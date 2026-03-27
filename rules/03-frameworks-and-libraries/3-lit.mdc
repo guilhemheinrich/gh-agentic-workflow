@@ -1,0 +1,47 @@
+---
+description: Patterns Lit 3 pour les web components du calendrier. Appliquer aux fichiers composants.
+globs: src/components/**/*.ts
+alwaysApply: false
+---
+
+Composant de base :
+- Étendre `LitElement`, importer depuis `lit`
+- `render()` retourne un `TemplateResult` via `html\`...\``
+- Styles via `static styles = css\`...\`` (scoped au shadow DOM)
+- Enregistrement via `@customElement('septeo-xxx')`
+
+Propriétés réactives :
+- `@property()` pour les props publiques (reflétées en attributs)
+- `@state()` pour l'état interne (pas d'attribut)
+- Spécifier `{ type: Number }`, `{ type: Boolean }`, `{ type: Array }` pour la conversion attribut → propriété
+- `{ reflect: true }` uniquement si l'attribut doit être lisible depuis l'extérieur
+
+Lifecycle :
+- `connectedCallback()` : setup (listeners globaux, timers)
+- `disconnectedCallback()` : cleanup (remove listeners, clear timers)
+- `willUpdate(changed)` : calculs dérivés avant le rendu
+- `updated(changed)` : effets post-rendu (focus, scroll)
+- `firstUpdated()` : initialisation unique post-premier rendu
+
+Templates :
+- Bindings : `.prop=${val}`, `@event=${handler}`, `?bool=${flag}`
+- Listes : `${items.map(i => html\`...\`)}` avec `key` via `repeat()`
+- Conditionnel : `${condition ? html\`...\` : nothing}`
+- Slots : `<slot name="header"></slot>` pour la composition
+
+Événements :
+- Dispatcher via `this.dispatchEvent(new CustomEvent('septeo-xxx', { detail, bubbles: true, composed: true }))`
+- `composed: true` pour traverser le shadow DOM
+- Nommer les événements `septeo-xxx`
+
+Overlay / Popover lifecycle :
+- `updateComplete` du parent ne garantit PAS que les children custom elements sont définis et rendus
+- Avant d'appeler une méthode sur un child : `await customElements.whenDefined('septeo-xxx')` puis `await child.updateComplete`
+- Un host avec `overflow: hidden` clippe les children `position: fixed` dans son shadow DOM — basculer `overflow: visible` via un attribut quand un overlay est ouvert
+
+Éviter :
+- `innerHTML` — toujours utiliser `html\`...\``
+- `querySelector` dans `render()` — utiliser `@query()`
+- Logique lourde dans `render()` — pré-calculer dans `willUpdate()`
+- Modifier les propriétés dans `render()` (boucle infinie)
+- Appeler des méthodes sur un child custom element sans attendre `whenDefined()` + `updateComplete`

@@ -1,0 +1,178 @@
+---
+description: Live interactive playground pattern for documenting Lit web components in Astro Starlight. Apply when creating, editing, or debugging docs pages with interactive demos.
+globs: apps/docs-site/**/*.{mdx,js,mjs}
+alwaysApply: false
+---
+
+## Principle
+
+Every documented web component MUST have a `<live-playground>` with bidirectional sync: the user edits HTML code and sees the result live, and interacting with the preview updates the code. This is the standard pattern for all Lit component documentation.
+
+## Architecture
+
+```
+Starlight page (parent)
+├── <live-playground>          ← vanilla WC (Shadow DOM, NOT Lit)
+│   ├── CodeMirror 6 editor    ← code pane (oneDark, HTML lang, line wrapping)
+│   └── <iframe srcdoc="...">  ← preview pane (full isolation)
+│       ├── calendar-wc.iife.js  ← component IIFE bundle (Lit + date-fns bundled in)
+│       ├── init script          ← fixtures, controlled-event wiring
+│       ├── ResizeObserver       ← auto-height → postMessage to parent
+│       └── MutationObserver     ← attribute changes → postMessage to parent
+```
+
+- The playground is a **vanilla web component** (no Lit) to avoid version conflicts with the documented Lit components loaded inside the iframe.
+- The iframe uses `srcdoc` for **complete isolation** (CSS, JS, DOM). The component IIFE loads exactly as a consumer would use it in production.
+- Communication between editor and iframe uses `postMessage`.
+
+## Bidirectional Sync
+
+Code → Preview:
+- `EditorView.updateListener` detects doc changes
+- Debounced 500ms to prevent excessive re-renders
+- Fast path (iframe ready): hot-swap `#user-code` innerHTML + re-init elements
+- Slow path (first load or error): full `iframe.srcdoc` reload
+
+Preview → Code:
+- `MutationObserver` inside iframe watches attribute mutations on `#user-code` direct children
+- Posts `playground-attr-change` message with `[{ attr, value }]`
+- Parent's `_syncAttributesToEditor()` updates CodeMirror doc via transaction
+- Only **reflected HTML attributes** sync back (e.g. `view`). JS-only properties (`date`, `entries`, `options`) are invisible in the editor — they are managed by the iframe init script
+
+Anti-loop:
+- `_isUpdatingFromIframe = true` before dispatching editor transaction from iframe message
+- `requestAnimationFrame` resets the flag after the dispatch
+- The `updateListener` skips updates when this flag is set
+
+## Controlled Component Pattern
+
+Lit components are "controlled" — they do NOT mutate their own state on user interaction. The iframe init script MUST wire event listeners that write back to the element:
+
+```javascript
+el.addEventListener('septeo-range-change', (e) => { el.date = e.detail.start; });
+el.addEventListener('septeo-view-change', (e) => { el.view = e.detail.newView; });
+```
+
+Without these listeners, the component appears frozen (no navigation, no view switching). This wiring lives inside the iframe's inline `<script>`, not in the parent page.
+
+## MDX Usage
+
+```mdx
+<live-playground code="&lt;septeo-calendar&#10;  view=&quot;month&quot;&#10;&gt;&lt;/septeo-calendar&gt;"></live-playground>
+```
+
+- The `code` attribute contains HTML-entity encoded HTML
+- MDX decodes `&lt;` → `<`, `&gt;` → `>`, `&quot;` → `"`, `&#10;` → newline
+- Internal quotes are rendered as `&#34;` by Astro — the browser decodes them correctly
+- Only put **reflected HTML attributes** in the snippet (e.g. `view`). JS-only properties are set by the iframe init script
+- Do NOT use `data-demo` — that was a legacy selector for `docs-init.js` static demos
+
+## Adding a New Component to the Playground
+
+When documenting a new Lit web component:
+
+1. Ensure the component is **exported from `src/index.ts`** — bare side-effect imports are tree-shaken (see IIFE Bundle Pitfalls below)
+2. In `src/playground/live-playground.js`, update the `SRCDOC_TEMPLATE` init script:
+   - Add `customElements.whenDefined('septeo-new-component')` if needed
+   - Wire controlled-event listeners for the new component
+   - Provide fixture data appropriate to the component
+3. In the MDX page, use `<live-playground code="...">` with the component's HTML
+4. Only reflected attributes appear in the code snippet — JS properties go in the init script
+
+## IIFE Bundle Pitfalls — Tree-Shaking
+
+**Critical**: `package.json` declares `"sideEffects": false` for ESM consumers. This causes Rollup to **tree-shake bare side-effect imports** like `import './shared/my-component.js'` even though they register custom elements via `@customElement`.
+
+Symptoms: the component tag appears in templates but the class definition, styles, and `render()` are missing from the bundle. The element renders as an empty inline box with no shadow DOM styles.
+
+**Prevention checklist** for every new component:
+
+1. **Export the class** from `src/index.ts` — `export { MyComponent } from './components/my-component.js'`
+2. **Set `treeshake.moduleSideEffects: true`** in `vite.config.iife.ts` rollupOptions
+3. **Verify** after build: `grep -c "my-css-class" dist-iife/calendar-wc.iife.js` must be > 0
+4. If the bundle size does not increase after adding a component, the component was tree-shaken
+
+```typescript
+// vite.config.iife.ts — required for IIFE builds
+rollupOptions: {
+  treeshake: {
+    moduleSideEffects: true,
+  },
+},
+```
+
+## Popover / Overlay Components in Iframe
+
+Components that render floating UI (popovers, tooltips, dropdowns) inside the iframe face specific challenges:
+
+**`overflow: hidden` on host clips `position: fixed` children:**
+The `:host` of a parent component (e.g. `<septeo-calendar>`) often has `overflow: hidden` for border-radius clipping. This clips any `position: fixed` child rendered in the same shadow DOM, even though CSS spec says `fixed` escapes containing blocks — shadow DOM hosts behave as clip boundaries.
+
+**Solution — dynamic overflow toggle:**
+```css
+:host { overflow: hidden; }
+:host([popover-open]) { overflow: visible; }
+```
+The component sets/removes the `popover-open` attribute when opening/closing a popover. This lets the popover escape the clip boundary while keeping border-radius clipping when no popover is active.
+
+**Iframe viewport constraints:**
+- `position: fixed` inside an iframe is relative to the **iframe viewport**, not the parent page
+- `window.innerWidth/innerHeight` inside the iframe returns the iframe dimensions
+- The popover positioning must account for the iframe's limited viewport
+- The iframe auto-resizes via `ResizeObserver` on `document.body`, but `position: fixed` elements don't contribute to body size — the iframe won't grow to accommodate them
+
+**Fixture data for popover demos:**
+When demonstrating popovers in the playground, fixture entries MUST include fields that the popover displays:
+```javascript
+entries.push({
+  id, title, start, end, color,
+  description: '...',  // shown in detail popover
+  location: '...',     // shown with map pin icon
+  editable: true,      // enables edit/delete action buttons
+});
+```
+Without these fields, the popover appears empty or incomplete.
+
+## Build Pipeline
+
+| Artifact | Source | Tool | Output |
+|----------|--------|------|--------|
+| Component IIFE | `apps/calendar-wc/` | Vite (`build:iife`) | `dist-iife/calendar-wc.iife.js` |
+| Playground bundle | `apps/docs-site/src/playground/live-playground.js` | esbuild (`build:playground`) | `public/playground-bundle.js` |
+
+- `playground-bundle.js` is gitignored (build artifact)
+- `npm run build:playground` runs automatically via `predev` and `prebuild` npm scripts
+- Dockerfile runs `npm run build:playground` in the dev stage after `npm install`
+
+## Starlight Head Config
+
+```javascript
+head: [
+  { tag: 'script', attrs: { src: '/calendar/calendar-wc.iife.js' } },
+  { tag: 'script', attrs: { defer: true, src: '/docs-init.js' } },
+  { tag: 'script', attrs: { src: '/playground-bundle.js' } },
+]
+```
+
+- IIFE bundle: plain `<script>` (NOT `type="module"`)
+- `docs-init.js`: kept for legacy static demos, loaded with `defer`
+- `playground-bundle.js`: CodeMirror 6 + `<live-playground>` component (~558KB minified IIFE)
+
+## Docker Pitfalls
+
+- Mounting `public/` as a bind-mount OVERWRITES the IIFE bundle copied by the Dockerfile
+- Solution: mount only specific files/directories — NOT the entire `public/` directory
+- The IIFE bundle in `public/calendar/` must come from the Docker build stage
+- The `scripts/` directory is bind-mounted for playground rebuild capability
+
+## Key Constraints
+
+- NEVER use Lit for the playground component itself — vanilla WC only
+- NEVER put JS-only properties in the `code` snippet — only reflected HTML attributes
+- NEVER skip the controlled-event wiring in the iframe init — the component will appear frozen
+- NEVER rely on bare side-effect imports in the IIFE bundle — always export the class from `index.ts`
+- ALWAYS debounce code→preview updates (500ms) to prevent excessive re-renders
+- ALWAYS use the anti-loop flag when syncing preview→code to prevent infinite cycles
+- ALWAYS use `iframe srcdoc` for preview — never render components directly in the Starlight page DOM
+- ALWAYS verify new components are in the IIFE bundle after build (`grep` for a CSS class or string unique to the component)
+- ALWAYS toggle `overflow: visible` on the host when rendering floating UI (popovers, tooltips) to prevent clipping

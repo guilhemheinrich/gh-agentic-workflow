@@ -1,0 +1,46 @@
+---
+description: Apply private npm registry patterns for scoped packages. Use when modifying .npmrc, Dockerfiles with NPM_TOKEN, or adding private dependencies.
+globs: .npmrc, .docker/**/Dockerfile, compose.yaml, .env.example
+alwaysApply: false
+---
+
+Registry privé npm — Conventions pour Turborepo + bun + Docker :
+
+Architecture :
+- `.npmrc` unique à la racine du monorepo — JAMAIS de `.npmrc` dans `apps/` ou `packages/`
+- Bun lit automatiquement le `.npmrc` racine pour tous les workspaces
+- Token via interpolation d'env `${NPM_TOKEN}` — JAMAIS de token en dur
+- Chaque scope privé = une ligne `@scope:registry=URL` + une ligne `//URL/:_authToken=${TOKEN}`
+
+Flux du token dans Docker :
+- `.env` → `compose.yaml` (`build.args`) → `Dockerfile` (`ARG` + `ENV`) → `.npmrc` → `bun install`
+- Le token est passé via `build.args` (build-time), PAS via `environment` (runtime)
+- Seuls les services avec des dépendances privées reçoivent le token
+
+Sécurité dans le Dockerfile (OBLIGATOIRE) :
+- `ARG NPM_TOKEN` + `ENV NPM_TOKEN=${NPM_TOKEN}` en début de stage deps
+- `COPY .npmrc .npmrc` AVANT `bun install`
+- `RUN rm -f .npmrc` + `ENV NPM_TOKEN=` APRÈS `bun install`
+- Le stage runtime (stage 2) ne doit contenir ni `.npmrc` ni `NPM_TOKEN`
+- Seul `node_modules` est copié du stage deps vers le stage runtime
+
+compose.yaml :
+- `build.args.NPM_TOKEN: ${NPM_TOKEN:-}` — valeur vide par défaut
+- `context: .` doit pointer vers la racine du monorepo (accès au `.npmrc`)
+
+.env.example :
+- Documenter chaque variable de token : `NPM_TOKEN=`
+- Section dédiée `# ─── NPM Private Registry ───`
+
+.dockerignore :
+- `.npmrc` ne doit PAS être dans `.dockerignore` (nécessaire au build)
+- `.env` DOIT être dans `.dockerignore` (contient le token réel)
+
+Skill associé : `.cursor/skills/npm-private-registry/SKILL.md` — procédure complète, checklist, debugging
+
+Avoid :
+- Token en dur dans `.npmrc`, Dockerfile ou compose.yaml
+- `.npmrc` dans les sous-packages
+- `NPM_TOKEN` dans `environment` (inutile au runtime, risque de fuite)
+- `.npmrc` dans `.dockerignore`
+- `bun install` sur l'hôte pour résoudre des packages privés
