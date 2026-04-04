@@ -1,0 +1,34 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "fleet": {
+      "version": "1.1.0",
+      "source": "local",
+      "manifest_hash": "sha256:329033853690a066ec7c0c2c88ca13a9e4bd971d17270e1a51e0bc49d59f2852",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "cursor-agent": [
+          "speckit.fleet.run",
+          "speckit.fleet.review"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-04-03T20:43:43.236671+00:00"
+    },
+    "verify": {
+      "version": "1.0.3",
+      "source": "local",
+      "manifest_hash": "sha256:74202b2c3bb17058b10787838cdf30c9ebe11e8793fc1de04bee75d5f111949a",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "cursor-agent": [
+          "speckit.verify.run"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-04-04T14:18:12.763867+00:00"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "skills": {
+    "fp-ts-async-practical": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "6e819f6ed1baa8ffdf9a7f3623c15e93dfc5cb3ee4879c4a5e3fc21a2b68f13d"
+    },
+    "fp-ts-backend": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "1842a14c6eb44551a109763ab359cecb482767f71418a65c7b9ece98671bb744"
+    },
+    "fp-ts-errors": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "00321fd41d192438a5c6d20c716a7ac6b77dee4a97fbdbf5c9b7402507eb07ed"
+    },
+    "fp-ts-pragmatic": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "84bf34b8ab97fb08bba1355fdd0c7405ee0cfd85139804afbbe2209d8757dcde"
+    },
+    "fp-ts-validation": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "9de7f36769dc4af55bd4b1f7dcd16cded03c3b57b49830d33f2e4157fa3a2618"
+    }
+  }
+}
