@@ -1,0 +1,55 @@
+---
+description: "Rule 2 — File-level and per-function JSDoc with @description for embedding-friendly domain documentation."
+alwaysApply: false
+---
+
+# Rule 2: Semantic JSDoc (Embedding Anchors)
+
+## Context
+
+Vector search and documentation generators rely on **natural language** tied to symbols. Domain files that only contain code without intent prose produce weak embedding matches when developers ask “what does this module do?”.
+
+## Directive
+
+- Each file under `/domain` MUST start with a **file-level** block comment describing the module’s responsibility (2–4 sentences).
+- Each **exported** pure function MUST have JSDoc including `@description` explaining behavior, inputs, and success output in plain English (not just `@param` lists).
+- Write for a new teammate and for retrieval: prefer concrete nouns over jargon.
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+/**
+ * Billing domain: pure pricing and tax calculations for invoices.
+ * No I/O — callers supply already-validated monetary values.
+ */
+
+/**
+ * Applies a percentage discount to a subtotal without mutating inputs.
+ *
+ * @description Returns a new Money value representing the price after discount.
+ */
+export function applyDiscount(subtotal: number, percentOff: number): number {
+  const factor = 1 - percentOff / 100;
+  return subtotal * factor;
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+// No file header, no @description — intent invisible to search tools.
+export function applyDiscount(subtotal: number, percentOff: number): number {
+  return subtotal * (1 - percentOff / 100);
+}
+```
+
+## Skill References
+
+- JSDoc is orthogonal to fp-ts; keep domain wording consistent with [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md) naming guidance when documenting pipelines.
+
+## Enforcement
+
+- **Detect**: Missing file banner or missing `@description` on exported domain functions.
+- **Fix**: Add concise file comment; add `@description` summarizing the happy path and notable edge behavior.

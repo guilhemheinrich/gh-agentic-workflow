@@ -1,0 +1,69 @@
+---
+description: "Backend vertical-slice architecture for TypeScript/NestJS — overview, folder layout, and links to Rules 1–7."
+alwaysApply: true
+---
+
+# Agentic Rules — Architecture Overview
+
+This project uses **Vertical Slices** with a **Functional Core / Imperative Shell**: pure domain logic, NestJS for orchestration, typed I/O at boundaries. Cursor loads detailed rules from separate files (better RAG chunks). **Always read the rule file** that matches the layer you are editing.
+
+## Stack
+
+| Layer | Technology |
+|-------|------------|
+| Language | TypeScript (strict) |
+| Shell | NestJS (`@Injectable` use cases, controllers, modules) |
+| Core | `fp-ts` and/or `Effect` — errors as values in domain |
+| Validation | Zod or `@effect/schema` at HTTP/persistence edges |
+
+## Canonical layout
+
+```text
+src/
+  modules/
+    <feature>/
+      domain/                    # Pure functions only — Rules 1–4
+        <feature>.model.ts       # Or <feature>.domain.ts if <5 pure functions
+        <feature>.logic.ts
+      application/
+        use-cases/               # Rule 5 — orchestration, pipes
+      infrastructure/
+        persistence/             # Rule 6 — sql_* repositories
+        http/                    # Rule 6 — controllers, DTOs, http_* gateways
+  shared/
+    domain/                      # Cross-cutting types — Rule 7
+    infrastructure/              # Shared clients
+```
+
+## Rule index (open the matching file)
+
+| ID | File | When to apply |
+|----|------|----------------|
+| R1 | [rule-01-explicit-typing.mdc](./rule-01-explicit-typing.mdc) | Editing `/domain` types and signatures |
+| R2 | [rule-02-semantic-jsdoc.mdc](./rule-02-semantic-jsdoc.mdc) | Adding docs / descriptions in domain |
+| R3 | [rule-03-anti-currying.mdc](./rule-03-anti-currying.mdc) | Simplifying FP style in domain |
+| R4 | [rule-04-pure-domain.mdc](./rule-04-pure-domain.mdc) | Keeping domain pure; typed errors |
+| R5 | [rule-05-flat-orchestration.mdc](./rule-05-flat-orchestration.mdc) | Use cases and application layer |
+| R6 | [rule-06-typed-boundaries.mdc](./rule-06-typed-boundaries.mdc) | Controllers, repos, external APIs |
+| R7 | [rule-07-module-isolation.mdc](./rule-07-module-isolation.mdc) | Imports between modules |
+
+## Quick decision tree
+
+1. **Editing pure business logic?** → Rules **1–4**, then **7** for imports.
+2. **Editing a Nest service use case?** → Rule **5**, then **6** for DTO validation.
+3. **Editing HTTP or DB code?** → Rule **6**, then **7** for cross-module access.
+4. **Unsure which rule applies?** → Start with **R4** (pure domain) and **R7** (isolation).
+
+## Skills (deep dives)
+
+Functional patterns and examples live under `skills/` (see links inside each rule). Start with:
+
+- [fp-ts pragmatic](../../skills/fp-ts-pragmatic/SKILL.md)
+- [fp-ts errors](../../skills/fp-ts-errors/SKILL.md)
+- [fp-ts validation](../../skills/fp-ts-validation/SKILL.md)
+- [fp-ts backend](../../skills/fp-ts-backend/SKILL.md)
+- [fp-ts async practical](../../skills/fp-ts-async-practical/SKILL.md)
+
+## SpecKit
+
+Planning and review workflows also use `.specify/memory/constitution.md`, which mirrors these principles for SpecKit phases.

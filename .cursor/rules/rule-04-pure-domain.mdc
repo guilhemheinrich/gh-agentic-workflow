@@ -1,0 +1,57 @@
+---
+description: "Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed errors; optional single-file domain for small modules."
+alwaysApply: false
+---
+
+# Rule 4: Pure Domain (Functional Core)
+
+## Context
+
+Domain logic must stay **referentially transparent**: same inputs → same outputs, no side effects. Throwing exceptions and framework imports leak the imperative shell into the core and break testability and LLM-local reasoning about a single file.
+
+## Directive
+
+- Files under `**/domain/**` MUST NOT import `@nestjs/*`, database drivers, HTTP clients, loggers, or `fs`.
+- Domain code MUST NOT use `throw` for business failures; return `Either`, `Effect`, `TaskEither`, or equivalent typed errors.
+- If a module has **fewer than five** named pure functions, **merge** schema and logic into one `[module].domain.ts` instead of separate `*.model.ts` / `*.logic.ts`.
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+import * as E from 'fp-ts/Either';
+
+export type DomainError = { tag: 'NEGATIVE'; field: string };
+
+export function ensurePositive(value: number, field: string): E.Either<DomainError, number> {
+  if (value < 0) {
+    return E.left({ tag: 'NEGATIVE', field });
+  }
+  return E.right(value);
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class PriceService {
+  validatePositive(value: number): number {
+    if (value < 0) throw new Error('negative');
+    return value;
+  }
+}
+```
+
+## Skill References
+
+- Typed errors and `Either` / `TaskEither`: [fp-ts errors skill](../../skills/fp-ts-errors/SKILL.md).
+- Reader / environment-style DI for shells (not inside pure domain): [fp-ts backend skill](../../skills/fp-ts-backend/SKILL.md).
+
+## Enforcement
+
+- **Detect**: Forbidden imports in `/domain`; `throw` in domain files; domain classes with Nest decorators.
+- **Fix**: Move orchestration to `application/use-cases/`; replace throws with typed errors; split merged file only when function count grows past four.

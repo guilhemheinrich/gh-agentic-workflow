@@ -1,0 +1,61 @@
+---
+description: "Rule 5 — NestJS use cases as thin injectable services: sequential pipe from validation to domain to persistence."
+alwaysApply: false
+---
+
+# Rule 5: Flat Orchestration (Application Layer)
+
+## Context
+
+Use cases coordinate **effects**: validation at the edge, pure domain calls, then persistence. Business branching belongs in domain functions, not nested `if/else` trees inside injectable classes.
+
+## Directive
+
+- Implement use cases as `@Injectable()` classes or functions in `application/use-cases/`.
+- Structure the main public method as a **linear pipeline**: parse/validate DTO → call pure domain → map errors → call repository port.
+- Use `pipe` / `flow` from fp-ts or `Effect.pipe` for multi-step async work; avoid deep nesting of conditionals—push decisions into typed domain helpers.
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { pipe } from 'fp-ts/function';
+import * as TE from 'fp-ts/TaskEither';
+
+@Injectable()
+export class CreateInvoiceUseCase {
+  execute(input: unknown): TE.TaskEither<AppError, InvoiceId> {
+    return pipe(
+      TE.fromEither(validateCreateInvoice(input)),
+      TE.chainW((dto) => TE.fromEither(buildInvoice(dto))),
+      TE.chainW((invoice) => this.repo.save(invoice)),
+    );
+  }
+
+  constructor(private readonly repo: InvoiceRepositoryPort) {}
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+@Injectable()
+export class CreateInvoiceUseCase {
+  async execute(input: unknown) {
+    if (!input) throw new Error('bad');
+    // Many nested branches mixing HTTP concerns and domain math in one method...
+  }
+}
+```
+
+## Skill References
+
+- `pipe` / `flow` composition: [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md).
+- Async `TaskEither` pipelines: [fp-ts async practical skill](../../skills/fp-ts-async-practical/SKILL.md).
+
+## Enforcement
+
+- **Detect**: Large methods with nested `if`/`else` business logic in use cases; direct SQL in use case class.
+- **Fix**: Extract pure checks to domain; keep use case to wiring only; inject repositories via interfaces.

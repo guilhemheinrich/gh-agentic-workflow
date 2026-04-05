@@ -1,0 +1,50 @@
+---
+description: "Rule 3 — Avoid deep currying and excessive point-free style; prefer named parameters and readable steps."
+alwaysApply: false
+---
+
+# Rule 3: Moderate Functional Style (Anti-Currying)
+
+## Context
+
+Deeply nested arrow functions (`a => b => c => …`) and heavy point-free composition fragment semantic chunks for RAG and make stack traces harder to read. Named values act as **anchors** for both humans and embeddings.
+
+## Directive
+
+- Do not introduce more than **one** arrow layer for domain logic unless a library API requires it.
+- Prefer **one object parameter** `{ ... }` when three or more values are needed.
+- Prefer **named intermediate constants** inside a function over long `pipe` chains in `/domain` (or keep `pipe` to at most 3–4 clearly named steps).
+- Reserve point-free style for trivial wrappers only.
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+type Line = { qty: number; unit: number };
+
+export function sumLines(lines: Line[]): number {
+  const subtotals = lines.map((line) => line.qty * line.unit);
+  const total = subtotals.reduce((acc, n) => acc + n, 0);
+  return total;
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+// Deep currying — hard to read and to chunk for retrieval.
+export const sumLines =
+  (lines: Line[]) =>
+  (zero: number) =>
+  lines.reduce((acc, line) => acc + line.qty * line.unit, zero);
+```
+
+## Skill References
+
+- Practical balance of `pipe`, `flow`, and readability: [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md).
+
+## Enforcement
+
+- **Detect**: Nested `=>` beyond one level in domain files; `pipe` chains without intermediate names when logic is non-trivial.
+- **Fix**: Collapse to a single function body with named locals; replace curried factories with objects or top-level functions.

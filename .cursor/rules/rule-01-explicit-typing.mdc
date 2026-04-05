@@ -1,0 +1,50 @@
+---
+description: "Rule 1 — Explicit typing in domain code (no any, explicit function signatures) for LSP and RAG-friendly contracts."
+alwaysApply: false
+---
+
+# Rule 1: Explicit Typing (Golden Signatures)
+
+## Context
+
+TypeScript’s language service and embeddings work best when `/domain` functions expose **explicit** parameter and return types. Hidden inference forces tools and LLMs to chase types across files (“multi-hop”), which hurts navigation and retrieval quality.
+
+## Directive
+
+- In `**/domain/**/*.ts` (and `**/*.domain.ts`), every **exported** function MUST declare explicit parameter types and an explicit return type.
+- Do NOT use `any`. Avoid `unknown` unless you narrow immediately in the same function.
+- Type aliases for object parameters are encouraged when a shape is reused (e.g. `type CreateUserInput = { ... }`).
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+/**
+ * Computes the total for a line item; pure domain helper.
+ */
+export type Money = { amount: number; currency: string };
+
+export function lineTotal(unitPrice: Money, quantity: number): Money {
+  const totalAmount = unitPrice.amount * quantity;
+  return { amount: totalAmount, currency: unitPrice.currency };
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+// Missing return type; parameters inferred only — harder for LSP/RAG.
+export function lineTotal(unitPrice, quantity) {
+  return { amount: unitPrice.amount * quantity, currency: unitPrice.currency };
+}
+```
+
+## Skill References
+
+- Use project `tsconfig` strict settings together with this rule. For fp-ts-heavy code style patterns, see [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md).
+
+## Enforcement
+
+- **Detect**: Exported functions in `/domain` without explicit `: ReturnType` or with `any` / implicit parameters.
+- **Fix**: Add named types or interfaces; extract `type` aliases for repeated shapes; add explicit return type even when inferrable.

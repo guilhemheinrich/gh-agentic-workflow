@@ -1,50 +1,52 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+# gh-agentic-workflow — Agentic Architecture Constitution
+
+This constitution governs SpecKit planning and reviews for backend TypeScript work in this repository. Detailed Cursor enforcement lives in `.cursor/rules/` (see `architecture-overview.mdc` and `rule-0X-*.mdc`).
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Explicit Type Contracts (Rule 1)
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+All pure domain logic exposes explicit input and output types. `any` and opaque inference-only APIs are forbidden in `/domain`. Types are the contract between human reviewers, the TypeScript compiler, and retrieval-augmented coding agents.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### II. Semantic Documentation (Rule 2)
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+Every domain file carries a file-level responsibility comment. Every exported pure function has a JSDoc `@description` in natural language so embeddings and search retrieve intent, not only syntax.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### III. Readable Functional Style (Rule 3)
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+Prefer named parameters objects and named intermediate values over deep currying and excessive point-free style. Code is written for humans and LLM chunk boundaries first; clever FP second.
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+### IV. Pure Functional Core (Rule 4)
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+The `/domain` layer contains only pure functions: no NestJS, no I/O, no `throw`. Errors are values (e.g. `Effect`, `Either`, `TaskEither`). When a module has fewer than five pure functions, merge model and logic into a single `[module].domain.ts` file to keep one retrieval chunk.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+### V. Flat Orchestration (Rule 5)
+
+Application use cases are NestJS injectable services that orchestrate with a straight, readable pipeline: validate input → call domain → persist via ports. No nested business branching inside the service shell; complexity stays in typed domain functions.
+
+### VI. Typed I/O Boundaries (Rule 6)
+
+All data entering or leaving the process through HTTP or persistence adapters is structurally validated (Zod or `@effect/schema`). Infrastructure filenames declare technology (`sql_*.repository.ts`, `http_*.gateway.ts`).
+
+### VII. Strict Module Isolation (Rule 7)
+
+Vertical slices do not import another module’s `domain`, `application`, or `internal` infrastructure. Shared concepts live under `src/shared/` or cross-module contracts; integration uses public facades (services, events), not deep imports.
+
+## Additional Constraints
+
+- **Stack**: TypeScript, NestJS (imperative shell), Effect or fp-ts (functional core), Zod or Effect Schema at boundaries unless a feature spec explicitly varies this.
+- **Layout**: `src/modules/<feature>/` with `domain/`, `application/use-cases/`, `infrastructure/persistence/`, `infrastructure/http/`, plus `src/shared/` for cross-cutting types and clients.
+- **AI tooling**: Cursor rules and optional skills under `skills/` are normative for agent-generated code; they do not replace code review or CI.
+
+## Development Workflow
+
+- Feature work follows SpecKit phases (specify → plan → tasks → implement → verify) when using the fleet workflow.
+- Constitution checks in `plan.md` must pass before implementation; amendments require a PR that updates this file and linked `.cursor/rules/` when principles change.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+- This constitution supersedes ad-hoc style preferences for backend TypeScript in this repo.
+- **Amendments**: Propose a PR with rationale, update `.cursor/rules/` if user-facing rules change, and bump the version below.
+- **Compliance**: Reviewers verify new modules match vertical-slice layout and boundary rules; the verify extension may flag drift against `spec.md` / `tasks.md` when used.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+**Version**: 1.0.0 | **Ratified**: 2026-04-05 | **Last Amended**: 2026-04-05

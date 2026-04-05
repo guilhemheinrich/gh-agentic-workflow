@@ -1,0 +1,59 @@
+---
+description: "Rule 6 — Validate all external I/O with Zod or Effect Schema; technology-prefixed infrastructure filenames."
+alwaysApply: false
+---
+
+# Rule 6: Typed Boundaries (Infrastructure)
+
+## Context
+
+Untrusted data enters through HTTP controllers and leaves through databases and gateways. Validation errors must be **localized** at these boundaries so `/domain` never sees raw strings without structure.
+
+## Directive
+
+- Controllers MUST parse request bodies/params with **Zod** (or `@effect/schema` / `Schema` when using Effect end-to-end).
+- Repositories that talk to SQL MUST live in files named `sql_<aggregate>.repository.ts` (or similar `sql_*.ts`).
+- External HTTP clients MUST live in `http_<system>.gateway.ts` files.
+- Map validation failures to HTTP or application errors **before** calling domain logic.
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+import { z } from 'zod';
+
+export const CreateUserBody = z.object({
+  email: z.string().email(),
+  name: z.string().min(1),
+});
+
+export type CreateUserBody = z.infer<typeof CreateUserBody>;
+```
+
+```typescript
+// File: sql_user.repository.ts
+export class SqlUserRepository implements UserRepositoryPort {
+  // ...
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+// Controller accepts any shape; domain receives unvalidated input.
+@Post()
+create(@Body() body: any) {
+  return this.service.create(body);
+}
+```
+
+## Skill References
+
+- Validation + error accumulation with fp-ts: [fp-ts validation skill](../../skills/fp-ts-validation/SKILL.md).
+- Error channel patterns: [fp-ts errors skill](../../skills/fp-ts-errors/SKILL.md).
+
+## Enforcement
+
+- **Detect**: `any` / untyped `@Body()`; repository classes in misnamed files; Zod schemas defined inside `/domain` (move to boundary DTO modules).
+- **Fix**: Add Zod schema + `safeParse`; rename infra files to include technology prefix; keep DTO types next to controllers or `infrastructure/http/dto/`.

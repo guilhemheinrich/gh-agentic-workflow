@@ -1,0 +1,46 @@
+---
+description: "Rule 7 — No deep imports across vertical slices; use shared kernel or public facades (services/events)."
+alwaysApply: false
+---
+
+# Rule 7: Module Isolation (Screaming Architecture)
+
+## Context
+
+Vertical slices stay independent: each module owns its `domain`, `application`, and `infrastructure`. Coupling slices through deep imports creates hidden graphs that break builds and confuse retrieval (“which module owns this type?”).
+
+## Directive
+
+- Do **not** import from `src/modules/<other>/**/domain/**` or other module-internal paths.
+- **Allowed**: `src/shared/domain/**` for cross-cutting types; **public** application facades exported from a module’s `index.ts` or Nest `exports`/`providers` intended for other modules.
+- Prefer **events** or **application services** as integration points instead of reaching into another slice’s folders.
+
+## Examples
+
+### Compliant (DO)
+
+```typescript
+// Consumer depends on a port interface defined in shared or a contracts package.
+import type { UserId } from '../../../shared/domain/ids';
+import type { BillingPort } from '../ports/billing.port';
+
+export function attachUserToInvoice(userId: UserId, billing: BillingPort) {
+  return billing.assignUser(userId);
+}
+```
+
+### Non-Compliant (DON'T)
+
+```typescript
+// Reaches into another module's domain implementation — forbidden.
+import { calculateTax } from '../../billing/domain/tax.logic';
+```
+
+## Skill References
+
+- Backend module boundaries and `ReaderTaskEither` for ports: [fp-ts backend skill](../../skills/fp-ts-backend/SKILL.md).
+
+## Enforcement
+
+- **Detect**: Import paths crossing `modules/<name>/domain` of another feature; relative imports that hop more than one module without going through `shared/` or a declared public API.
+- **Fix**: Move shared types to `src/shared/domain/`; expose behavior via Nest provider interfaces or integration events; refactor imports to facades.
