@@ -23,5 +23,9 @@ Auto-generated plan context may list technologies from active features. Treat **
 
 Use project scripts from `package.json` when present (e.g. `npm test`, `npm run lint`).
 
+## AIDD library
+
+The same rules are classified under `rules/` (`01-project-fundamentals-and-architecture` … `04-tools-and-configurations`; `N-*.mdc` filenames).
+
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

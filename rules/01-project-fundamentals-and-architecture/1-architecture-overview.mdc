@@ -7,6 +7,8 @@ alwaysApply: true
 
 This project uses **Vertical Slices** with a **Functional Core / Imperative Shell**: pure domain logic, NestJS for orchestration, typed I/O at boundaries. Cursor loads detailed rules from separate files (better RAG chunks). **Always read the rule file** that matches the layer you are editing.
 
+Rules are classified under `rules/` using the AIDD-style buckets: **01** fundamentals, **02** TypeScript & pure domain, **03** frameworks & libraries (NestJS, boundaries, slices), **04** tools & configuration. `.cursor/rules/` mirrors these files via symlinks.
+
 ## Stack
 
 | Layer | Technology |
@@ -39,13 +41,13 @@ src/
 
 | ID | File | When to apply |
 |----|------|----------------|
-| R1 | [rule-01-explicit-typing.mdc](./rule-01-explicit-typing.mdc) | Editing `/domain` types and signatures |
-| R2 | [rule-02-semantic-jsdoc.mdc](./rule-02-semantic-jsdoc.mdc) | Adding docs / descriptions in domain |
-| R3 | [rule-03-anti-currying.mdc](./rule-03-anti-currying.mdc) | Simplifying FP style in domain |
-| R4 | [rule-04-pure-domain.mdc](./rule-04-pure-domain.mdc) | Keeping domain pure; typed errors |
-| R5 | [rule-05-flat-orchestration.mdc](./rule-05-flat-orchestration.mdc) | Use cases and application layer |
-| R6 | [rule-06-typed-boundaries.mdc](./rule-06-typed-boundaries.mdc) | Controllers, repos, external APIs |
-| R7 | [rule-07-module-isolation.mdc](./rule-07-module-isolation.mdc) | Imports between modules |
+| R1 | [2-explicit-typing.mdc](../../rules/02-typescript-and-domain-conventions/2-explicit-typing.mdc) | Editing `/domain` types and signatures |
+| R2 | [2-semantic-jsdoc.mdc](../../rules/02-typescript-and-domain-conventions/2-semantic-jsdoc.mdc) | Adding docs / descriptions in domain |
+| R3 | [2-anti-currying.mdc](../../rules/02-typescript-and-domain-conventions/2-anti-currying.mdc) | Simplifying FP style in domain |
+| R4 | [2-pure-domain.mdc](../../rules/02-typescript-and-domain-conventions/2-pure-domain.mdc) | Keeping domain pure; typed errors |
+| R5 | [3-flat-orchestration.mdc](../../rules/03-frameworks-and-libraries/3-flat-orchestration.mdc) | Use cases and application layer |
+| R6 | [3-typed-boundaries.mdc](../../rules/03-frameworks-and-libraries/3-typed-boundaries.mdc) | Controllers, repos, external APIs |
+| R7 | [3-module-isolation.mdc](../../rules/03-frameworks-and-libraries/3-module-isolation.mdc) | Imports between modules |
 
 ## Quick decision tree
 

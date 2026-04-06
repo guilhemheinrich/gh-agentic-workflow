@@ -1,0 +1,27 @@
+---
+description: "Repo meta — SpecKit context pointer; backend architecture rules live under rules/ (AIDD buckets) and are mirrored in .cursor/rules."
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# gh-agentic-workflow — Cursor Rules
+
+## Primary guidance (backend TypeScript / NestJS)
+
+For **architecture, vertical slices, fp-ts/Effect, and NestJS orchestration**, follow:
+
+- **[1-architecture-overview.mdc](../../rules/01-project-fundamentals-and-architecture/1-architecture-overview.mdc)** — stack, folder layout, rule index, skill links (always applied alongside this file).
+- **Rule files** in `rules/02-typescript-and-domain-conventions/` (R1–R4) and `rules/03-frameworks-and-libraries/` (R5–R7) — load the rule that matches the layer you are editing.
+
+This file stays short to avoid duplicating `alwaysApply` content: do **not** re-define stack or layout here; use the overview + numbered rules.
+
+## SpecKit / plans
+
+Auto-generated plan context may list technologies from active features. Treat **1-architecture-overview.mdc** and **constitution** (`.specify/memory/constitution.md`) as authoritative for backend structure.
+
+## Commands (when applicable)
+
+Use project scripts from `package.json` when present (e.g. `npm test`, `npm run lint`).
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->
