@@ -1,0 +1,115 @@
+---
+description: Structure et conventions du Makefile racine du projet
+globs: "**/Makefile"
+alwaysApply: false
+---
+
+# Makefile — Structure attendue
+
+Chaque projet DOIT avoir un `Makefile` à la racine avec les commandes ci-dessous.
+
+## Variables d'environnement
+
+Toutes les valeurs configurables (ports, noms de services, images, etc.) DOIVENT être lues depuis le fichier `.env` avec un fallback vers les valeurs de `.env.example`.
+
+```makefile
+include .env
+export
+
+# Fallbacks (valeurs de .env.example)
+APP_PORT ?= 3000
+DB_PORT ?= 5432
+REDIS_PORT ?= 6379
+```
+
+## Commandes obligatoires
+
+### `up` — Démarrage du projet
+
+```makefile
+up:
+	docker compose up -d --build
+```
+
+### `down` — Arrêt du projet
+
+```makefile
+down:
+	docker compose down
+```
+
+### `test` — Suite de tests complète
+
+Lance les tests pour CHAQUE app/package du monorepo. Distingue les types de tests :
+
+```makefile
+test: test-unit test-integration test-e2e
+
+test-unit:
+	docker compose exec <service> npm run test:unit
+	# Répéter pour chaque app/package
+
+test-integration:
+	docker compose exec <service> npm run test:integration
+
+test-e2e:
+	docker compose exec <service> npm run test:e2e
+```
+
+Si le projet n'est pas un monorepo, adapter avec une seule cible par type.
+
+### `coverage` — Rapport de couverture
+
+Lance le check de couverture pour CHAQUE app/package individuellement :
+
+```makefile
+coverage:
+	docker compose exec <service-1> npm run test:coverage
+	docker compose exec <service-2> npm run test:coverage
+	# Une ligne par app/package
+```
+
+## Commandes conditionnelles (si applicable)
+
+### `setup` — Initialisation idempotente
+
+À lancer une seule fois. Doit être idempotent (relancer ne casse rien).
+
+```makefile
+setup:
+	cp -n .env.example .env || true
+	docker compose build
+	$(MAKE) db-migrate
+	# Autres initialisations (seed, etc.)
+```
+
+### `db-*` — Opérations base de données
+
+```makefile
+db-migrate:
+	docker compose exec <service> npx prisma migrate deploy
+
+db-reset:
+	docker compose exec <service> npx prisma migrate reset --force
+
+db-seed:
+	docker compose exec <service> npx prisma db seed
+
+db-studio:
+	docker compose exec <service> npx prisma studio
+```
+
+Adapter les commandes `db-*` au ORM/outil de migration utilisé (Prisma, Drizzle, TypeORM, Alembic, etc.).
+
+## Règles
+
+- **JAMAIS de valeurs en dur** — toujours `$(VARIABLE)` avec fallback `?=`
+- **TOUJOURS exécuter via Docker** — aucune commande directe sur l'hôte
+- **Un target par type de test** — `test-unit`, `test-integration`, `test-e2e`
+- **Un target coverage par app/package** — ou une boucle sur les packages
+- **`setup` DOIT être idempotent** — utiliser `cp -n`, `|| true`, checks d'existence
+- **`.PHONY`** — déclarer tous les targets comme PHONY
+
+```makefile
+.PHONY: up down setup test test-unit test-integration test-e2e coverage db-migrate db-reset db-seed db-studio
+```
