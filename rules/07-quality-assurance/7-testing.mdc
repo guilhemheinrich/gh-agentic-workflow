@@ -1,0 +1,52 @@
+---
+description: Apply TDD and testing best practices with Vitest. Use when creating or modifying test files.
+globs: **/*.test.ts,**/*.spec.ts,**/__tests__/**/*.ts,**/vitest.config.ts
+alwaysApply: false
+---
+
+TDD Approach (ADR-014):
+
+- Write failing test FIRST
+- Write minimum code to pass
+- Refactor while tests stay green
+
+Test Framework — Vitest 3.x:
+
+- Config per app: `vitest.config.ts`
+- Run via Docker: `docker compose exec {service} bun run test`
+- Use `describe`, `it`, `expect`, `vi.fn()`, `vi.spyOn()`
+- `vi.mock()` for module mocking, `vi.fn()` for port/interface mocking
+- `beforeEach(() => vi.clearAllMocks())` to reset between tests
+
+Test Organization:
+
+- Unit tests: `src/__tests__/unit/` or co-located `__tests__/` folders
+- Route tests: `src/__tests__/unit/routes/` (Hono `app.request()`)
+- Integration tests: `test/integration/` per app
+- E2E tests: `test/e2e/` per app
+
+Hexagonal Testing:
+
+- Domain entities: pure unit tests, no mocks needed
+- Use cases: mock ports (interfaces) via `vi.fn()` implementing the port interface
+- Adapters: integration tests against real services (Prisma, Redis) in Docker
+- Routes: use Hono's `app.request()` with mocked use cases (no supertest needed)
+
+Naming:
+
+- `describe('ClassName')` or `describe('use-case-name')`
+- `it('should [expected behavior] when [condition]')`
+
+Assertions:
+
+- Use AAA pattern: Arrange, Act, Assert
+- One assertion focus per test (can have multiple related asserts)
+- Test both happy path AND error cases
+
+Anti-Patterns:
+
+- Never write tests after implementation
+- Never mock internal modules — only mock at boundaries (ports)
+- Never test implementation details — test behavior
+- Never skip edge cases in coverage
+- Never use `jest` — project uses Vitest exclusively

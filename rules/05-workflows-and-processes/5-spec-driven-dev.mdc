@@ -1,0 +1,46 @@
+---
+description: Apply Spec-Driven Development (SpecKit) workflow. Use when working with specs/ folder or implementing features.
+globs: specs/**/*,fixes/**/*
+alwaysApply: false
+---
+
+SpecKit Workflow:
+
+- `/specify [feature]` → create spec in `specs/{id}-{name}/`
+- `/index` → verify and fix spec/fix indexation (conflicts, gaps)
+- Review `spec.md`, `plan.md`, `tasks.md`
+- `/implement {id}` → execute tasks following TDD
+- `/review-implement` → code review
+- Track progress in `tasks.md` and `_todo.md`
+
+Spec Structure:
+
+- `specs/{id}-{name}/spec.md` — detailed specification
+- `specs/{id}-{name}/plan.md` — implementation plan
+- `specs/{id}-{name}/tasks.md` — task breakdown with checkboxes
+- `specs/{id}-{name}/research.md` — optional research notes
+
+Indexation:
+
+- **See rule `5-spec-indexing.mdc`** for complete indexation rules
+- Index format: 3-digit zero-padded (`001`, `002`, ..., `999`)
+- Shared index space: `specs/` + `fixes/` + `specs/archive/`
+- Sequence must be continuous with increment of 1 — no gaps, no duplicates
+- Use `/index` to detect and resolve conflicts after branch merges
+
+Roadmap (from ROADMAP_AGENTS_IA.md):
+
+- Phase 0: Bootstrap & DX (`specs/001-bootstrap-dx/`)
+- Phase 1: auth-api + App Registry (`specs/002-auth-bff/`, `specs/003-app-registry/`)
+- Phase 2: Entitlements + Hub Shell (`specs/004-entitlements/`, `specs/005-hub-shell/`)
+- Phase 3: App Starter + Integration Kits (`specs/006-app-starter/`)
+- Phase 4: Feature Flags + Hub AI Module (`specs/007-feature-flags/`, `specs/008-hub-ai-module/`)
+- Phase 5: Event Bus + Documentation Hub (`specs/009-event-bus/`, `specs/010-documentation-hub/`)
+- Platform: Local Dev DNS/TLS (`specs/011-local-dev-platform/`)
+
+Rules:
+
+- Always read the relevant spec before implementing
+- Update tasks.md as you complete work
+- Follow TDD — write failing test first
+- Before creating a new spec/fix, apply indexation rules from `5-spec-indexing.mdc`

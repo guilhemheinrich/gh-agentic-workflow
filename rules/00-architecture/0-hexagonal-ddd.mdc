@@ -1,0 +1,46 @@
+---
+description: Apply DDD Hexagonal architecture for Hono backend services. Use when creating or modifying files in any backend app (auth-api, app-registry, entitlements, feature-flags).
+globs: apps/auth-api/**/*.ts,apps/app-registry/**/*.ts,apps/entitlements/**/*.ts,apps/feature-flags/**/*.ts
+alwaysApply: false
+---
+
+Hexagonal Architecture (Ports/Adapters):
+
+- `domain/` = pure business logic, ZERO external dependencies
+- `application/` = use cases, DTOs, orchestration
+- `infrastructure/` = adapters, HTTP routes, config
+
+Domain Layer Rules:
+
+- NO import from `hono`, `prisma`, `redis`, `ioredis`, `openai` in `domain/`
+- NO import from `hono`, `prisma` in `application/`
+- Entities and Value Objects are plain TypeScript classes
+- Ports are interfaces defined in `domain/ports/` or `packages/hub-contracts`
+
+Dependency Direction:
+
+- `infrastructure/` → `application/` → `domain/` (inward only)
+- `domain/` NEVER depends on outer layers
+- Use manual DI in `index.ts` to provide adapters to use cases (ADR-028)
+
+Hono Scope:
+
+- Hono is ONLY in `infrastructure/` (routes, middleware, error handler)
+- Each service has a single `index.ts` composition root
+- Route files create sub-apps via `new Hono()` and are mounted with `app.route()`
+
+Mandatory Patterns (ADR-012):
+
+- Strategy: swap implementations (auth provider, event bus, storage)
+- Adapter: normalize external interfaces to internal contracts
+- Repository: abstract persistence behind domain interfaces
+- Facade: simplify complex subsystem access
+- Circuit Breaker: prevent cascade failures on inter-service calls
+- Observer: decouple producers and consumers via events
+
+Anti-Patterns:
+
+- Avoid importing `PrismaClient` directly in use cases
+- Avoid Hono or framework imports in domain or application layers
+- Avoid anemic domain models (put behavior in entities)
+- Avoid god modules (split by bounded context)
