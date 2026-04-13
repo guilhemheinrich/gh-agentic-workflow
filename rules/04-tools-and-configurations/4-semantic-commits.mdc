@@ -1,0 +1,116 @@
+---
+description: "Commit hygiene — semantic, feature-scoped commits with clean file grouping for human and agent readability."
+alwaysApply: false
+---
+
+# Semantic Commit Strategy
+
+## Goal
+
+Every commit in the history must tell a **self-contained story**. A human or an AI agent browsing `git log --oneline` should instantly understand what changed and why, without opening the diff.
+
+## Commit Message Format
+
+Use **Conventional Commits** syntax:
+
+```
+<type>(<scope>): <imperative summary>
+
+[optional body — explain WHY, not WHAT]
+[optional footer — BREAKING CHANGE, refs, closes]
+```
+
+### Allowed types
+
+| Type | When to use |
+|------|-------------|
+| `feat` | New user-facing capability or behavior |
+| `fix` | Bug fix (reference issue when available) |
+| `refactor` | Internal restructuring with no behavior change |
+| `docs` | Documentation only (README, JSDoc, ADR, specs) |
+| `test` | Adding or updating tests with no production code change |
+| `chore` | Tooling, CI, deps, config — no production logic |
+| `style` | Formatting, whitespace, linting — no logic change |
+| `perf` | Performance improvement with no behavior change |
+
+### Scope
+
+Use the module or feature name (e.g. `feat(auth)`, `fix(session-store)`, `chore(ci)`). Keep it short and consistent across the project.
+
+## File Grouping Rules
+
+### 1. One logical change per commit
+
+Never mix unrelated changes. A commit must map to **one** of:
+
+- A single feature increment (or a coherent slice of a larger feature)
+- A single bug fix
+- A single refactoring move
+- A documentation update
+- A tooling/config change
+
+### 2. Feature commits group by vertical slice
+
+For `feat` commits, group files that belong to the **same vertical slice**:
+
+- Domain model + logic
+- Application use-case that wires the domain
+- Infrastructure adapter (controller, repository) that exposes it
+- Tests covering the above
+
+All these files go into **one commit** because they form a coherent unit of functionality.
+
+### 3. Separate cross-cutting changes
+
+If a feature requires a cross-cutting change (e.g. adding a shared type, updating a config, modifying a shared module), commit the cross-cutting change **first** in its own commit, then commit the feature that depends on it.
+
+```text
+chore(deps): add zod v3.23               ← dependency first
+feat(auth): add login use-case           ← feature second (uses zod)
+```
+
+### 4. Separate formatting and refactoring from logic
+
+Never combine a `refactor` or `style` change with a `feat` or `fix`. The reviewer (human or agent) must be able to trust that a `refactor` commit introduces **zero behavior change**.
+
+### 5. Test-only commits are allowed but not preferred
+
+Prefer bundling tests with the feature or fix they cover. Use a standalone `test` commit only when:
+
+- Adding tests for **existing** untested code
+- Refactoring test infrastructure without touching production code
+
+## Staging Workflow
+
+When the working tree contains changes spanning multiple concerns:
+
+1. **Inventory** — run `git status` and `git diff --stat` to list all modified/added files.
+2. **Classify** — mentally (or explicitly) group files by the commit they belong to.
+3. **Stage selectively** — use `git add <path>...` (or `git add -p` for partial hunks) to stage only the files for one logical commit.
+4. **Commit** — write a conventional commit message.
+5. **Repeat** — stage and commit the next group until the working tree is clean.
+
+## Commit Ordering
+
+When a single task produces multiple commits, order them so the history reads like a narrative:
+
+1. Infrastructure / dependency changes
+2. Cross-cutting shared types or utilities
+3. Domain model and logic
+4. Application orchestration (use-cases)
+5. Adapters (controllers, repositories)
+6. Tests (if standalone)
+7. Documentation
+
+## Anti-Patterns
+
+- **God commit** — one commit touching 30 files across 5 features. Split it.
+- **WIP commit** — vague message, half-done work. Finish or stash; never push WIP.
+- **Fix typo in previous commit** — use `git commit --amend` or interactive rebase **before pushing**; do not litter history with trivial fixups.
+- **Mixing concerns** — `feat(auth): add login and fix header styling` belongs in two commits.
+- **Empty or meaningless scope** — `fix: stuff` tells nobody anything.
+
+## Enforcement
+
+- **Detect**: Multiple unrelated file groups in a single staged commit; commit messages not matching conventional format; `refactor` commits that contain behavior changes.
+- **Fix**: Unstage, re-group files, commit separately. Rewrite messages to match the format.
