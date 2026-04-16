@@ -1,47 +1,47 @@
 ---
-description: Patterns Lit 3 pour les web components du calendrier. Appliquer aux fichiers composants.
+description: Lit 3 patterns for calendar web components. Apply to component files.
 globs: src/components/**/*.ts
 alwaysApply: false
 ---
 
-Composant de base :
-- Étendre `LitElement`, importer depuis `lit`
-- `render()` retourne un `TemplateResult` via `html\`...\``
-- Styles via `static styles = css\`...\`` (scoped au shadow DOM)
-- Enregistrement via `@customElement('septeo-xxx')`
+Base component:
+- Extend `LitElement`, import from `lit`
+- `render()` returns a `TemplateResult` via `html\`...\``
+- Styles via `static styles = css\`...\`` (scoped to shadow DOM)
+- Registration via `@customElement('septeo-xxx')`
 
-Propriétés réactives :
-- `@property()` pour les props publiques (reflétées en attributs)
-- `@state()` pour l'état interne (pas d'attribut)
-- Spécifier `{ type: Number }`, `{ type: Boolean }`, `{ type: Array }` pour la conversion attribut → propriété
-- `{ reflect: true }` uniquement si l'attribut doit être lisible depuis l'extérieur
+Reactive properties:
+- `@property()` for public props (reflected as attributes)
+- `@state()` for internal state (no attribute)
+- Specify `{ type: Number }`, `{ type: Boolean }`, `{ type: Array }` for attribute → property conversion
+- `{ reflect: true }` only if the attribute must be readable from the outside
 
-Lifecycle :
-- `connectedCallback()` : setup (listeners globaux, timers)
-- `disconnectedCallback()` : cleanup (remove listeners, clear timers)
-- `willUpdate(changed)` : calculs dérivés avant le rendu
-- `updated(changed)` : effets post-rendu (focus, scroll)
-- `firstUpdated()` : initialisation unique post-premier rendu
+Lifecycle:
+- `connectedCallback()`: setup (global listeners, timers)
+- `disconnectedCallback()`: cleanup (remove listeners, clear timers)
+- `willUpdate(changed)`: derived computations before render
+- `updated(changed)`: post-render effects (focus, scroll)
+- `firstUpdated()`: one-time initialization after first render
 
-Templates :
-- Bindings : `.prop=${val}`, `@event=${handler}`, `?bool=${flag}`
-- Listes : `${items.map(i => html\`...\`)}` avec `key` via `repeat()`
-- Conditionnel : `${condition ? html\`...\` : nothing}`
-- Slots : `<slot name="header"></slot>` pour la composition
+Templates:
+- Bindings: `.prop=${val}`, `@event=${handler}`, `?bool=${flag}`
+- Lists: `${items.map(i => html\`...\`)}` with `key` via `repeat()`
+- Conditional: `${condition ? html\`...\` : nothing}`
+- Slots: `<slot name="header"></slot>` for composition
 
-Événements :
-- Dispatcher via `this.dispatchEvent(new CustomEvent('septeo-xxx', { detail, bubbles: true, composed: true }))`
-- `composed: true` pour traverser le shadow DOM
-- Nommer les événements `septeo-xxx`
+Events:
+- Dispatch via `this.dispatchEvent(new CustomEvent('septeo-xxx', { detail, bubbles: true, composed: true }))`
+- `composed: true` to traverse shadow DOM
+- Name events `septeo-xxx`
 
-Overlay / Popover lifecycle :
-- `updateComplete` du parent ne garantit PAS que les children custom elements sont définis et rendus
-- Avant d'appeler une méthode sur un child : `await customElements.whenDefined('septeo-xxx')` puis `await child.updateComplete`
-- Un host avec `overflow: hidden` clippe les children `position: fixed` dans son shadow DOM — basculer `overflow: visible` via un attribut quand un overlay est ouvert
+Overlay / Popover lifecycle:
+- Parent's `updateComplete` does NOT guarantee that child custom elements are defined and rendered
+- Before calling a method on a child: `await customElements.whenDefined('septeo-xxx')` then `await child.updateComplete`
+- A host with `overflow: hidden` clips `position: fixed` children in its shadow DOM — toggle `overflow: visible` via an attribute when an overlay is open
 
-Éviter :
-- `innerHTML` — toujours utiliser `html\`...\``
-- `querySelector` dans `render()` — utiliser `@query()`
-- Logique lourde dans `render()` — pré-calculer dans `willUpdate()`
-- Modifier les propriétés dans `render()` (boucle infinie)
-- Appeler des méthodes sur un child custom element sans attendre `whenDefined()` + `updateComplete`
+Avoid:
+- `innerHTML` — always use `html\`...\``
+- `querySelector` in `render()` — use `@query()`
+- Heavy logic in `render()` — pre-compute in `willUpdate()`
+- Modifying properties in `render()` (infinite loop)
+- Calling methods on a child custom element without awaiting `whenDefined()` + `updateComplete`

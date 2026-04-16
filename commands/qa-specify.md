@@ -1,49 +1,48 @@
 ---
 name: qa-specify
 description: >-
-  Commande de spécification E2E pilotée par l'analyse du projet. Scanne
-  toutes les specs existantes pour apprendre les conventions, identifie les
-  lacunes E2E, et produit directement des specs complètes (spec.md, plan.md,
-  tasks.md) alignées sur la qualité et les patterns du projet.
-  Contrairement au qa-tester (analyse seule), cette commande produit les livrables.
+  E2E specification command driven by project analysis. Scans all existing specs
+  to learn conventions, identifies E2E gaps, and directly produces complete specs
+  (spec.md, plan.md, tasks.md) aligned with project quality and patterns.
+  Unlike qa-tester (analysis only), this command produces deliverables.
 model: claude-4.6-opus-max-thinking
 ---
 
-# `/qa-specify` — Spécification E2E Pilotée par l'Analyse
+# `/qa-specify` — Analysis-Driven E2E Specification
 
-Cette commande combine l'analyse approfondie du projet avec la production directe de spécifications E2E complètes. Elle ne se contente pas de trouver les lacunes — elle les comble.
+This command combines deep project analysis with the direct production of complete E2E specifications. It doesn't just find gaps — it fills them.
 
 ## Usage
 
 ```
-/qa-specify [description optionnelle de périmètre]
+/qa-specify [optional scope description]
 ```
 
-**Exemples** :
+**Examples**:
 
-- `/qa-specify` — analyse complète, produit des specs pour toutes les lacunes E2E
-- `/qa-specify auth flows` — cible uniquement les flux d'authentification
-- `/qa-specify specs/047-*` — cible une spec précise
+- `/qa-specify` — full analysis, produces specs for all E2E gaps
+- `/qa-specify auth flows` — targets authentication flows only
+- `/qa-specify specs/047-*` — targets a specific spec
 
-## Différence avec `/specify` et le qa-tester
+## Difference with `/specify` and qa-tester
 
 | Aspect | `/specify` | qa-tester (agent) | `/qa-specify` |
 |--------|-----------|-------------------|---------------|
-| Input | Description de feature | Aucun (scan total) | Périmètre optionnel |
-| Analyse préalable | Non | Oui (gap analysis) | Oui (deep context + gap) |
-| Apprentissage des conventions | Non | Partiel | **Total** |
-| Output | 1 spec isolée | Prompts `/specify` | **Specs complètes directes** |
-| Connaissance du projet | Limitée au prompt | Scan des user stories | **Immersion totale** |
+| Input | Feature description | None (full scan) | Optional scope |
+| Prior analysis | No | Yes (gap analysis) | Yes (deep context + gap) |
+| Convention learning | No | Partial | **Total** |
+| Output | 1 isolated spec | `/specify` prompts | **Direct complete specs** |
+| Project knowledge | Limited to prompt | User story scan | **Total immersion** |
 
 ---
 
-## Phase 0 : Immersion Projet (OBLIGATOIRE)
+## Phase 0: Project Immersion (MANDATORY)
 
-**Objectif** : Construire un modèle mental complet du projet avant de produire quoi que ce soit.
+**Objective**: Build a complete mental model of the project before producing anything.
 
-### 0.1 Inventaire Exhaustif
+### 0.1 Exhaustive Inventory
 
-Scanner **tout** l'arbre de spécification :
+Scan **all** the specification tree:
 
 ```
 specs/
@@ -51,341 +50,341 @@ specs/archive/
 specs/Archive/
 ```
 
-Pour chaque dossier spec, enregistrer :
-- Nom du dossier (ex: `001-bootstrap-dx`, `047-bug-report`)
-- Statut : actif / archivé
-- Fichiers présents : `spec.md`, `plan.md`, `tasks.md`, `review.md`, `stats.md`
-- Taille approximative du `spec.md` (nombre de lignes)
+For each spec folder, record:
+- Folder name (e.g., `001-bootstrap-dx`, `047-bug-report`)
+- Status: active / archived
+- Files present: `spec.md`, `plan.md`, `tasks.md`, `review.md`, `stats.md`
+- Approximate `spec.md` size (line count)
 
-### 0.2 Analyse des Patterns de Spécification
+### 0.2 Specification Pattern Analysis
 
-Lire **chaque** `spec.md` du projet (pas un échantillon — **tous**). Pour chaque spec, extraire :
+Read **every** `spec.md` in the project (not a sample — **all of them**). For each spec, extract:
 
-| Dimension | Ce qu'il faut extraire |
-|-----------|----------------------|
-| **Structure** | Titres de sections, profondeur de sous-sections, ordre |
-| **Format User Story** | Style utilisé (As a.../Given-When-Then/narratif/tableau) |
-| **Critères d'acceptation** | Nombre moyen par story, niveau de détail, cas limites |
-| **Format des exigences** | Numérotation (FR-XXX, etc.), catégorisation |
-| **Critères de succès** | Mesurabilité, granularité |
-| **Cas limites** | Exhaustivité de la documentation des edge cases |
-| **Références croisées** | Comment les specs se référencent entre elles |
-| **Vocabulaire** | Terminologie métier récurrente |
-| **Patterns techniques** | Composants UI partagés, patterns de routing, state management |
+| Dimension | What to extract |
+|-----------|----------------|
+| **Structure** | Section headings, sub-section depth, ordering |
+| **User Story format** | Style used (As a.../Given-When-Then/narrative/table) |
+| **Acceptance criteria** | Average count per story, level of detail, edge cases |
+| **Requirements format** | Numbering (FR-XXX, etc.), categorization |
+| **Success criteria** | Measurability, granularity |
+| **Edge cases** | Thoroughness of edge case documentation |
+| **Cross-references** | How specs reference each other |
+| **Vocabulary** | Recurring domain terminology |
+| **Technical patterns** | Shared UI components, routing patterns, state management |
 
-Stocker comme `$SPEC_PATTERNS`.
+Store as `$SPEC_PATTERNS`.
 
-### 0.3 Identification des Specs Exemplaires
+### 0.3 Identifying Exemplary Specs
 
-Identifier les **3 à 5 meilleures specs** du projet selon :
-- Complétude (toutes les sections remplies, pas de placeholders)
-- Profondeur (critères d'acceptation exhaustifs, edge cases)
-- Clarté (langage non-ambigu, critères mesurables)
-- Cohérence (structure régulière, conventions respectées)
+Identify the **3 to 5 best specs** in the project based on:
+- Completeness (all sections filled, no placeholders)
+- Depth (exhaustive acceptance criteria, edge cases)
+- Clarity (unambiguous language, measurable criteria)
+- Consistency (regular structure, conventions respected)
 
-Stocker comme `$BENCHMARK_SPECS`. Ces specs servent de **modèle de qualité** pour tout ce qui sera produit.
+Store as `$BENCHMARK_SPECS`. These specs serve as the **quality benchmark** for everything produced.
 
-### 0.4 Analyse des Plans et Tâches
+### 0.4 Plan and Task Analysis
 
-Lire `plan.md` et `tasks.md` des specs exemplaires. Enregistrer :
+Read `plan.md` and `tasks.md` from the exemplary specs. Record:
 
-| Dimension | Ce qu'il faut extraire |
-|-----------|----------------------|
-| **Structure du plan** | Sections, format stack technique, format décisions archi |
-| **Format des tâches** | Style checkbox, format ID, marqueurs parallélisme |
-| **Granularité des tâches** | Nombre moyen par spec, détail par tâche |
-| **Organisation en phases** | Groupement, conventions de checkpoints |
+| Dimension | What to extract |
+|-----------|----------------|
+| **Plan structure** | Sections, tech stack format, architecture decision format |
+| **Task format** | Checkbox style, ID format, parallelism markers |
+| **Task granularity** | Average count per spec, detail per task |
+| **Phase organization** | Grouping, checkpoint conventions |
 
-Stocker comme `$TASK_PATTERNS`.
+Store as `$TASK_PATTERNS`.
 
-### 0.5 Cartographie UI
+### 0.5 UI Cartography
 
-Construire une carte légère de l'architecture UI :
-- Structure des composants (arborescence)
-- Structure des routes/pages
-- Bibliothèque UI utilisée (shadcn, Radix, custom, etc.)
-- Patterns de gestion d'état
-- Web components custom (shadow DOM, etc.)
+Build a lightweight map of the UI architecture:
+- Component structure (tree)
+- Route/page structure
+- UI library used (shadcn, Radix, custom, etc.)
+- State management patterns
+- Custom web components (shadow DOM, etc.)
 
-Stocker comme `$UI_MAP`.
+Store as `$UI_MAP`.
 
-### 0.6 Détection de l'Infrastructure E2E Existante
+### 0.6 Existing E2E Infrastructure Detection
 
-Identifier ce qui existe déjà :
-- Framework de test (Playwright, Cypress, etc.)
-- Fichiers de configuration (playwright.config.ts, etc.)
-- Fixtures et helpers existants
-- Tests E2E déjà écrits (dossier, nombre, patterns)
-- Scripts npm/make pour les tests
+Identify what already exists:
+- Test framework (Playwright, Cypress, etc.)
+- Configuration files (playwright.config.ts, etc.)
+- Existing fixtures and helpers
+- Already written E2E tests (folder, count, patterns)
+- npm/make scripts for tests
 
-Stocker comme `$E2E_INFRA`.
+Store as `$E2E_INFRA`.
 
-### 0.7 Synthèse Contextuelle
+### 0.7 Contextual Summary
 
-Produire un document interne `$PROJECT_CONTEXT` :
+Produce an internal document `$PROJECT_CONTEXT`:
 
 ```
-Projet : [nom]
-Total Specs : [count] (actives: [N], archivées: [N])
-Specs Exemplaires : [liste avec justification]
-Stack UI : [détection]
-Infra E2E : [framework, config, N tests existants]
-Convention Spec :
-  - Format User Story : [format]
-  - Critères d'Acceptation moyens/story : [N]
-  - Format Exigences : [format]
-  - Format Tâches : [format]
-  - Tâches moyennes/spec : [N]
-Vocabulaire Métier : [termes clés]
+Project: [name]
+Total Specs: [count] (active: [N], archived: [N])
+Exemplary Specs: [list with justification]
+UI Stack: [detection]
+E2E Infra: [framework, config, N existing tests]
+Spec Convention:
+  - User Story Format: [format]
+  - Average Acceptance Criteria/story: [N]
+  - Requirements Format: [format]
+  - Task Format: [format]
+  - Average Tasks/spec: [N]
+Domain Vocabulary: [key terms]
 ```
 
 ---
 
-## Phase 1 : Extraction et Analyse des Lacunes
+## Phase 1: Extraction and Gap Analysis
 
-### 1.1 Extraction des User Stories UI
+### 1.1 UI User Story Extraction
 
-Pour chaque `spec.md` actif, extraire toutes les user stories impliquant une interaction UI :
-- Interaction écran, formulaire, bouton, dialog, page, vue
-- Navigation (page, lien, menu)
-- Feedback visuel (message, notification, loading, erreur)
-- Affichage de données (liste, tableau, dashboard, vue détail)
-- Action d'input (saisie, sélection, upload, drag)
+For each active `spec.md`, extract all user stories involving UI interaction:
+- Screen, form, button, dialog, page, view interaction
+- Navigation (page, link, menu)
+- Visual feedback (message, notification, loading, error)
+- Data display (list, table, dashboard, detail view)
+- Input action (entry, selection, upload, drag)
 
-**Exclure** les stories purement :
+**Exclude** stories that are purely:
 - Backend (API-to-API, cron, migrations)
-- Infrastructure (déploiement, CI/CD, monitoring)
+- Infrastructure (deployment, CI/CD, monitoring)
 - DX (tooling, CLI, documentation)
 
-Pour chaque story extraite, enregistrer :
+For each extracted story, record:
 
-| Champ | Description |
+| Field | Description |
 |-------|-------------|
-| `id` | Identifiant unique : `US-[dossier-spec]-[N]` |
-| `spec_source` | Nom du dossier spec |
-| `summary` | Texte complet de la user story |
-| `acceptance_criteria` | Critères d'acceptation **verbatim** (pas de résumé) |
-| `ui_elements` | Éléments UI impliqués |
-| `related_specs` | Autres specs partageant des composants/flux UI |
-| `complexity` | Complexité E2E estimée : Simple / Medium / Complex |
+| `id` | Unique identifier: `US-[spec-folder]-[N]` |
+| `spec_source` | Spec folder name |
+| `summary` | Full user story text |
+| `acceptance_criteria` | Acceptance criteria **verbatim** (no summarizing) |
+| `ui_elements` | UI elements involved |
+| `related_specs` | Other specs sharing UI components/flows |
+| `complexity` | Estimated E2E complexity: Simple / Medium / Complex |
 
-### 1.2 Détection de Couverture E2E Existante
+### 1.2 Existing E2E Coverage Detection
 
-Chercher la couverture existante :
-1. Fichiers de test E2E (`*.spec.ts`, `*.e2e.ts`, dossiers e2e/)
-2. Specs ciblant les tests E2E (dossiers ou contenu mentionnant "e2e", "end-to-end", "playwright")
-3. Tâches dans les `tasks.md` liées aux tests E2E
+Search for existing coverage:
+1. E2E test files (`*.spec.ts`, `*.e2e.ts`, e2e/ folders)
+2. Specs targeting E2E tests (folders or content mentioning "e2e", "end-to-end", "playwright")
+3. Tasks in `tasks.md` related to E2E tests
 
-### 1.3 Calcul du Gap
+### 1.3 Gap Calculation
 
 ```
 $UNCOVERED = $UI_STORIES \ $COVERED
 ```
 
-Grouper par source spec. Enrichir chaque story non couverte avec :
-- **Stories couvertes similaires** (templates potentiels)
-- **Composants UI partagés** avec des stories couvertes
-- **Chaînes de dépendance** (prérequis pour tester)
+Group by source spec. Enrich each uncovered story with:
+- **Similar covered stories** (potential templates)
+- **Shared UI components** with covered stories
+- **Dependency chains** (prerequisites for testing)
 
-### 1.4 Priorisation
+### 1.4 Prioritization
 
-Classer les lacunes par priorité :
+Rank gaps by priority:
 
-| Priorité | Critères |
+| Priority | Criteria |
 |----------|----------|
-| **P0 — Critique** | Flux utilisateur principaux (auth, CRUD primaire, actions business critiques) |
-| **P1 — Haute** | Flux secondaires importants (settings, préférences, gestion d'erreurs UI) |
-| **P2 — Moyenne** | Flux complémentaires (cosmétique, interactions non-critiques) |
+| **P0 — Critical** | Main user flows (auth, primary CRUD, critical business actions) |
+| **P1 — High** | Important secondary flows (settings, preferences, UI error handling) |
+| **P2 — Medium** | Complementary flows (cosmetic, non-critical interactions) |
 
 ---
 
-## Phase 2 : Regroupement en Specs E2E
+## Phase 2: E2E Spec Grouping
 
-### 2.1 Stratégie de Regroupement
+### 2.1 Grouping Strategy
 
-Ne pas créer une spec par user story. Regrouper intelligemment :
+Do not create one spec per user story. Group intelligently:
 
-| Stratégie | Quand l'appliquer |
-|-----------|-------------------|
-| **Par flux utilisateur** | Stories qui forment un parcours complet (ex: inscription → vérification → première connexion) |
-| **Par composant partagé** | Stories qui testent le même composant dans différents contextes |
-| **Par spec source** | Stories qui viennent de la même spec et sont cohérentes ensemble |
-| **Par complexité** | Isoler les stories complexes qui méritent une spec dédiée |
+| Strategy | When to apply |
+|----------|---------------|
+| **By user flow** | Stories that form a complete journey (e.g., signup → verification → first login) |
+| **By shared component** | Stories that test the same component in different contexts |
+| **By source spec** | Stories from the same spec that are coherent together |
+| **By complexity** | Isolate complex stories that deserve a dedicated spec |
 
-### 2.2 Plan de Specs à Produire
+### 2.2 Spec Production Plan
 
-Pour chaque groupe, définir :
+For each group, define:
 
 ```
-Spec E2E #[N] : [titre descriptif]
-  Source(s) : [dossier(s) spec d'origine]
-  Stories couvertes : [US-XXX-N, US-XXX-M, ...]
-  Priorité : P0 / P1 / P2
-  Complexité : Simple / Medium / Complex
-  Dépendances : [specs E2E prérequises, ou aucune]
+E2E Spec #[N]: [descriptive title]
+  Source(s): [origin spec folder(s)]
+  Stories covered: [US-XXX-N, US-XXX-M, ...]
+  Priority: P0 / P1 / P2
+  Complexity: Simple / Medium / Complex
+  Dependencies: [prerequisite E2E specs, or none]
 ```
 
-Présenter le plan à l'utilisateur pour validation avant de produire les specs.
+Present the plan to the user for validation before producing specs.
 
 ---
 
-## Phase 3 : Production des Specs (pour chaque groupe validé)
+## Phase 3: Spec Production (for each validated group)
 
-### 3.1 Numérotation
+### 3.1 Numbering
 
-**OBLIGATOIRE** : Appliquer les règles d'indexation définies dans `.cursor/rules/05-workflows-and-processes/5-spec-indexing.mdc` (section 4 — Calcul du Prochain Index Disponible).
+**MANDATORY**: Apply the indexing rules defined in `.cursor/rules/05-workflows-and-processes/5-spec-indexing.mdc` (section 4 — Computing the Next Available Index).
 
-En résumé :
-1. Scanner `specs/`, `fixes/`, et `specs/archive/` (si existant)
-2. Trouver `MAX(NNN)` parmi tous les dossiers indexés
-3. Prochain index = `MAX + 1`, format 3-digit zero-padded
-4. Si un conflit d'index est détecté → exécuter `/index` avant de continuer
+In summary:
+1. Scan `specs/`, `fixes/`, and `specs/archive/` (if existing)
+2. Find `MAX(NNN)` among all indexed folders
+3. Next index = `MAX + 1`, 3-digit zero-padded format
+4. If an index conflict is detected → run `/index` before continuing
 
-Convention de nommage du dossier :
+Folder naming convention:
 ```
-specs/[NNN]-e2e-[description-courte]/
+specs/[NNN]-e2e-[short-description]/
 ```
 
-### 3.2 Créer la Branche Git
+### 3.2 Create the Git Branch
 
 ```bash
 git checkout -b feature/[NNN]-e2e-[description]
 ```
 
-### 3.3 Sauvegarder le Prompt
+### 3.3 Save the Prompt
 
-Créer `specs/[NNN]-e2e-[description]/prompt.md` avec :
-- La commande `/qa-specify` invoquée
-- Le contexte d'analyse (résumé du gap identifié)
-- Les user stories ciblées
+Create `specs/[NNN]-e2e-[description]/prompt.md` with:
+- The `/qa-specify` command invoked
+- The analysis context (summary of the identified gap)
+- The targeted user stories
 
-### 3.4 Produire `spec.md`
+### 3.4 Produce `spec.md`
 
-**CRITIQUE** : Le spec.md produit DOIT :
-1. **Suivre exactement** la structure observée dans `$BENCHMARK_SPECS`
-2. **Utiliser le format de user story** du projet (`$SPEC_PATTERNS`)
-3. **Atteindre ou dépasser** la profondeur moyenne du projet
-4. **Utiliser le vocabulaire métier** identifié en Phase 0
-5. **Référencer les specs source** et les composants partagés
-6. **Inclure des edge cases** au même niveau de détail que les benchmark specs
+**CRITICAL**: The produced spec.md MUST:
+1. **Follow exactly** the structure observed in `$BENCHMARK_SPECS`
+2. **Use the user story format** of the project (`$SPEC_PATTERNS`)
+3. **Match or exceed** the project's average depth
+4. **Use the domain vocabulary** identified in Phase 0
+5. **Reference source specs** and shared components
+6. **Include edge cases** at the same level of detail as the benchmark specs
 
-Structure minimale (adaptée aux conventions du projet) :
+Minimum structure (adapted to project conventions):
 
 ```markdown
-# E2E Test Specification: [Titre]
+# E2E Test Specification: [Title]
 
 **Feature Branch**: `[NNN]-e2e-[description]`
 **Created**: [YYYY-MM-DD]
 **Status**: Draft
-**Source Specs**: [liste des specs source]
+**Source Specs**: [list of source specs]
 **E2E Framework**: [Playwright/Cypress — from $E2E_INFRA]
 
 ## Context
 
-[Pourquoi ces tests E2E sont nécessaires. Référence aux specs source.
-Description des flux utilisateur couverts.]
+[Why these E2E tests are needed. Reference to source specs.
+Description of user flows covered.]
 
 ## User Scenarios & Testing
 
-### User Story 1 — [Titre] (Priority: [P0/P1/P2])
+### User Story 1 — [Title] (Priority: [P0/P1/P2])
 
-[Texte complet de la user story, adapté au contexte E2E]
+[Full user story text, adapted to the E2E context]
 
 **Source**: specs/[XXX-feature]/spec.md
 **Why this priority**: [Justification]
-**Independent Test**: [Comment tester cette story seule]
+**Independent Test**: [How to test this story alone]
 
 **Acceptance Scenarios**:
 
-1. **Given** [contexte], **When** [action], **Then** [résultat]
-2. **Given** [contexte], **When** [action], **Then** [résultat]
-[... autant que nécessaire — au moins autant que la spec source]
+1. **Given** [context], **When** [action], **Then** [result]
+2. **Given** [context], **When** [action], **Then** [result]
+[... as many as needed — at least as many as the source spec]
 
 **Edge Cases**:
-- [Condition limite 1] → [comportement attendu]
-- [Condition limite 2] → [comportement attendu]
+- [Boundary condition 1] → [expected behavior]
+- [Boundary condition 2] → [expected behavior]
 
-### User Story 2 — [Titre] (Priority: [P0/P1/P2])
-[... même structure ...]
+### User Story 2 — [Title] (Priority: [P0/P1/P2])
+[... same structure ...]
 
 ## Requirements
 
 ### Functional Requirements
 
-- **FR-001**: Le test E2E DOIT [exigence testable]
-- **FR-002**: Le test E2E DOIT [exigence testable]
-[... suivre le format de numérotation du projet]
+- **FR-001**: The E2E test MUST [testable requirement]
+- **FR-002**: The E2E test MUST [testable requirement]
+[... follow the project's numbering format]
 
 ### Technical Requirements
 
-- **TR-001**: Les tests DOIVENT utiliser `data-testid` pour la sélection d'éléments
-- **TR-002**: Les tests DOIVENT utiliser `test.step()` pour décomposer les scénarios
-- **TR-003**: Les tests DOIVENT être indépendants (pas d'état partagé entre tests)
+- **TR-001**: Tests MUST use `data-testid` for element selection
+- **TR-002**: Tests MUST use `test.step()` to decompose scenarios
+- **TR-003**: Tests MUST be independent (no shared state between tests)
 
 ### Data-TestID Requirements
 
-| Composant | Attribut `data-testid` | Raison |
-|-----------|----------------------|--------|
-| [composant] | `[testid-proposé]` | [utilisé dans quel test] |
+| Component | `data-testid` attribute | Reason |
+|-----------|------------------------|--------|
+| [component] | `[proposed-testid]` | [used in which test] |
 
 ## Source Code Policy (CRITICAL)
 
-L'application source NE DOIT PAS être modifiée, sauf pour ajouter des
-attributs `data-testid` aux composants UI existants listés ci-dessus.
-Aucune modification de la logique, des styles, de la structure ou du comportement.
+The source application MUST NOT be modified, except to add `data-testid`
+attributes to existing UI components listed above.
+No modifications to logic, styles, structure, or behavior.
 
 ## Success Criteria
 
-- **SC-001**: [Critère mesurable et technology-agnostic]
-- **SC-002**: [Critère mesurable et technology-agnostic]
+- **SC-001**: [Measurable, technology-agnostic criterion]
+- **SC-002**: [Measurable, technology-agnostic criterion]
 ```
 
-### 3.5 Produire `plan.md`
+### 3.5 Produce `plan.md`
 
-Suivre la structure de `$TASK_PATTERNS`. Inclure :
-- Approche technique (framework, configuration, fixtures)
-- Architecture des tests (dossiers, helpers partagés)
-- Stratégie d'exécution (parallélisme, CI, reporting)
-- Référence aux tests existants (`$E2E_INFRA`) comme base
+Follow the structure from `$TASK_PATTERNS`. Include:
+- Technical approach (framework, configuration, fixtures)
+- Test architecture (folders, shared helpers)
+- Execution strategy (parallelism, CI, reporting)
+- Reference to existing tests (`$E2E_INFRA`) as a base
 
-### 3.6 Produire `tasks.md`
+### 3.6 Produce `tasks.md`
 
-Suivre strictement le format de `$TASK_PATTERNS` :
+Strictly follow the format from `$TASK_PATTERNS`:
 
 ```text
-- [ ] TXXX [P?] [USN?] Description avec chemin de fichier
+- [ ] TXXX [P?] [USN?] Description with file path
 ```
 
-Organisation en phases :
+Phase organization:
 
 ```markdown
 # Tasks: E2E [description]
 
-## Phase 1: Setup (Infrastructure partagée)
+## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Configurer les fixtures Playwright pour [contexte]
-- [ ] T002 [P] Créer les helpers partagés dans tests/e2e/helpers/
+- [ ] T001 Configure Playwright fixtures for [context]
+- [ ] T002 [P] Create shared helpers in tests/e2e/helpers/
 
-## Phase 2: Data-TestID (Seule modification app autorisée)
+## Phase 2: Data-TestID (Only allowed app modification)
 
-- [ ] T003 [P] Ajouter data-testid à [composant] dans [chemin]
-- [ ] T004 [P] Ajouter data-testid à [composant] dans [chemin]
+- [ ] T003 [P] Add data-testid to [component] in [path]
+- [ ] T004 [P] Add data-testid to [component] in [path]
 
-**Checkpoint**: Tous les data-testid en place, app inchangée par ailleurs
+**Checkpoint**: All data-testid in place, app otherwise unchanged
 
-## Phase 3: Tests E2E — [User Story 1]
+## Phase 3: E2E Tests — [User Story 1]
 
-- [ ] T010 [US1] Créer test fichier tests/e2e/[nom].spec.ts
-- [ ] T011 [US1] Implémenter scénario [titre]
-- [ ] T012 [US1] Implémenter edge case [titre]
+- [ ] T010 [US1] Create test file tests/e2e/[name].spec.ts
+- [ ] T011 [US1] Implement scenario [title]
+- [ ] T012 [US1] Implement edge case [title]
 
-**Checkpoint**: User Story 1 testée de bout en bout
+**Checkpoint**: User Story 1 tested end-to-end
 
-## Phase N: Validation Finale
+## Phase N: Final Validation
 
-- [ ] TXXX Exécuter la suite E2E complète
-- [ ] TXXX Vérifier la non-régression des tests existants
-- [ ] TXXX Mettre à jour la documentation de test
+- [ ] TXXX Run the complete E2E suite
+- [ ] TXXX Verify no regressions in existing tests
+- [ ] TXXX Update test documentation
 
 ## Summary
 
@@ -393,54 +392,54 @@ Organisation en phases :
 - By priority: P0=[count], P1=[count], P2=[count]
 ```
 
-### 3.7 Initialiser `stats.md`
+### 3.7 Initialize `stats.md`
 
-Suivre le format `stats.md` du projet (observé dans `$BENCHMARK_SPECS`).
+Follow the project's `stats.md` format (observed in `$BENCHMARK_SPECS`).
 
 ---
 
-## Phase 4 : Rapport de Synthèse
+## Phase 4: Summary Report
 
-Après production de toutes les specs, présenter :
+After producing all specs, present:
 
 ```markdown
-## Rapport /qa-specify
+## /qa-specify Report
 
-### Analyse du Projet
+### Project Analysis
 
-| Métrique | Valeur |
-|----------|--------|
-| Specs analysées | X |
-| Specs exemplaires identifiées | N |
-| User stories UI extraites | X |
-| Déjà couvertes par E2E | X |
-| **Lacunes identifiées** | **X** |
+| Metric | Value |
+|--------|-------|
+| Specs analyzed | X |
+| Exemplary specs identified | N |
+| UI user stories extracted | X |
+| Already covered by E2E | X |
+| **Gaps identified** | **X** |
 
-### Specs E2E Produites
+### E2E Specs Produced
 
-| # | Dossier | Stories couvertes | Priorité | Tâches |
-|---|---------|-------------------|----------|--------|
+| # | Folder | Stories covered | Priority | Tasks |
+|---|--------|----------------|----------|-------|
 | 1 | `NNN-e2e-description` | US-XXX-1, US-XXX-2 | P0 | X tasks |
 
-### Qualité & Conformité
+### Quality & Compliance
 
-| Critère | Statut |
-|---------|--------|
-| Structure alignée sur $BENCHMARK_SPECS | OK / Déviation: [raison] |
-| Format user story conforme | OK |
-| Profondeur critères d'acceptation | OK / [N] vs moyenne projet [M] |
-| Format tâches conforme | OK |
-| Références croisées incluses | OK |
-| Source code policy explicite | OK |
+| Criterion | Status |
+|-----------|--------|
+| Structure aligned with $BENCHMARK_SPECS | OK / Deviation: [reason] |
+| User story format compliant | OK |
+| Acceptance criteria depth | OK / [N] vs project average [M] |
+| Task format compliant | OK |
+| Cross-references included | OK |
+| Source code policy explicit | OK |
 
-### Prochaines Étapes
+### Next Steps
 
-1. Revoir les specs produites
-2. Pour chaque spec, déléguer à l'implémenteur :
+1. Review the produced specs
+2. For each spec, delegate to the implementer:
    ```
    Use the implementer subagent to: /implement [NNN]
    ```
-3. Après implémentation, exécuter la review :
+3. After implementation, run the review:
    ```
    /review-implemented [NNN]
    ```
@@ -448,25 +447,25 @@ Après production de toutes les specs, présenter :
 
 ---
 
-## Règles Critiques
+## Critical Rules
 
-- **JAMAIS produire une spec sans avoir lu TOUTES les specs existantes** en Phase 0
-- **JAMAIS résumer les critères d'acceptation** — les copier verbatim depuis les specs source
-- **TOUJOURS identifier les benchmark specs** et s'aligner sur leur qualité
-- **TOUJOURS respecter les conventions de format** observées dans le projet
-- **TOUJOURS inclure les références croisées** vers les specs source et specs liées
-- **TOUJOURS inclure la source code policy** dans chaque spec.md
-- **L'application source NE DOIT PAS être modifiée** sauf ajout de `data-testid`
-- **Créer une branche Git** avant de commencer à écrire
-- **Exécuter TOUTES les commandes via Docker** si le projet utilise Docker — JAMAIS sur l'hôte
-- **Respecter `.cursor/rules/`** et `AGENTS.md` pour les conventions du projet
-- **Utiliser Context7 MCP** pour la documentation Playwright et Spec-Kit
+- **NEVER produce a spec without having read ALL existing specs** in Phase 0
+- **NEVER summarize acceptance criteria** — copy them verbatim from source specs
+- **ALWAYS identify benchmark specs** and align with their quality
+- **ALWAYS follow the format conventions** observed in the project
+- **ALWAYS include cross-references** to source specs and related specs
+- **ALWAYS include the source code policy** in each spec.md
+- **The source application MUST NOT be modified** except for adding `data-testid`
+- **Create a Git branch** before starting to write
+- **Run ALL commands via Docker** if the project uses Docker — NEVER on the host
+- **Follow `.cursor/rules/`** and `AGENTS.md` for project conventions
+- **Use Context7 MCP** for Playwright and Spec-Kit documentation
 
 ## Model Requirement
 
-| Priorité | Modèle | ID |
-|----------|--------|----|
-| **Préféré** | Claude 4.6 Opus Max Thinking | `claude-opus-4-6-max-thinking` |
-| **Fallback (sans Max Mode)** | Claude 4.6 Opus Thinking | `claude-opus-4-6-thinking` |
+| Priority | Model | ID |
+|----------|-------|----|
+| **Preferred** | Claude 4.6 Opus Max Thinking | `claude-opus-4-6-max-thinking` |
+| **Fallback (without Max Mode)** | Claude 4.6 Opus Thinking | `claude-opus-4-6-thinking` |
 
-La capacité de raisonnement étendu est essentielle pour l'analyse exhaustive de 50+ specs, l'identification fiable des patterns, et la production de specs de qualité benchmark.
+Extended reasoning capability is essential for the exhaustive analysis of 50+ specs, reliable pattern identification, and production of benchmark-quality specs.

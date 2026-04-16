@@ -4,43 +4,43 @@ globs: .npmrc, .docker/**/Dockerfile, compose.yaml, .env.example
 alwaysApply: false
 ---
 
-Registry privé npm — Conventions pour Turborepo + bun + Docker :
+Private npm registry — Conventions for Turborepo + bun + Docker:
 
-Architecture :
-- `.npmrc` unique à la racine du monorepo — JAMAIS de `.npmrc` dans `apps/` ou `packages/`
-- Bun lit automatiquement le `.npmrc` racine pour tous les workspaces
-- Token via interpolation d'env `${NPM_TOKEN}` — JAMAIS de token en dur
-- Chaque scope privé = une ligne `@scope:registry=URL` + une ligne `//URL/:_authToken=${TOKEN}`
+Architecture:
+- Single `.npmrc` at monorepo root — NEVER `.npmrc` in `apps/` or `packages/`
+- Bun automatically reads the root `.npmrc` for all workspaces
+- Token via env interpolation `${NPM_TOKEN}` — NEVER hardcoded tokens
+- Each private scope = one `@scope:registry=URL` line + one `//URL/:_authToken=${TOKEN}` line
 
-Flux du token dans Docker :
+Token flow in Docker:
 - `.env` → `compose.yaml` (`build.args`) → `Dockerfile` (`ARG` + `ENV`) → `.npmrc` → `bun install`
-- Le token est passé via `build.args` (build-time), PAS via `environment` (runtime)
-- Seuls les services avec des dépendances privées reçoivent le token
+- Token is passed via `build.args` (build-time), NOT via `environment` (runtime)
+- Only services with private dependencies receive the token
 
-Sécurité dans le Dockerfile (OBLIGATOIRE) :
-- `ARG NPM_TOKEN` + `ENV NPM_TOKEN=${NPM_TOKEN}` en début de stage deps
-- `COPY .npmrc .npmrc` AVANT `bun install`
-- `RUN rm -f .npmrc` + `ENV NPM_TOKEN=` APRÈS `bun install`
-- Le stage runtime (stage 2) ne doit contenir ni `.npmrc` ni `NPM_TOKEN`
-- Seul `node_modules` est copié du stage deps vers le stage runtime
+Dockerfile security (MANDATORY):
+- `ARG NPM_TOKEN` + `ENV NPM_TOKEN=${NPM_TOKEN}` at the beginning of the deps stage
+- `COPY .npmrc .npmrc` BEFORE `bun install`
+- `RUN rm -f .npmrc` + `ENV NPM_TOKEN=` AFTER `bun install`
+- The runtime stage (stage 2) must contain neither `.npmrc` nor `NPM_TOKEN`
+- Only `node_modules` is copied from the deps stage to the runtime stage
 
-compose.yaml :
-- `build.args.NPM_TOKEN: ${NPM_TOKEN:-}` — valeur vide par défaut
-- `context: .` doit pointer vers la racine du monorepo (accès au `.npmrc`)
+compose.yaml:
+- `build.args.NPM_TOKEN: ${NPM_TOKEN:-}` — empty default value
+- `context: .` must point to the monorepo root (access to `.npmrc`)
 
-.env.example :
-- Documenter chaque variable de token : `NPM_TOKEN=`
-- Section dédiée `# ─── NPM Private Registry ───`
+.env.example:
+- Document each token variable: `NPM_TOKEN=`
+- Dedicated section `# ─── NPM Private Registry ───`
 
-.dockerignore :
-- `.npmrc` ne doit PAS être dans `.dockerignore` (nécessaire au build)
-- `.env` DOIT être dans `.dockerignore` (contient le token réel)
+.dockerignore:
+- `.npmrc` must NOT be in `.dockerignore` (needed for the build)
+- `.env` MUST be in `.dockerignore` (contains the actual token)
 
-Skill associé : `.cursor/skills/npm-private-registry/SKILL.md` — procédure complète, checklist, debugging
+Related skill: `.cursor/skills/npm-private-registry/SKILL.md` — full procedure, checklist, debugging
 
-Avoid :
-- Token en dur dans `.npmrc`, Dockerfile ou compose.yaml
-- `.npmrc` dans les sous-packages
-- `NPM_TOKEN` dans `environment` (inutile au runtime, risque de fuite)
-- `.npmrc` dans `.dockerignore`
-- `bun install` sur l'hôte pour résoudre des packages privés
+Avoid:
+- Hardcoded token in `.npmrc`, Dockerfile, or compose.yaml
+- `.npmrc` in sub-packages
+- `NPM_TOKEN` in `environment` (unnecessary at runtime, leak risk)
+- `.npmrc` in `.dockerignore`
+- `bun install` on the host to resolve private packages

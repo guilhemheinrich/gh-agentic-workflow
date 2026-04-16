@@ -1,136 +1,136 @@
 ---
 description: >-
-  Règles d'indexation des specs et fixes. Définit le format, la séquence,
-  la résolution de conflits d'index, et la prise en compte des archives.
-  Référencée par /specify, /qa-specify, et /index.
+  Spec and fix indexing rules. Defines the format, sequence, index conflict
+  resolution, and archive handling.
+  Referenced by /specify, /qa-specify, and /index.
 globs: specs/**/*,fixes/**/*
 alwaysApply: false
 ---
 
-# Règles d'Indexation des Specs & Fixes
+# Spec & Fix Indexing Rules
 
-## 1. Format d'Index
+## 1. Index Format
 
-| Propriété           | Règle                                                          |
+| Property           | Rule                                                          |
 | ------------------- | -------------------------------------------------------------- |
-| **Format numérique** | 3 chiffres, zero-padded : `001`, `002`, ..., `999`            |
-| **Incrément**        | Strictement +1 (pas de bis, pas de suffixes, pas de sauts)    |
-| **Unicité**          | Un index est unique dans l'ensemble `specs/ ∪ fixes/ ∪ specs/archive/` |
-| **Séquence globale** | Les index forment une séquence continue `[1, 2, 3, ..., N]`  |
+| **Numeric format** | 3 digits, zero-padded: `001`, `002`, ..., `999`            |
+| **Increment**        | Strictly +1 (no bis, no suffixes, no gaps)    |
+| **Uniqueness**          | An index is unique across `specs/ ∪ fixes/ ∪ specs/archive/` |
+| **Global sequence** | Indexes form a continuous sequence `[1, 2, 3, ..., N]`  |
 
-## 2. Convention de Nommage des Dossiers
+## 2. Folder Naming Convention
 
 ```
 {NNN}-{semantic-name}/
 ```
 
-- `NNN` : index 3-digit zero-padded
-- `semantic-name` : kebab-case, descriptif, en anglais
-- Exemples : `001-bootstrap-dx`, `042-e2e-auth-flows`, `007-fix-login-timeout`
+- `NNN`: 3-digit zero-padded index
+- `semantic-name`: kebab-case, descriptive, in English
+- Examples: `001-bootstrap-dx`, `042-e2e-auth-flows`, `007-fix-login-timeout`
 
-## 3. Périmètre d'Indexation
+## 3. Indexing Scope
 
-Les dossiers suivants partagent le **même espace d'indexation** (séquence unique) :
+The following folders share the **same indexing space** (unique sequence):
 
-| Dossier            | Description                       | Obligatoire |
+| Folder            | Description                       | Required |
 | ------------------ | --------------------------------- | ----------- |
-| `specs/`           | Spécifications actives            | Oui         |
-| `fixes/`           | Correctifs indexés                 | Oui         |
-| `specs/archive/`   | Spécifications archivées          | Si existant |
+| `specs/`           | Active specifications            | Yes         |
+| `fixes/`           | Indexed fixes                 | Yes         |
+| `specs/archive/`   | Archived specifications          | If existing |
 
-L'index est **global** : si `specs/archive/` contient `034-old-feature/`, alors le prochain index disponible est `035` ou plus.
+The index is **global**: if `specs/archive/` contains `034-old-feature/`, then the next available index is `035` or higher.
 
-## 4. Calcul du Prochain Index Disponible
+## 4. Computing the Next Available Index
 
-Pour déterminer le prochain index à utiliser :
+To determine the next index to use:
 
 ```
-1. Scanner TOUS les dossiers du périmètre (specs/, fixes/, specs/archive/)
-2. Extraire le préfixe numérique de chaque dossier : {NNN}-*
-3. Trouver MAX(NNN) parmi tous les dossiers trouvés
-4. Prochain index = MAX + 1
-5. Formater en 3-digit zero-padded
+1. Scan ALL folders in scope (specs/, fixes/, specs/archive/)
+2. Extract the numeric prefix from each folder: {NNN}-*
+3. Find MAX(NNN) among all found folders
+4. Next index = MAX + 1
+5. Format as 3-digit zero-padded
 ```
 
-**Cas particuliers** :
-- Si aucun dossier n'existe → le premier index est `001`
-- Si `specs/archive/` n'existe pas → l'ignorer dans le scan
-- Si `fixes/` n'existe pas → l'ignorer dans le scan
+**Edge cases**:
+- If no folders exist → the first index is `001`
+- If `specs/archive/` does not exist → skip it in the scan
+- If `fixes/` does not exist → skip it in the scan
 
-## 5. Résolution de Conflits d'Index
+## 5. Index Conflict Resolution
 
-Un conflit se produit quand deux dossiers (créés sur des branches différentes) possèdent le même index.
+A conflict occurs when two folders (created on different branches) have the same index.
 
-### 5.1 Détection
+### 5.1 Detection
 
-Un conflit est détecté si :
-- Deux dossiers `{NNN}-A/` et `{NNN}-B/` existent avec le même `NNN`
-- Un trou existe dans la séquence (ex: `001, 002, 004` → manque `003`)
+A conflict is detected if:
+- Two folders `{NNN}-A/` and `{NNN}-B/` exist with the same `NNN`
+- A gap exists in the sequence (e.g., `001, 002, 004` → missing `003`)
 
-### 5.2 Détermination de l'Ordre de Priorité
+### 5.2 Determining Priority Order
 
-Pour décider **quel dossier conserve un index bas** (était là en premier), appliquer dans l'ordre :
+To decide **which folder keeps a lower index** (was there first), apply in order:
 
-| Priorité | Source de vérité                                   | Comment vérifier                                                                                    |
+| Priority | Source of truth                                   | How to verify                                                                                    |
 | -------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| **P1**   | Date de création dans `stats.md`                   | Champ `Created` du header du fichier `stats.md` dans le dossier de la spec                          |
-| **P2**   | Date de création dans `spec.md`                    | Champ `Created` du header du fichier `spec.md`                                                      |
-| **P3**   | Présence sur `main`                                | `git log main -- specs/{NNN}-*/` — si un des deux existe sur main, il est prioritaire               |
-| **P4**   | Présence sur `staging`                             | `git log staging -- specs/{NNN}-*/` — si un des deux existe sur staging, il est prioritaire          |
-| **P5**   | Présence sur une branche remote (origin/*)         | `git branch -r --list 'origin/*' --contains` — le plus ancien commit remote gagne                   |
-| **P6**   | Date du premier commit touchant le dossier         | `git log --diff-filter=A --format=%aI -- specs/{NNN}-*/` — le plus ancien commit gagne              |
+| **P1**   | Creation date in `stats.md`                   | `Created` field in the `stats.md` file header within the spec folder                          |
+| **P2**   | Creation date in `spec.md`                    | `Created` field in the `spec.md` file header                                                      |
+| **P3**   | Presence on `main`                                | `git log main -- specs/{NNN}-*/` — if one exists on main, it has priority               |
+| **P4**   | Presence on `staging`                             | `git log staging -- specs/{NNN}-*/` — if one exists on staging, it has priority          |
+| **P5**   | Presence on a remote branch (origin/*)         | `git branch -r --list 'origin/*' --contains` — the oldest remote commit wins                   |
+| **P6**   | Date of the first commit touching the folder         | `git log --diff-filter=A --format=%aI -- specs/{NNN}-*/` — the oldest commit wins              |
 
-**Règle de tie-break** : Si deux sources donnent la même date, l'ordre alphabétique du nom sémantique départage (A avant B).
+**Tie-break rule**: If two sources give the same date, alphabetical order of the semantic name breaks the tie (A before B).
 
-### 5.3 Algorithme de Ré-indexation
+### 5.3 Re-indexing Algorithm
 
-L'algorithme est implémenté dans le script `.cursor/scripts/reindex.sh`.
+The algorithm is implemented in the `.cursor/scripts/reindex.sh` script.
 
 ```
-1. SCAN: Lister TOUS les dossiers indexés dans specs/, fixes/, specs/archive/
-2. SORT: Trier par clé composite (index original, date P1/P2, main P3, staging P4, commit P5/P6, nom)
-3. PLAN: Assigner les index [001..N] séquentiellement dans l'ordre trié
-4. RENAME en 2 phases (anti-collision cascade) :
-   a. Phase A : Tous les dossiers à renommer → noms temporaires (.tmp-reindex-*)
-   b. Phase B : Noms temporaires → noms finaux ({NNN}-{name})
-5. UPDATE: Mettre à jour les références dans spec.md, plan.md, stats.md, tasks.md, prompt.md, review.md
-6. XREF: Corriger les références croisées dans tout le périmètre
-7. VALIDATE: Vérifier la séquence finale [001..N] sans trou ni doublon
+1. SCAN: List ALL indexed folders in specs/, fixes/, specs/archive/
+2. SORT: Sort by composite key (original index, P1/P2 date, main P3, staging P4, commit P5/P6, name)
+3. PLAN: Assign indexes [001..N] sequentially in sorted order
+4. RENAME in 2 phases (anti-cascade collision):
+   a. Phase A: All folders to rename → temporary names (.tmp-reindex-*)
+   b. Phase B: Temporary names → final names ({NNN}-{name})
+5. UPDATE: Update references in spec.md, plan.md, stats.md, tasks.md, prompt.md, review.md
+6. XREF: Fix cross-references across the entire scope
+7. VALIDATE: Verify the final sequence [001..N] has no gaps or duplicates
 ```
 
-L'approche en 2 phases (étape 4) élimine le problème de collision en cascade
-(ex: renommer 004→005 quand un 005 existe déjà).
+The 2-phase approach (step 4) eliminates the cascade collision problem
+(e.g., renaming 004→005 when a 005 already exists).
 
-**NE PAS** renommer les branches git (documenté dans un commentaire si nécessaire).
+**DO NOT** rename git branches (documented in a comment if necessary).
 
-## 6. Intégrité Après Ré-indexation
+## 6. Integrity After Re-indexing
 
-Après toute opération de ré-indexation, vérifier :
+After any re-indexing operation, verify:
 
-| Vérification                                          | Attendu                           |
+| Check                                          | Expected                           |
 | ----------------------------------------------------- | --------------------------------- |
-| Séquence continue `[1..N]`                            | Aucun trou, aucun doublon         |
-| Chaque dossier a un index unique                       | `count(distinct NNN) == count(*)` |
-| Les fichiers internes référencent le bon index         | Grep `Feature Branch` cohérent    |
-| L'archive est correctement prise en compte             | Ses index sont dans la séquence   |
+| Continuous sequence `[1..N]`                            | No gaps, no duplicates         |
+| Each folder has a unique index                       | `count(distinct NNN) == count(*)` |
+| Internal files reference the correct index         | Grep `Feature Branch` is consistent    |
+| Archive is correctly accounted for             | Its indexes are in the sequence   |
 
-## 7. Règles pour les Commandes Référentes
+## 7. Rules for Referencing Commands
 
 ### `/specify`
 
-Avant de créer un dossier de spec :
-1. Appliquer la section 4 (Calcul du Prochain Index)
-2. Vérifier qu'aucun conflit n'existe (section 5.1)
-3. Si conflit détecté → exécuter `/index` avant de continuer
+Before creating a spec folder:
+1. Apply section 4 (Computing the Next Available Index)
+2. Verify no conflict exists (section 5.1)
+3. If conflict detected → run `/index` before continuing
 
 ### `/qa-specify`
 
-Même règles que `/specify`. En cas de création de multiples specs en une session :
-- Incrémenter séquentiellement à partir du premier index calculé
-- Vérifier l'absence de conflit à chaque incrémentation
+Same rules as `/specify`. When creating multiple specs in one session:
+- Increment sequentially from the first computed index
+- Verify no conflict at each increment
 
 ### `/index`
 
-Commande dédiée à la vérification et correction de l'indexation.
-Exécute le script `.cursor/scripts/reindex.sh` (dry-run puis réel après confirmation).
-Voir la commande `/index` pour le workflow complet.
+Dedicated command for indexing verification and correction.
+Executes the `.cursor/scripts/reindex.sh` script (dry-run then actual after confirmation).
+See the `/index` command for the full workflow.

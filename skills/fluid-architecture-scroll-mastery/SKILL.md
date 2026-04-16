@@ -1,49 +1,49 @@
-**Domaine :** UX / Intégration Web Component & Layout  
-**Objectif :** Éliminer les doubles barres de défilement et garantir que l'extension dynamique d'un composant (ex: menu dépliant) soit gérée nativement par le navigateur.
+**Domain:** UX / Web Component Integration & Layout  
+**Objective:** Eliminate double scrollbars and ensure that a component's dynamic expansion (e.g., dropdown menu) is handled natively by the browser.
 
 ---
 
-## 1. La Théorie : Pourquoi ça casse ?
-Le problème survient quand deux "contextes de défilement" entrent en conflit. 
+## 1. The Theory: Why Does It Break?
+The problem occurs when two "scroll contexts" conflict.
 
-* **Le Piège du Shadow DOM :** Par défaut, un Web Component est `display: inline`. Il ne communique pas sa hauteur réelle au parent. Si on force une hauteur interne avec un `overflow: auto`, on crée une "boîte dans la boîte" qui scrolle indépendamment.
-* **Le Conflit de Flux :** Si un composant utilise `position: fixed` ou `absolute` pour ses options, il sort du flux CSS. Le parent "pense" que le composant est petit, alors que son contenu dépasse visuellement.
-
----
-
-## 2. Les Règles de Comportement (Le "Comment")
-
-### A. Le Composant (The Content Provider)
-Le composant doit être **"Agnostique de la Hauteur"**. Il ne doit jamais décider de sa propre limite verticale.
-
-1.  **Affirmation d'existence :** Utiliser `:host { display: block; }`. Cela permet au composant d'occuper toute la largeur et de calculer sa hauteur en fonction de son contenu.
-2.  **Transparence du Scroll :** Appliquer `overflow: visible;` sur l'élément racine du composant. 
-3.  **Expansion Naturelle :** Les éléments extensibles (accordéons, paramètres avancés) doivent utiliser le flux normal (`static` ou `relative`). En s'ouvrant, ils augmentent la taille du composant, qui augmente la taille du parent.
-
-### B. L'Application Parente (The Scroll Master)
-L'application est la seule autorité sur le défilement.
-
-1.  **Conteneur Souple :** Le conteneur du Web Component ne doit avoir ni `height` fixe, ni `max-height`.
-2.  **Délégation de Scroll :** Seule la racine de l'application (ou le conteneur principal de la page) possède la propriété `overflow-y: auto`.
+* **The Shadow DOM Trap:** By default, a Web Component is `display: inline`. It does not communicate its actual height to the parent. If you force an internal height with `overflow: auto`, you create a "box within a box" that scrolls independently.
+* **The Flow Conflict:** If a component uses `position: fixed` or `absolute` for its options, it leaves the CSS flow. The parent "thinks" the component is small, while its content visually overflows.
 
 ---
 
-## 3. Matrice de Décision pour l'implémentation
+## 2. Behavior Rules (The "How")
 
-| Si je veux... | Je fais (Composant) | Je fais (Parent) |
+### A. The Component (The Content Provider)
+The component must be **"Height-Agnostic"**. It must never decide its own vertical limit.
+
+1.  **Existence declaration:** Use `:host { display: block; }`. This allows the component to occupy the full width and calculate its height based on its content.
+2.  **Scroll transparency:** Apply `overflow: visible;` on the component's root element.
+3.  **Natural expansion:** Expandable elements (accordions, advanced settings) must use normal flow (`static` or `relative`). When opening, they increase the component's size, which increases the parent's size.
+
+### B. The Parent Application (The Scroll Master)
+The application is the sole authority over scrolling.
+
+1.  **Flexible container:** The Web Component's container must have neither a fixed `height` nor `max-height`.
+2.  **Scroll delegation:** Only the application root (or the main page container) owns the `overflow-y: auto` property.
+
+---
+
+## 3. Implementation Decision Matrix
+
+| If I want to... | I do (Component) | I do (Parent) |
 | :--- | :--- | :--- |
-| **Ajouter du contenu** | Je laisse le DOM s'étirer naturellement. | Je ne bride pas la hauteur du slot. |
-| **Éviter le double scroll** | `overflow: visible` obligatoire. | `overflow-y: auto` sur le wrapper global. |
-| **Afficher des options** | Utiliser `relative` pour pousser le bas. | Prévoir un padding en bas de page. |
+| **Add content** | Let the DOM stretch naturally. | Don't constrain the slot's height. |
+| **Avoid double scroll** | `overflow: visible` is mandatory. | `overflow-y: auto` on the global wrapper. |
+| **Display options** | Use `relative` to push the bottom. | Provide bottom padding on the page. |
 
 ---
 
-## 4. Logique pour IA (System Prompting)
-> "Lors de la génération d'un Web Component, assure-toi que le composant est un 'Flow Citizen'. 
-> 1. Définis `:host` en `display: block`.
-> 2. Prohibe l'usage de `height: 100%` ou `100vh` à l'intérieur du Shadow DOM.
-> 3. Délègue la gestion du dépassement (overflow) au parent pour maintenir une expérience de défilement unifiée (`Single Source of Scroll`)."
+## 4. AI Logic (System Prompting)
+> "When generating a Web Component, ensure the component is a 'Flow Citizen'.
+> 1. Set `:host` to `display: block`.
+> 2. Prohibit the use of `height: 100%` or `100vh` inside the Shadow DOM.
+> 3. Delegate overflow management to the parent to maintain a unified scroll experience (`Single Source of Scroll`)."
 
 ---
 
-> **Note d'intention :** Cette approche garantit que l'utilisateur n'est jamais bloqué dans une "impasse de scroll" où le mouvement de sa molette ne fait rien parce qu'il survole une zone qui a déjà atteint son propre bas, alors que la page globale est encore longue.
+> **Design intent note:** This approach ensures the user is never stuck in a "scroll dead-end" where their scroll wheel does nothing because it hovers over a zone that has already reached its own bottom, while the global page is still long.

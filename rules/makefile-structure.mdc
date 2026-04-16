@@ -1,53 +1,53 @@
 ---
-description: Structure et conventions du Makefile racine du projet
+description: Structure and conventions for the project root Makefile
 globs: "**/Makefile"
 alwaysApply: false
 ---
 
-# Makefile — Structure attendue
+# Makefile — Expected Structure
 
-Chaque projet DOIT avoir un `Makefile` à la racine avec les commandes ci-dessous.
+Every project MUST have a `Makefile` at the root with the commands below.
 
-## Variables d'environnement
+## Environment Variables
 
-Toutes les valeurs configurables (ports, noms de services, images, etc.) DOIVENT être lues depuis le fichier `.env` avec un fallback vers les valeurs de `.env.example`.
+All configurable values (ports, service names, images, etc.) MUST be read from the `.env` file with a fallback to `.env.example` values.
 
 ```makefile
 include .env
 export
 
-# Fallbacks (valeurs de .env.example)
+# Fallbacks (.env.example values)
 APP_PORT ?= 3000
 DB_PORT ?= 5432
 REDIS_PORT ?= 6379
 ```
 
-## Commandes obligatoires
+## Mandatory Commands
 
-### `up` — Démarrage du projet
+### `up` — Start the project
 
 ```makefile
 up:
 	docker compose up -d --build
 ```
 
-### `down` — Arrêt du projet
+### `down` — Stop the project
 
 ```makefile
 down:
 	docker compose down
 ```
 
-### `test` — Suite de tests complète
+### `test` — Full test suite
 
-Lance les tests pour CHAQUE app/package du monorepo. Distingue les types de tests :
+Run tests for EVERY app/package in the monorepo. Distinguish test types:
 
 ```makefile
 test: test-unit test-integration test-e2e
 
 test-unit:
 	docker compose exec <service> npm run test:unit
-	# Répéter pour chaque app/package
+	# Repeat for each app/package
 
 test-integration:
 	docker compose exec <service> npm run test:integration
@@ -56,34 +56,34 @@ test-e2e:
 	docker compose exec <service> npm run test:e2e
 ```
 
-Si le projet n'est pas un monorepo, adapter avec une seule cible par type.
+If the project is not a monorepo, adapt with a single target per type.
 
-### `coverage` — Rapport de couverture
+### `coverage` — Coverage report
 
-Lance le check de couverture pour CHAQUE app/package individuellement :
+Run the coverage check for EVERY app/package individually:
 
 ```makefile
 coverage:
 	docker compose exec <service-1> npm run test:coverage
 	docker compose exec <service-2> npm run test:coverage
-	# Une ligne par app/package
+	# One line per app/package
 ```
 
-## Commandes conditionnelles (si applicable)
+## Conditional Commands (if applicable)
 
-### `setup` — Initialisation idempotente
+### `setup` — Idempotent initialization
 
-À lancer une seule fois. Doit être idempotent (relancer ne casse rien).
+Run once. Must be idempotent (re-running does not break anything).
 
 ```makefile
 setup:
 	cp -n .env.example .env || true
 	docker compose build
 	$(MAKE) db-migrate
-	# Autres initialisations (seed, etc.)
+	# Other initializations (seed, etc.)
 ```
 
-### `db-*` — Opérations base de données
+### `db-*` — Database operations
 
 ```makefile
 db-migrate:
@@ -99,16 +99,16 @@ db-studio:
 	docker compose exec <service> npx prisma studio
 ```
 
-Adapter les commandes `db-*` au ORM/outil de migration utilisé (Prisma, Drizzle, TypeORM, Alembic, etc.).
+Adapt `db-*` commands to the ORM/migration tool used (Prisma, Drizzle, TypeORM, Alembic, etc.).
 
-## Règles
+## Rules
 
-- **JAMAIS de valeurs en dur** — toujours `$(VARIABLE)` avec fallback `?=`
-- **TOUJOURS exécuter via Docker** — aucune commande directe sur l'hôte
-- **Un target par type de test** — `test-unit`, `test-integration`, `test-e2e`
-- **Un target coverage par app/package** — ou une boucle sur les packages
-- **`setup` DOIT être idempotent** — utiliser `cp -n`, `|| true`, checks d'existence
-- **`.PHONY`** — déclarer tous les targets comme PHONY
+- **NEVER hardcode values** — always `$(VARIABLE)` with `?=` fallback
+- **ALWAYS execute via Docker** — no direct commands on the host
+- **One target per test type** — `test-unit`, `test-integration`, `test-e2e`
+- **One coverage target per app/package** — or a loop over packages
+- **`setup` MUST be idempotent** — use `cp -n`, `|| true`, existence checks
+- **`.PHONY`** — declare all targets as PHONY
 
 ```makefile
 .PHONY: up down setup test test-unit test-integration test-e2e coverage db-migrate db-reset db-seed db-studio

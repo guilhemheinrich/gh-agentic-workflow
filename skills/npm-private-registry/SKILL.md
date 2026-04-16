@@ -5,22 +5,22 @@ description: "Integrate private npm packages in a Turborepo + bun + Docker monor
 
 # NPM Private Registry — Turborepo + Bun + Docker
 
-Ce skill documente la procédure complète pour intégrer un package npm privé (scoped) dans un monorepo Turborepo + bun, avec des builds Docker multi-stage.
+This skill documents the complete procedure for integrating a private npm package (scoped) in a Turborepo + bun monorepo with Docker multi-stage builds.
 
-## Quand utiliser ce skill
+## When to Use This Skill
 
-- Ajout d'un nouveau package npm privé (ex: `@septeo-immo/calendar-wc`)
-- Configuration initiale de l'accès à un registry privé
-- Debugging d'erreurs `401 Unauthorized` ou `404 Not Found` lors de `bun install` dans Docker
-- Ajout d'un nouveau scope npm privé (ex: `@autre-org/...`)
-- Migration d'un package local (volume mount) vers un package publié sur un registry
+- Adding a new private npm package (e.g., `@septeo-immo/calendar-wc`)
+- Initial configuration of private registry access
+- Debugging `401 Unauthorized` or `404 Not Found` errors during `bun install` in Docker
+- Adding a new private npm scope (e.g., `@other-org/...`)
+- Migrating from a local package (volume mount) to a package published on a registry
 
-## Prérequis
+## Prerequisites
 
-- Un token npm valide avec accès en lecture au scope privé
-- Le token doit être dans `.env` (jamais commité)
+- A valid npm token with read access to the private scope
+- The token must be in `.env` (never committed)
 
-## Architecture du flux d'authentification
+## Authentication Flow Architecture
 
 ```
 .env (NPM_TOKEN=npm_xxxx)
@@ -36,43 +36,43 @@ Dockerfile ────── ARG NPM_TOKEN
 .npmrc ────────── //registry.npmjs.org/:_authToken=${NPM_TOKEN}
     │
     ▼
-bun install ───── Authentification réussie
+bun install ───── Authentication successful
     │
     ▼
-Nettoyage ─────── RUN rm -f .npmrc
+Cleanup ───────── RUN rm -f .npmrc
                   ENV NPM_TOKEN=
 ```
 
-## Procédure pas-à-pas
+## Step-by-Step Procedure
 
-### Étape 1 — Configurer `.npmrc` à la racine du monorepo
+### Step 1 — Configure `.npmrc` at the monorepo root
 
-Le `.npmrc` est **unique et à la racine** du monorepo. Bun le lit automatiquement.
+The `.npmrc` is **unique and at the root** of the monorepo. Bun reads it automatically.
 
 ```ini
-# .npmrc (racine du monorepo)
+# .npmrc (monorepo root)
 @septeo-immo:registry=https://registry.npmjs.org/
 //registry.npmjs.org/:_authToken=${NPM_TOKEN}
 ```
 
-**Règles :**
-- Un scope = une ligne `@scope:registry=...`
-- Une ligne d'auth par registry `//registry.url/:_authToken=...`
-- Utiliser `${NPM_TOKEN}` (interpolation d'env), jamais le token en dur
-- **Pas de `.npmrc` dans les sous-packages** (`apps/`, `packages/`) — uniquement à la racine
+**Rules:**
+- One scope = one `@scope:registry=...` line
+- One auth line per registry `//registry.url/:_authToken=...`
+- Use `${NPM_TOKEN}` (env interpolation), never a hardcoded token
+- **No `.npmrc` in sub-packages** (`apps/`, `packages/`) — only at the root
 
-Pour ajouter un second scope privé sur un registry différent :
+To add a second private scope on a different registry:
 
 ```ini
 # .npmrc
 @septeo-immo:registry=https://registry.npmjs.org/
 //registry.npmjs.org/:_authToken=${NPM_TOKEN}
 
-@autre-org:registry=https://npm.pkg.github.com/
+@other-org:registry=https://npm.pkg.github.com/
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
-### Étape 2 — Déclarer `NPM_TOKEN` dans `.env.example`
+### Step 2 — Declare `NPM_TOKEN` in `.env.example`
 
 ```bash
 # .env.example
@@ -80,55 +80,55 @@ Pour ajouter un second scope privé sur un registry différent :
 NPM_TOKEN=
 ```
 
-Et dans `.env` (non commité) :
+And in `.env` (not committed):
 
 ```bash
 NPM_TOKEN=npm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-### Étape 3 — Configurer le Dockerfile (multi-stage)
+### Step 3 — Configure the Dockerfile (multi-stage)
 
-Le pattern critique : le token n'existe que dans le stage de build, puis est supprimé.
+The critical pattern: the token exists only in the build stage, then is removed.
 
 ```dockerfile
-# Stage 1 — Installation des dépendances avec auth
+# Stage 1 — Dependency installation with auth
 FROM oven/bun:1.3-alpine AS deps
 
-# ── Token pour le registry privé ──
+# ── Private registry token ──
 ARG NPM_TOKEN
 ENV NPM_TOKEN=${NPM_TOKEN}
 
 WORKDIR /app
 
-# ── Copier les fichiers nécessaires au résolution des dépendances ──
+# ── Copy files needed for dependency resolution ──
 COPY package.json bun.lock* turbo.json ./
 COPY apps/<service>/package.json apps/<service>/
-# Si d'autres packages du monorepo sont des dépendances :
+# If other monorepo packages are dependencies:
 # COPY packages/shared/package.json packages/shared/
 COPY .npmrc .npmrc
 
-# ── Installer ──
+# ── Install ──
 RUN bun install --frozen-lockfile 2>/dev/null || bun install
 
-# ── SÉCURITÉ : supprimer le token et le .npmrc ──
+# ── SECURITY: remove token and .npmrc ──
 RUN rm -f .npmrc
 ENV NPM_TOKEN=
 
-# Stage 2 — Runtime (pas de token, pas de .npmrc)
+# Stage 2 — Runtime (no token, no .npmrc)
 FROM node:22-alpine
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/<service>/ .
-# ... reste de la config runtime
+# ... rest of runtime config
 ```
 
-**Points critiques :**
-- `ARG NPM_TOKEN` + `ENV NPM_TOKEN=${NPM_TOKEN}` : rend le token disponible pour `.npmrc`
-- `COPY .npmrc .npmrc` : copié **avant** `bun install`
-- `RUN rm -f .npmrc` + `ENV NPM_TOKEN=` : nettoyage **après** `bun install`
-- Le stage 2 (`FROM node:22-alpine`) ne contient ni le token ni le `.npmrc`
+**Critical points:**
+- `ARG NPM_TOKEN` + `ENV NPM_TOKEN=${NPM_TOKEN}`: makes token available for `.npmrc`
+- `COPY .npmrc .npmrc`: copied **before** `bun install`
+- `RUN rm -f .npmrc` + `ENV NPM_TOKEN=`: cleanup **after** `bun install`
+- Stage 2 (`FROM node:22-alpine`) contains neither the token nor `.npmrc`
 
-### Étape 4 — Passer le token via `compose.yaml`
+### Step 4 — Pass the token via `compose.yaml`
 
 ```yaml
 services:
@@ -140,12 +140,12 @@ services:
         NPM_TOKEN: ${NPM_TOKEN:-}
 ```
 
-**Règles :**
-- `${NPM_TOKEN:-}` : valeur vide par défaut (pas d'erreur si absent)
-- Le `context: .` doit être la racine du monorepo (pour accéder à `.npmrc`)
-- Seuls les services qui dépendent de packages privés ont besoin du `build.args`
+**Rules:**
+- `${NPM_TOKEN:-}`: empty default value (no error if absent)
+- `context: .` must be the monorepo root (to access `.npmrc`)
+- Only services that depend on private packages need `build.args`
 
-### Étape 5 — Ajouter la dépendance dans le bon `package.json`
+### Step 5 — Add the dependency in the appropriate `package.json`
 
 ```json
 {
@@ -155,59 +155,59 @@ services:
 }
 ```
 
-Puis regénérer le lockfile :
+Then regenerate the lockfile:
 
 ```bash
-# Via Docker (JAMAIS sur l'hôte)
+# Via Docker (NEVER on the host)
 docker compose exec <service> bun install
-# Ou rebuild complet
+# Or full rebuild
 docker compose up -d --build
 ```
 
-## Checklist d'intégration d'un nouveau package privé
+## Integration Checklist for a New Private Package
 
 ```
-[ ] .npmrc : scope + auth configurés à la racine
-[ ] .env.example : variable(s) de token documentée(s)
-[ ] .env : token renseigné (non commité)
-[ ] Dockerfile du service : ARG/ENV NPM_TOKEN, COPY .npmrc, cleanup post-install
-[ ] compose.yaml : build.args.NPM_TOKEN passé au service
-[ ] package.json : dépendance ajoutée dans le bon app/package
-[ ] .dockerignore : .npmrc n'est PAS dans .dockerignore (nécessaire au build)
-[ ] .gitignore : .env est ignoré (le token ne doit jamais être commité)
-[ ] Test : docker compose up -d --build réussit
+[ ] .npmrc: scope + auth configured at root
+[ ] .env.example: token variable(s) documented
+[ ] .env: token filled in (not committed)
+[ ] Dockerfile for the service: ARG/ENV NPM_TOKEN, COPY .npmrc, post-install cleanup
+[ ] compose.yaml: build.args.NPM_TOKEN passed to the service
+[ ] package.json: dependency added in the correct app/package
+[ ] .dockerignore: .npmrc is NOT in .dockerignore (needed for build)
+[ ] .gitignore: .env is ignored (token must never be committed)
+[ ] Test: docker compose up -d --build succeeds
 ```
 
-## Sécurité
+## Security
 
-### Ce qui est commité (safe)
+### What is committed (safe)
 
-| Fichier | Contenu sensible ? | Pourquoi c'est safe |
-|---------|-------------------|---------------------|
-| `.npmrc` | Non | Contient `${NPM_TOKEN}`, pas le token réel |
-| `.env.example` | Non | Valeur vide `NPM_TOKEN=` |
-| `Dockerfile` | Non | `ARG NPM_TOKEN` sans valeur par défaut |
-| `compose.yaml` | Non | `${NPM_TOKEN:-}` référence `.env` |
+| File | Sensitive content? | Why it's safe |
+|------|--------------------|---------------|
+| `.npmrc` | No | Contains `${NPM_TOKEN}`, not the actual token |
+| `.env.example` | No | Empty value `NPM_TOKEN=` |
+| `Dockerfile` | No | `ARG NPM_TOKEN` with no default value |
+| `compose.yaml` | No | `${NPM_TOKEN:-}` references `.env` |
 
-### Ce qui n'est JAMAIS commité
+### What is NEVER committed
 
-| Fichier | Contenu | Protection |
-|---------|---------|------------|
+| File | Content | Protection |
+|------|---------|------------|
 | `.env` | `NPM_TOKEN=npm_xxxx` | `.gitignore` |
 
-### Protection dans l'image Docker
+### Protection in the Docker Image
 
-- Le token n'existe que dans le stage `deps` (stage 1)
-- `RUN rm -f .npmrc` supprime le fichier de config
-- `ENV NPM_TOKEN=` écrase la variable d'environnement
-- Le stage 2 (`FROM node:22-alpine`) repart d'une image propre
-- Seul `node_modules` est copié du stage 1 vers le stage 2
+- Token exists only in the `deps` stage (stage 1)
+- `RUN rm -f .npmrc` removes the config file
+- `ENV NPM_TOKEN=` overwrites the environment variable
+- Stage 2 (`FROM node:22-alpine`) starts from a clean image
+- Only `node_modules` is copied from stage 1 to stage 2
 
-## Cas particuliers
+## Edge Cases
 
-### Service sans dépendance privée (ex: backend)
+### Service without private dependency (e.g., backend)
 
-Pas besoin de `ARG NPM_TOKEN` ni de `COPY .npmrc` dans le Dockerfile :
+No need for `ARG NPM_TOKEN` or `COPY .npmrc` in the Dockerfile:
 
 ```dockerfile
 FROM oven/bun:1.3-alpine AS deps
@@ -215,13 +215,13 @@ WORKDIR /app
 COPY package.json bun.lock* turbo.json ./
 COPY apps/backend/package.json apps/backend/
 COPY packages/shared/package.json packages/shared/
-# Pas de COPY .npmrc, pas de ARG NPM_TOKEN
+# No COPY .npmrc, no ARG NPM_TOKEN
 RUN bun install --frozen-lockfile 2>/dev/null || bun install
 ```
 
-### Dev local avec volume mount (override du package)
+### Local dev with volume mount (package override)
 
-Pour utiliser une version locale d'un package privé en développement :
+To use a local version of a private package during development:
 
 ```yaml
 # compose.yaml
@@ -237,7 +237,7 @@ if [ -d "/calendar-wc" ] && [ -f "/calendar-wc/package.json" ]; then
 fi
 ```
 
-### Plusieurs tokens pour plusieurs registries
+### Multiple tokens for multiple registries
 
 ```ini
 # .npmrc
@@ -269,31 +269,31 @@ ENV GITHUB_TOKEN=
 
 ## Debugging
 
-### Erreur `401 Unauthorized` pendant `bun install`
+### `401 Unauthorized` error during `bun install`
 
-1. Vérifier que `NPM_TOKEN` est dans `.env`
-2. Vérifier que `compose.yaml` passe `args.NPM_TOKEN`
-3. Vérifier que le Dockerfile a `ARG NPM_TOKEN` + `ENV NPM_TOKEN`
-4. Vérifier que `.npmrc` est copié **avant** `bun install`
-5. Tester le token : `npm whoami --registry=https://registry.npmjs.org/`
+1. Verify `NPM_TOKEN` is in `.env`
+2. Verify `compose.yaml` passes `args.NPM_TOKEN`
+3. Verify the Dockerfile has `ARG NPM_TOKEN` + `ENV NPM_TOKEN`
+4. Verify `.npmrc` is copied **before** `bun install`
+5. Test the token: `npm whoami --registry=https://registry.npmjs.org/`
 
-### Erreur `404 Not Found` pour un package scoped
+### `404 Not Found` for a scoped package
 
-1. Vérifier le scope dans `.npmrc` : `@scope:registry=...`
-2. Vérifier que le nom du package correspond au scope (ex: `@septeo-immo/calendar-wc`)
-3. Vérifier que le package est publié sur le bon registry
+1. Verify the scope in `.npmrc`: `@scope:registry=...`
+2. Verify the package name matches the scope (e.g., `@septeo-immo/calendar-wc`)
+3. Verify the package is published on the correct registry
 
-### `bun install` fonctionne en local mais pas dans Docker
+### `bun install` works locally but not in Docker
 
-1. Vérifier que `.npmrc` n'est pas dans `.dockerignore`
-2. Vérifier l'ordre des `COPY` : `.npmrc` doit être copié avant `RUN bun install`
-3. Vérifier que le `context` du build est la racine du monorepo (pour accéder à `.npmrc`)
+1. Verify `.npmrc` is not in `.dockerignore`
+2. Verify `COPY` order: `.npmrc` must be copied before `RUN bun install`
+3. Verify the build `context` is the monorepo root (to access `.npmrc`)
 
 ## Anti-patterns
 
-- Mettre le token en dur dans `.npmrc` ou le Dockerfile
-- Laisser `.npmrc` ou `NPM_TOKEN` dans l'image finale
-- Créer des `.npmrc` par sous-package au lieu d'un seul à la racine
-- Passer `NPM_TOKEN` dans `environment` au lieu de `build.args` (inutile au runtime)
-- Ajouter `.npmrc` au `.dockerignore` (empêche le build)
-- Exécuter `bun install` sur l'hôte pour résoudre les packages privés
+- Hardcoding the token in `.npmrc` or the Dockerfile
+- Leaving `.npmrc` or `NPM_TOKEN` in the final image
+- Creating `.npmrc` per sub-package instead of a single one at the root
+- Passing `NPM_TOKEN` in `environment` instead of `build.args` (unnecessary at runtime)
+- Adding `.npmrc` to `.dockerignore` (blocks the build)
+- Running `bun install` on the host to resolve private packages
