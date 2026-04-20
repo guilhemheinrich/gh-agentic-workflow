@@ -1,0 +1,31 @@
+# compose.e2e.yml — E2E environment overrides
+#
+# Usage: docker compose -f compose.yml -f compose.e2e.yml --profile e2e up --build
+#
+# This file ONLY overrides environment variables for E2E mode.
+# The full service definitions (playwright, app, db, etc.) live in compose.yml
+# with the playwright service gated behind `profiles: [e2e]`.
+#
+# ─── Variables d'environnement E2E ────────────────────────────────────────────
+# E2E_ACTION_DELAY_MS : délai entre actions Playwright (ms). Default: 50. Debug: 500-1000.
+# E2E_VIDEO_MODE      : off | on | retain-on-failure | on-first-retry
+# E2E_WORKERS         : nombre de workers Playwright parallèles
+# SLOW_MO             : alias de E2E_ACTION_DELAY_MS pour compat Playwright native
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+  # ─── Backend overrides for E2E ────────────────────────────────
+  backend:
+    environment:
+      NODE_ENV: test
+      # Disable external auth in E2E (use dev login)
+      HUB_AUTH_URL: ""
+      # Use real or fake LLM provider depending on test needs
+      CHAT_LLM_PROVIDER: "${CHAT_LLM_PROVIDER:-fake}"
+
+  # ─── Playwright runner overrides ──────────────────────────────
+  playwright:
+    environment:
+      SLOW_MO: "${E2E_ACTION_DELAY_MS:-50}"
+      PW_VIDEO: "${E2E_VIDEO_MODE:-off}"
+      WORKERS: "${E2E_WORKERS:-4}"
