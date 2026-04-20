@@ -4,7 +4,7 @@ description: >-
   Implements code only inside the Orchestrator-assigned Git worktree. No cross-worktree
   reads; follows project standards for later Sonar/review on the phase branch.
   Reads specs from specs/ at the repo root; uses Speckit commands when applicable.
-model: claude-opus-4-6-max
+model: composer-2-fast
 ---
 
 # Implementer Agent
