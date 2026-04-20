@@ -1,45 +1,48 @@
 ---
 name: dockerfile-dev-prod
-description: "Write Dockerfiles with a DEVELOPMENT build argument for dual-mode dependency installation. Use when creating a Dockerfile, configuring dev vs production builds, handling lockfile generation via make copy-vendor, or debugging dependency install issues in Docker."
+description: "Write Dockerfiles with multi-stage builds for development and production. Use when creating a Dockerfile, configuring dev vs production builds, handling lockfile generation via make lock, or debugging dependency install issues in Docker."
 ---
 
-# Dockerfile — Development / Production Mode
+# Dockerfile — Multi-stage Development / Production
 
-Universal pattern for writing Dockerfiles that support two dependency installation modes via a `DEVELOPMENT` build argument.
+Universal pattern for writing Dockerfiles that support two dependency installation modes via **named multi-stage builds** instead of build arguments.
 
 ## Core Principle
 
-| Mode | `DEVELOPMENT` | Behavior |
-|:---|:---|:---|
-| Production | undefined | Install via strict lockfile (`--frozen-lockfile`, `--ci`, etc.) — fails if lockfile is missing or out of sync. |
-| Development | defined (e.g., `1`) | Install without lockfile — the package manager resolves dependencies and **generates/updates the lockfile in the container**. |
+| Target stage | Behavior |
+|:---|:---|
+| `development` | Copies `package.json` (no lockfile required), runs a free `install`, generates the lockfile inside the image. Retrieved on host via `make lock`. |
+| `production` | Copies `package.json` **and** the committed lockfile, runs a strict frozen install (`--frozen-lockfile`, `--ci`, etc.). |
 
-## Essential Rule
+## Essential Rules
 
 > **Never launch an ephemeral container (`docker run --rm …`) to generate the lockfile.**
 >
-> The lockfile is produced as a side-effect of the build in DEVELOPMENT mode, then retrieved via `make copy-vendor`.
+> The lockfile is produced as a side-effect of the `development` stage build, then retrieved on host via `make lock` (`docker compose cp`).
+
+> **The lockfile is always committed in the repo.** Production builds depend on it.
 
 ## Dockerfile Pattern (multi-stage)
 
 ```dockerfile
-FROM <base-image> AS deps
-
-ARG DEVELOPMENT
+# ── Stage: development ──────────────────────────────────
+FROM <base-image> AS development
 
 WORKDIR /app
 
 COPY package.json ./
-# Copy the lockfile only if it exists (for prod mode)
-COPY <lockfile>* ./
 
-# Dev mode   → free resolution (generates/updates lockfile)
-# Prod mode → strict installation via lockfile
-RUN if [ -n "$DEVELOPMENT" ]; then \
-       <pkg-manager> install; \
-    else \
-       <pkg-manager> install --frozen-lockfile; \
-    fi
+RUN <pkg-manager> install
+
+# ── Stage: production ───────────────────────────────────
+FROM <base-image> AS production
+
+WORKDIR /app
+
+COPY package.json ./
+COPY <lockfile> ./
+
+RUN <pkg-manager> install --frozen-lockfile
 ```
 
 ### Ecosystem Examples
@@ -47,75 +50,82 @@ RUN if [ -n "$DEVELOPMENT" ]; then \
 **Node.js (bun)**
 
 ```dockerfile
-ARG DEVELOPMENT
+FROM oven/bun:1 AS development
+WORKDIR /app
 COPY package.json ./
-COPY bun.lock* ./
+RUN bun install
 
-RUN if [ -n "$DEVELOPMENT" ]; then \
-      bun install; \
-    else \
-      bun install --frozen-lockfile; \
-    fi
+FROM oven/bun:1 AS production
+WORKDIR /app
+COPY package.json ./
+COPY bun.lock ./
+RUN bun install --frozen-lockfile
 ```
 
 **Node.js (npm)**
 
 ```dockerfile
-ARG DEVELOPMENT
+FROM node:22-slim AS development
+WORKDIR /app
 COPY package.json ./
-COPY package-lock.json* ./
+RUN npm install
 
-RUN if [ -n "$DEVELOPMENT" ]; then \
-      npm install; \
-    else \
-      npm ci; \
-    fi
+FROM node:22-slim AS production
+WORKDIR /app
+COPY package.json ./
+COPY package-lock.json ./
+RUN npm ci
 ```
 
 **Node.js (pnpm)**
 
 ```dockerfile
-ARG DEVELOPMENT
+FROM node:22-slim AS development
+RUN corepack enable
+WORKDIR /app
 COPY package.json ./
-COPY pnpm-lock.yaml* ./
+RUN pnpm install --no-frozen-lockfile
 
-RUN if [ -n "$DEVELOPMENT" ]; then \
-      pnpm install --no-frozen-lockfile; \
-    else \
-      pnpm install --frozen-lockfile; \
-    fi
+FROM node:22-slim AS production
+RUN corepack enable
+WORKDIR /app
+COPY package.json ./
+COPY pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
 ```
 
 **Python (pip)**
 
 ```dockerfile
-ARG DEVELOPMENT
+FROM python:3.12-slim AS development
+WORKDIR /app
 COPY requirements.in ./
-COPY requirements.txt* ./
+RUN pip-compile requirements.in -o requirements.txt && \
+    pip install -r requirements.txt
 
-RUN if [ -n "$DEVELOPMENT" ]; then \
-      pip-compile requirements.in -o requirements.txt && \
-      pip install -r requirements.txt; \
-    else \
-      pip install -r requirements.txt; \
-    fi
+FROM python:3.12-slim AS production
+WORKDIR /app
+COPY requirements.in ./
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
 ```
 
 **PHP (composer)**
 
 ```dockerfile
-ARG DEVELOPMENT
+FROM php:8.3-fpm AS development
+WORKDIR /app
 COPY composer.json ./
-COPY composer.lock* ./
+RUN composer install
 
-RUN if [ -n "$DEVELOPMENT" ]; then \
-      composer install; \
-    else \
-      composer install --no-dev --no-scripts --prefer-dist; \
-    fi
+FROM php:8.3-fpm AS production
+WORKDIR /app
+COPY composer.json ./
+COPY composer.lock ./
+RUN composer install --no-dev --no-scripts --prefer-dist
 ```
 
-## compose.yaml
+## compose.yaml (local / dev)
 
 ```yaml
 services:
@@ -123,116 +133,106 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        DEVELOPMENT: ${DEVELOPMENT:-}
+      target: development
 ```
 
-- `DEVELOPMENT` is passed only if defined in `.env` or shell environment.
-- In CI/production: do not define `DEVELOPMENT` → strict build.
+Le compose cible **toujours** le stage `development`. Le stage `production` n'est jamais buildé via compose — il est construit par la couche infra (AWS task definition, Kubernetes manifest, pipeline CI, etc.) avec `--target production`.
 
-## Makefile — `copy-vendor`
+## Makefile — `make lock`
 
-The `make copy-vendor` command copies the lockfile **from the container already running** to the host.
+`make lock` builde via compose (qui cible déjà `development`), lance le service, copie le lockfile généré vers l'host, puis arrête le service.
 
 ```makefile
 SERVICE_NAME := my-service
+LOCKFILE     := <lockfile>
 
-copy-vendor:
-	docker compose cp $(SERVICE_NAME):/app/<lockfile> ./<lockfile>
+lock:
+	docker compose build $(SERVICE_NAME)
+	docker compose up -d $(SERVICE_NAME)
+	docker compose cp $(SERVICE_NAME):/app/$(LOCKFILE) ./$(LOCKFILE)
+	docker compose down
 ```
 
 ### Examples
 
 ```makefile
 # Node.js (bun)
-copy-vendor:
+lock:
+	docker compose build frontend
+	docker compose up -d frontend
 	docker compose cp frontend:/app/bun.lock ./bun.lock
+	docker compose down
 
 # Node.js (npm)
-copy-vendor:
+lock:
+	docker compose build frontend
+	docker compose up -d frontend
 	docker compose cp frontend:/app/package-lock.json ./package-lock.json
+	docker compose down
 
 # Python
-copy-vendor:
+lock:
+	docker compose build api
+	docker compose up -d api
 	docker compose cp api:/app/requirements.txt ./requirements.txt
+	docker compose down
 
 # PHP
-copy-vendor:
-	docker compose cp api:/app/composer.lock ./composer.lock
-```
-
-### Updated Makefile — Use `make lock` for Dependencies
-
-Instead of `make copy-vendor`, use `make lock` when updating dependencies. This command generates and copies all lockfiles in one step:
-
-```makefile
 lock:
-	# Build container in dev mode to generate lockfile
-	DEVELOPMENT=1 docker compose build my-service
-	
-	# Copy all lockfiles from container to host
-	<package-manager> lock
-	
-	# Commit lockfile changes
-	git add <lockfile>
-	git commit -m "chore: update lockfile"
+	docker compose build api
+	docker compose up -d api
+	docker compose cp api:/app/composer.lock ./composer.lock
+	docker compose down
 ```
 
-**IMPORTANT**: Always run `make lock` before pushing or updating any dependencies:
-```bash
-# 1. Install/update package globally
-npm install package-name
+## Complete Workflow
 
-# 2. Generate lockfile via make lock
+```bash
+# 1. Modifier package.json (ajouter/supprimer une dépendance)
+vim package.json
+
+# 2. Générer le lockfile via le stage development
 make lock
 
-# 3. Verify changes
-git status
-
-# 4. Push to remote (lockfile is ready!)
-git push origin feature-branch
-```
-
-This pattern ensures:
-- Lockfiles are always up-to-date before commits
-- No manual lockfile copying needed
-- Consistent dependency resolution across environments
-
-## Complete Workflow (Traditional)
-
-```bash
-# 1. Build in dev mode (generates lockfile in container)
-DEVELOPMENT=1 docker compose build my-service
-
-# 2. Start the service
-docker compose up -d
-
-# 3. Retrieve lockfile on host
-make copy-vendor
-
-# 4. Commit the lockfile
+# 3. Committer le lockfile
 git add <lockfile>
 git commit -m "chore: update lockfile"
+
+# 4. En CI / production, l'infra build le stage production directement
+docker build --target production -t my-service .
 ```
 
 ## Checklist
 
 ```
-[ ] Dockerfile: ARG DEVELOPMENT declared
-[ ] Dockerfile: Conditional branch (if/else) on $DEVELOPMENT
-[ ] Dockerfile: lockfile is COPY with glob (*) to avoid failure if missing
-[ ] compose.yaml: DEVELOPMENT passed via build.args
-[ ] Makefile: copy-vendor target using docker compose cp
-[ ] Lockfile is committed in repo
-[ ] No ephemeral docker run for lockfile generation
-[ ] NEW: Use `make lock` instead of manual copy-vendor for dependency updates
+[ ] Dockerfile: stage `development` — COPY package.json uniquement, install libre
+[ ] Dockerfile: stage `production` — COPY package.json + lockfile, install strict
+[ ] compose.yaml: `target: development` (toujours, pas de variable)
+[ ] Makefile: cible `lock` qui build, up, cp lockfile, down (via compose)
+[ ] Lockfile commité dans le repo
+[ ] Aucun `docker run --rm` pour la génération du lockfile
+[ ] CI/production: build `--target production` hors compose (infra)
 ```
 
 ## Anti-patterns
 
-- Running `docker run --rm <image> cat <lockfile> > <lockfile>` to extract lockfile → use `docker compose cp` on existing container
-- Installing dependencies without lockfile in production → always use `--frozen-lockfile` / `--ci`
-- Not committing lockfile → it's part of the source code
-- Hardcoding the mode in Dockerfile instead of `ARG DEVELOPMENT`
-- Using `COPY <lockfile> ./` without glob in dev mode → build fails if file doesn't exist yet
-- Using `make copy-vendor` instead of `make lock` for dependency updates → always run `make lock` before pushing dependencies
+- Utiliser un `ARG` conditionnel (`if/else`) au lieu de stages séparés → deux stages nommés sont plus lisibles et cachent mieux
+- Utiliser une variable `${DOCKER_TARGET}` dans le compose → le compose est toujours `development`, la production est gérée par l'infra
+- Lancer `docker run --rm <image> cat <lockfile> > <lockfile>` → utiliser `docker compose cp`
+- Installer sans lockfile en production → toujours `--frozen-lockfile` / `--ci`
+- Ne pas committer le lockfile → il fait partie du code source
+- Copier le lockfile dans le stage `development` → il n'existe pas encore, et ce stage sert justement à le générer
+- Oublier `docker compose down` dans `make lock` → laisse des containers orphelins
+- Builder le stage `production` via compose en local → compose = dev, infra = prod
+
+## Skills connexes
+
+| Skill | Quand la consulter |
+|:---|:---|
+| [docker-hotreload-volume](../docker-hotreload-volume/SKILL.md) | Configurer le hot-reload avec volumes isolés (`node_modules`) dans un monorepo — pattern 3-layer volume stack + entrypoint de cache |
+| [docker-compose-orchestration](../docker-compose-orchestration/SKILL.md) | Orchestrer plusieurs services (DB, cache, reverse proxy), gérer les réseaux, volumes et health checks |
+| [docker-containerization](../docker-containerization/SKILL.md) | Bonnes pratiques générales de containerisation : sécurité, `.dockerignore`, images minimales |
+| [multi-stage-dockerfile](../multi-stage-dockerfile/SKILL.md) | Guide générique multi-stage : choix d'images de base, optimisation des layers, sécurité |
+| [docker-expert](../docker-expert/SKILL.md) | Expertise avancée : hardening sécurité, images distroless, cross-platform builds, diagnostics |
+| [e2e-playwright](../e2e-playwright/SKILL.md) | Tests E2E via Docker Compose avec Playwright — profil `e2e`, compose override, parallélisme |
+| [npm-private-registry](../npm-private-registry/SKILL.md) | Intégrer un registre npm privé dans un build Docker multi-stage (`.npmrc`, `NPM_TOKEN`, cleanup) |

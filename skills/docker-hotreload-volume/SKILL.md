@@ -124,3 +124,14 @@ exec "$@"
 * **Stale dependencies:** Since anonymous volumes persist, adding a new package to `package.json` won't trigger a re-copy. 
     * **Fix:** Run `docker compose down -v` to wipe the volumes and force a fresh sync.
 * **Module Not Found:** Ensure the workspace package is correctly referenced in both the `Dockerfile` (for the build cache) and the `compose.yml` (for the runtime mount).
+
+---
+
+## Skills connexes
+
+| Skill | Quand la consulter |
+|:---|:---|
+| [dockerfile-dev-prod](../dockerfile-dev-prod/SKILL.md) | Pattern multi-stage `development` / `production` avec `make lock` — à combiner avec ce pattern pour le Dockerfile |
+| [docker-compose-orchestration](../docker-compose-orchestration/SKILL.md) | Orchestration complète multi-services, réseaux, health checks |
+| [docker-containerization](../docker-containerization/SKILL.md) | Bonnes pratiques générales : sécurité, `.dockerignore`, images minimales |
+| [npm-private-registry](../npm-private-registry/SKILL.md) | Intégrer un registre npm privé dans le build Docker (`.npmrc`, `NPM_TOKEN`) |
