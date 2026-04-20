@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "documentation-writer": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "ee53d65b163cd7eb953a930c95841cfe398cc2c0bd24c06508bbaa07c432be35"
+    },
     "fp-ts-async-practical": {
       "source": "whatiskadudoing/fp-ts-skills",
       "sourceType": "github",
@@ -25,6 +30,16 @@
       "source": "whatiskadudoing/fp-ts-skills",
       "sourceType": "github",
       "computedHash": "9de7f36769dc4af55bd4b1f7dcd16cded03c3b57b49830d33f2e4157fa3a2618"
+    },
+    "gh-cli": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "cbe644b0c6760ae2a1eaafa39133920d889331327065d92a131675a665273e56"
+    },
+    "git-commit": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "2607fc60629b82b257136dd2a7a373f0a4466c0b49df7746d845d59313c99b21"
     }
   }
 }

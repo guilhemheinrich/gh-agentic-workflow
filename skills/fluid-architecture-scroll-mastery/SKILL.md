@@ -1,4 +1,7 @@
-**Domain:** UX / Web Component Integration & Layout  
+---
+description: "Eliminate double scrollbars and ensure seamless component dynamic expansion"
+---
+**Domain:** UX / Web Component Integration & Layout
 **Objective:** Eliminate double scrollbars and ensure that a component's dynamic expansion (e.g., dropdown menu) is handled natively by the browser.
 
 ---

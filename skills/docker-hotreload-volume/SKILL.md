@@ -1,3 +1,7 @@
+---
+description: "A universal Docker volume pattern to reconcile hot-reload with container-isolated node_modules"
+---
+
 # Docker Hot-Reload Volume Pattern (Agnostic)
 
 **Description:** A universal Docker volume pattern to reconcile **hot-reload** (live code editing on the host) with **container-isolated node_modules** (installed inside Docker). Ideal for Node.js monorepos where dependencies should not exist on or pollute the host machine.
