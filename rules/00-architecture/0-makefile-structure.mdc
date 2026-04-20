@@ -1,0 +1,157 @@
+---
+description: Structure and conventions for the project root Makefile
+globs: "**/Makefile"
+alwaysApply: false
+---
+
+# Makefile — Expected Structure
+
+Every project MUST have a `Makefile` at the root with the commands below.
+
+## Environment Variables
+
+All configurable values (ports, service URLs, images, etc.) MUST be read from the `.env` file with a fallback to `.env.example` values.
+
+```makefile
+include .env
+export
+
+# Application URLs (derived from PORT variables from .env)
+APP_URL ?= http://localhost:$(APP_PORT)
+ADMIN_URL ?= http://localhost:$(ADMIN_PORT)
+API_URL ?= http://localhost:$(API_PORT)
+DB_STUDIO_URL ?= http://localhost:$(DB_STUDIO_PORT)
+REDIS_URL ?= redis://localhost:$(REDIS_PORT)
+PROMETHEUS_URL ?= http://localhost:$(PROMETHEUS_PORT)
+GRAFANA_URL ?= http://localhost:$(GRAFANA_PORT)
+PGADMIN_URL ?= http://localhost:$(PGADMIN_PORT)
+SENTRY_URL ?= http://localhost:$(SENTRY_PORT)
+KIBANA_URL ?= http://localhost:$(KIBANA_PORT)
+
+# Fallback .env.example values (if .env is missing)
+APP_PORT ?= 3000
+ADMIN_PORT ?= 3001
+API_PORT ?= 8080
+DB_STUDIO_PORT ?= 5555
+REDIS_PORT ?= 6379
+PROMETHEUS_PORT ?= 9090
+GRAFANA_PORT ?= 3000
+PGADMIN_PORT ?= 5050
+SENTRY_PORT ?= 8000
+KIBANA_PORT ?= 5601
+```
+
+## Mandatory Commands
+
+### `up` — Start the project (EXAMPLE TEMPLATE)
+
+```makefile
+up:
+	docker compose up -d --build
+	@echo ""
+	@echo "🚀 Services started successfully!"
+	@echo ""
+	@echo "Visit the following services (Cmd/Ctrl+Click to open URLs):"
+	@echo ""
+	@echo "┌──────────────────────────────┬────────────────────┐"
+	@echo "│ Service                          │ URL                   │"
+	@echo "├──────────────────────────────┼────────────────────┤"
+	@echo "│ App                              │ $(APP_URL)            │"
+	@echo "│ Admin Dashboard                  │ $(ADMIN_URL)          │"
+	@echo "│ API Docs                         │ $(API_URL)            │"
+	@echo "│ Database Studio                  │ $(DB_STUDIO_URL)      │"
+	@echo "│ Redis Commander                  │ $(REDIS_URL)          │"
+	@echo "│ Prometheus                       │ $(PROMETHEUS_URL)     │"
+	@echo "│ Grafana                          │ $(GRAFANA_URL)        │"
+	@echo "│ PgAdmin                          │ $(PGADMIN_URL)        │"
+	@echo "│ Kibana                           │ $(KIBANA_URL)         │"
+	@echo "└──────────────────────────────┴────────────────────┘"
+	@echo ""
+	@echo "💡 Cmd/Ctrl+Click to open in browser"
+	@echo ""
+	@echo "To stop: make down (or press Ctrl+C)"
+	@echo ""
+```
+
+### `down` — Stop the project
+
+```makefile
+down:
+	docker compose down
+```
+
+### `test` — Full test suite
+
+Run tests for EVERY app/package in the monorepo. Distinguish test types:
+
+```makefile
+test: test-unit test-integration test-e2e
+
+test-unit:
+	docker compose exec <service> npm run test:unit
+	# Repeat for each app/package
+
+test-integration:
+	docker compose exec <service> npm run test:integration
+
+test-e2e:
+	docker compose exec <service> npm run test:e2e
+```
+
+If the project is not a monorepo, adapt with a single target per type.
+
+### `coverage` — Coverage report
+
+Run the coverage check for EVERY app/package individually:
+
+```makefile
+coverage:
+	docker compose exec <service-1> npm run test:coverage
+	docker compose exec <service-2> npm run test:coverage
+	# One line per app/package
+```
+
+## Conditional Commands (if applicable)
+
+### `setup` — Idempotent initialization
+
+Run once. Must be idempotent (re-running does not break anything).
+
+```makefile
+setup:
+	cp -n .env.example .env || true
+	docker compose build
+	$(MAKE) db-migrate
+	# Other initializations (seed, etc.)
+```
+
+### `db-*` — Database operations
+
+```makefile
+db-migrate:
+	docker compose exec <service> npx prisma migrate deploy
+
+db-reset:
+	docker compose exec <service> npx prisma migrate reset --force
+
+db-seed:
+	docker compose exec <service> npx prisma db seed
+
+db-studio:
+	docker compose exec <service> npx prisma studio
+```
+
+Adapt `db-*` commands to the ORM/migration tool used (Prisma, Drizzle, TypeORM, Alembic, etc.).
+
+## Rules
+
+- **NEVER hardcode values** — always `$(VARIABLE)` with `?=` fallback
+- **ALWAYS execute via Docker** — no direct commands on the host
+- **One target per test type** — `test-unit`, `test-integration`, `test-e2e`
+- **One coverage target per app/package** — or a loop over packages
+- **`setup` MUST be idempotent** — use `cp -n`, `|| true`, existence checks
+- **`.PHONY`** — declare all targets as PHONY
+
+```makefile
+.PHONY: up down setup test test-unit test-integration test-e2e coverage db-migrate db-reset db-seed db-studio
+```
