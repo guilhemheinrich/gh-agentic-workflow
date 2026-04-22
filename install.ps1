@@ -9,7 +9,7 @@ $Targets = @(
     Join-Path $env:USERPROFILE '.pi'
 )
 
-$Resources = @('skills', 'rules', 'hooks', 'agents')
+$Resources = @('skills', 'rules', 'hooks', 'agents', 'commands')
 
 foreach ($target in $Targets) {
     foreach ($res in $Resources) {

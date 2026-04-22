@@ -5,7 +5,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 TARGETS=("$HOME/.cursor" "$HOME/.pi")
 
-RESOURCES=(skills rules hooks agents)
+RESOURCES=(skills rules hooks agents commands)
 
 for target in "${TARGETS[@]}"; do
   for res in "${RESOURCES[@]}"; do
