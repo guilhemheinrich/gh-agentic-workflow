@@ -108,6 +108,17 @@ Arguments: {}
 
 Extract the `projectKey` from the `SONAR_CLI_COMMAND` parameter (look for `-Dsonar.projectKey=...`). This key will be used for all subsequent MCP requests. If the key cannot be found in the command, use `search_my_sonarqube_projects` to locate it.
 
+### 1.4 sonar-project.properties Validation
+
+Check if a `sonar-project.properties` file exists at the project root. If it does, verify it follows best practices. If it does not, consider creating one. **Check if you have skills available for writing SonarQube scanner configuration or related topics** (e.g., analysis scope, exclusions, rule suppression) and apply them.
+
+Key checks:
+- Test files (`*.spec.ts`, `*.test.ts`, etc.) are properly identified or excluded
+- Generated code is excluded from analysis
+- Coverage report paths are set if coverage reports exist
+- No hardcoded `sonar.token` in the file
+- Exclusions and suppressions have comments explaining why
+
 ---
 
 ## Step 2: Initial Scan
