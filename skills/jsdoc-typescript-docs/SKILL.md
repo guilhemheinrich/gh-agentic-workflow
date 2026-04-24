@@ -1,6 +1,12 @@
 ---
 name: jsdoc-typescript-docs
-description: Documents TypeScript code with JSDoc comments, generates API documentation, and creates type-safe documentation. Use when users request "JSDoc", "code documentation", "API docs", "TypeDoc", or "inline documentation".
+description: >-
+  Documents TypeScript code with JSDoc comments, generates API documentation,
+  and creates type-safe documentation. Use when users request "JSDoc", "code
+  documentation", "API docs", "TypeDoc", or "inline documentation".
+tags:
+  - documentation
+  - typescript
 ---
 
 # JSDoc TypeScript Documentation

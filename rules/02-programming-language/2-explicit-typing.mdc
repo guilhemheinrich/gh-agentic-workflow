@@ -1,6 +1,10 @@
 ---
-description: "Rule 1 — Explicit typing in domain code (no any, explicit function signatures) for LSP and RAG-friendly contracts."
+description: >-
+  Rule 1 — Explicit typing in domain code (no any, explicit function signatures)
+  for LSP and RAG-friendly contracts.
 alwaysApply: false
+tags:
+  - typescript
 ---
 
 # Rule 1: Explicit Typing (Golden Signatures)

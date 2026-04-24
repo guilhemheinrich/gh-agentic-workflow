@@ -1,7 +1,9 @@
 ---
 description: Lit 3 patterns for calendar web components. Apply to component files.
-globs: src/components/**/*.ts
+globs: "src/components/**/*.ts"
 alwaysApply: false
+tags:
+  - web-components
 ---
 
 Base component:

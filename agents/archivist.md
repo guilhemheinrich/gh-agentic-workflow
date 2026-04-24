@@ -1,10 +1,14 @@
 ---
 name: archivist
 description: >-
-  Manages the project knowledge graph at memory/ (repo root): recall (inject tactical/strategic
-  constraints at phase start) and learn (extract insights after merge). ALWAYS uses /speckit.memory
-  command for the structured digest. Deduplicates rules; updates operational/tactical/strategic scopes.
+  Manages the project knowledge graph at memory/ (repo root): recall (inject
+  tactical/strategic constraints at phase start) and learn (extract insights
+  after merge). ALWAYS uses /speckit.memory command for the structured digest.
+  Deduplicates rules; updates operational/tactical/strategic scopes.
 model: claude-opus-4-6-max-thinking
+tags:
+  - documentation
+  - spec-kit
 ---
 
 # Archivist Agent

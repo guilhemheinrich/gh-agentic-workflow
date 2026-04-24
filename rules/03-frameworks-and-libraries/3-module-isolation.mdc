@@ -1,6 +1,11 @@
 ---
-description: "Rule 7 — No deep imports across vertical slices; use shared kernel or public facades (services/events)."
+description: >-
+  Rule 7 — No deep imports across vertical slices; use shared kernel or public
+  facades (services/events).
 alwaysApply: false
+tags:
+  - architecture
+  - nestjs
 ---
 
 # Rule 7: Module Isolation (Screaming Architecture)

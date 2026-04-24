@@ -1,10 +1,13 @@
 ---
 name: spec-release-and-versioning
 description: >-
-  Transform a versioning or release-related need into a full Speckit specification.
-  Covers application version metadata contracts, UI display rules, semantic-release
-  CI/CD governance, and migration planning. References the app-version-surface and
-  semantic-release-js-ts-pipeline skills.
+  Transform a versioning or release-related need into a full Speckit
+  specification. Covers application version metadata contracts, UI display
+  rules, semantic-release CI/CD governance, and migration planning. References
+  the app-version-surface and semantic-release-js-ts-pipeline skills.
+tags:
+  - ci-cd
+  - versioning
 ---
 
 # `/spec-release-and-versioning` — Version & Release Spec Generator

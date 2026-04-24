@@ -3,6 +3,8 @@ name: commit
 description: >-
   Smart commit using the gitter agent. Analyzes all pending changes, groups them
   into logical semantic batches, and commits each with a conventional message.
+tags:
+  - git
 ---
 
 # `/commit` — Semantic Smart Commit

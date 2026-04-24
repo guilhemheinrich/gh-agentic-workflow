@@ -1,6 +1,14 @@
 ---
 name: hub-app-registration
-description: "Register a downstream application in the Modelo Hub ecosystem. Use when onboarding a new app, configuring Hub authentication, debugging registration/auth issues, or understanding the Hub SSO flow."
+description: >-
+  Register a downstream application in the Modelo Hub ecosystem. Use when
+  onboarding a new app, configuring Hub authentication, debugging
+  registration/auth issues, or understanding the Hub SSO flow.
+tags:
+  - auth
+  - common
+  - docker
+  - hub
 ---
 
 # Hub App Registration & Authentication

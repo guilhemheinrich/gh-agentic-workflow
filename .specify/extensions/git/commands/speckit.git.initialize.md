@@ -1,5 +1,8 @@
 ---
-description: "Initialize a Git repository with an initial commit"
+description: Initialize a Git repository with an initial commit
+tags:
+  - git
+  - spec-kit
 ---
 
 # Initialize Git Repository

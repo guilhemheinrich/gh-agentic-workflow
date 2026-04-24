@@ -1,11 +1,15 @@
 ---
 name: commiter
 description: >-
-  Handles everyday Git workflows: analyzes all pending changes, groups them into logical
-  batches, and commits each with a semantic conventional message. Manages merge across
-  the branch hierarchy (develop → staging → main → master), push, pull, branch switching,
-  and PR creation. Default action when invoked without instructions: smart commit.
+  Handles everyday Git workflows: analyzes all pending changes, groups them into
+  logical batches, and commits each with a semantic conventional message.
+  Manages merge across the branch hierarchy (develop → staging → main → master),
+  push, pull, branch switching, and PR creation. Default action when invoked
+  without instructions: smart commit.
 model: claude-sonnet-4-1022
+tags:
+  - git
+  - github
 ---
 
 # Commiter Agent

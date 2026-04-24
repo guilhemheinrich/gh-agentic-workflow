@@ -1,12 +1,16 @@
 ---
 name: sonarqube-config
 description: >-
-  Write and maintain sonar-project.properties files for local SonarScanner CLI analysis.
-  Covers analysis scope (exclusions, test detection), copy-paste detection exclusions,
-  coverage report paths, rule suppression strategies, and language-specific examples.
-  Use when creating or editing sonar-project.properties, configuring SonarQube analysis
-  scope, excluding files from scan, ignoring SonarQube rules, or setting up local
-  sonar-scanner.
+  Write and maintain sonar-project.properties files for local SonarScanner CLI
+  analysis. Covers analysis scope (exclusions, test detection), copy-paste
+  detection exclusions, coverage report paths, rule suppression strategies, and
+  language-specific examples. Use when creating or editing
+  sonar-project.properties, configuring SonarQube analysis scope, excluding
+  files from scan, ignoring SonarQube rules, or setting up local sonar-scanner.
+tags:
+  - ci-cd
+  - sonarqube
+  - testing
 ---
 
 # SonarQube Configuration — sonar-project.properties

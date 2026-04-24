@@ -2,9 +2,11 @@
 name: improve
 description: >-
   Continuous code improvement agent. Iterates on project quality by leveraging
-  SonarQube (MCP + CLI scanner) and dedicated Git branches.
-  Loop: Scan → Analyze → Plan → Fix → Review → Re-scan until Quality Gate is green.
+  SonarQube (MCP + CLI scanner) and dedicated Git branches. Loop: Scan → Analyze
+  → Plan → Fix → Review → Re-scan until Quality Gate is green.
 model: claude-4.6-opus-max-thinking
+tags:
+  - refactoring
 ---
 
 # Improve — Continuous Improvement Agent

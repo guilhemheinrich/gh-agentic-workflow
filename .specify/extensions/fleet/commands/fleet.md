@@ -1,5 +1,9 @@
 ---
-description: "Orchestrate a full feature lifecycle through all SpecKit phases with human-in-the-loop checkpoints: specify -> clarify -> plan -> checklist -> tasks -> analyze -> cross-model review -> implement -> verify -> CI. Detects partially complete features and resumes from the right phase."
+description: >-
+  Orchestrate a full feature lifecycle through all SpecKit phases with
+  human-in-the-loop checkpoints: specify -> clarify -> plan -> checklist ->
+  tasks -> analyze -> cross-model review -> implement -> verify -> CI. Detects
+  partially complete features and resumes from the right phase.
 scripts:
   sh: scripts/bash/check-prerequisites.sh --json --paths-only
   ps: scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly
@@ -15,6 +19,8 @@ agents:
   - speckit.verify
 user-invocable: true
 disable-model-invocation: true
+tags:
+  - spec-kit
 ---
 
 ## User Input

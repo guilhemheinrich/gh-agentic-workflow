@@ -1,5 +1,8 @@
 ---
-description: "Validate current branch follows feature branch naming conventions"
+description: Validate current branch follows feature branch naming conventions
+tags:
+  - git
+  - spec-kit
 ---
 
 # Validate Feature Branch

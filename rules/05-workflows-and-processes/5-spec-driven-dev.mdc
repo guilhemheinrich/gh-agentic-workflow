@@ -1,7 +1,11 @@
 ---
-description: Apply Spec-Driven Development (SpecKit) workflow. Use when working with specs/ folder or implementing features.
-globs: specs/**/*,fixes/**/*
+description: >-
+  Apply Spec-Driven Development (SpecKit) workflow. Use when working with specs/
+  folder or implementing features.
+globs: 'specs/**/*,fixes/**/*'
 alwaysApply: false
+tags:
+  - spec-kit
 ---
 
 SpecKit Workflow:

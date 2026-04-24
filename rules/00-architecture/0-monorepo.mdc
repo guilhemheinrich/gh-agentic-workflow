@@ -1,7 +1,12 @@
 ---
-description: Apply monorepo conventions for Bun 1.3 + Turborepo 2.8 workspace. Use when modifying package.json, turbo.json, or cross-package imports.
-globs: package.json,turbo.json,apps/*/package.json,packages/*/package.json
+description: >-
+  Apply monorepo conventions for Bun 1.3 + Turborepo 2.8 workspace. Use when
+  modifying package.json, turbo.json, or cross-package imports.
+globs: 'package.json,turbo.json,apps/*/package.json,packages/*/package.json'
 alwaysApply: false
+tags:
+  - monorepo
+  - typescript
 ---
 
 Monorepo Structure:

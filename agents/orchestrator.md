@@ -1,11 +1,15 @@
 ---
 name: orchestrator
 description: >-
-  Orchestrates the agentic lifecycle using a parallel Git worktree strategy: phase branch,
-  isolated spec worktrees, mandatory tester gate before merge, reconciliation on phase,
-  then reviewer. Invokes Archivist at phase start (recall) and after quality closure (learn).
-  All agents use Speckit commands exclusively; specs/ and memory/ live at the repo root.
+  Orchestrates the agentic lifecycle using a parallel Git worktree strategy:
+  phase branch, isolated spec worktrees, mandatory tester gate before merge,
+  reconciliation on phase, then reviewer. Invokes Archivist at phase start
+  (recall) and after quality closure (learn). All agents use Speckit commands
+  exclusively; specs/ and memory/ live at the repo root.
 model: claude-opus-4-6-max
+tags:
+  - git
+  - spec-kit
 ---
 
 # Orchestrator Agent

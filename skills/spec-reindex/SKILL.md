@@ -2,10 +2,13 @@
 name: spec-reindex
 description: >-
   Verify and fix spec/fix folder indexation. Maintains two independent index
-  sequences (specs and fixes), detects conflicts (duplicates, gaps) per sequence,
-  and re-indexes each into its own continuous sequence. Use when running /index,
-  reindexing specs, fixing spec numbering, or resolving index conflicts after
-  branch merges.
+  sequences (specs and fixes), detects conflicts (duplicates, gaps) per
+  sequence, and re-indexes each into its own continuous sequence. Use when
+  running /index, reindexing specs, fixing spec numbering, or resolving index
+  conflicts after branch merges.
+tags:
+  - common
+  - spec-kit
 ---
 
 # Spec re-index skill

@@ -1,6 +1,11 @@
 ---
 name: docker-compose-orchestration
-description: Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production deployment
+description: >-
+  Container orchestration with Docker Compose for multi-container applications,
+  networking, volumes, and production deployment
+tags:
+  - docker
+  - docker-compose
 ---
 
 # Docker Compose Orchestration

@@ -1,10 +1,14 @@
 ---
 name: dependency-updater
 description: >-
-  Dependency & Migration Strategist: scans package manifests, audits versions against registries,
-  classifies updates by SemVer tier, and produces a structured migration report with ordered
-  upgrade plan, impact analysis, and links to changelogs and migration guides.
+  Dependency & Migration Strategist: scans package manifests, audits versions
+  against registries, classifies updates by SemVer tier, and produces a
+  structured migration report with ordered upgrade plan, impact analysis, and
+  links to changelogs and migration guides.
 model: claude-opus-4-6-max-thinking
+tags:
+  - common
+  - npm
 ---
 
 # Dependency Updater Agent

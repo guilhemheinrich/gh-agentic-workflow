@@ -1,3 +1,9 @@
+---
+tags:
+  - architecture
+  - documentation
+  - hub
+---
 # Skill: Modelo Hub Documentation
 
 > **When to use**: Whenever you need to understand the Modelo Hub platform — its architecture, integration contracts, onboarding process, session model, or operational setup. Use this skill for both high-level architectural questions and fine-grained implementation details.

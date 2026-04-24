@@ -3,9 +3,12 @@ name: app-version-surface
 description: >-
   Standardize how application components expose, transport, and display version
   metadata across the organization. Covers frontend, backend, worker, gateway,
-  and embedded packages. Use when adding version display, configuring build metadata
-  injection, creating version endpoints, or implementing version aggregation for
-  multi-component applications.
+  and embedded packages. Use when adding version display, configuring build
+  metadata injection, creating version endpoints, or implementing version
+  aggregation for multi-component applications.
+tags:
+  - common
+  - versioning
 ---
 
 # Application Version Surface

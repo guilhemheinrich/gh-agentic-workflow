@@ -1,7 +1,13 @@
 ---
-description: "Repo meta — SpecKit context pointer; backend architecture rules live in architecture-overview and rule-0X files."
-globs: ["**/*"]
+description: >-
+  Repo meta — SpecKit context pointer; backend architecture rules live in
+  architecture-overview and rule-0X files.
+globs:
+  - '**/*'
 alwaysApply: true
+tags:
+  - cursor
+  - spec-kit
 ---
 
 # gh-agentic-workflow — Cursor Rules

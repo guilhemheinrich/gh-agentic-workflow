@@ -1,9 +1,13 @@
 ---
 name: debugger
 description: >-
-  Fixes failing tests or defects in the same isolated worktree where the Tester reported
-  failure; signals Orchestrator to re-run Tester. Reads memory from memory/ at the repo root.
+  Fixes failing tests or defects in the same isolated worktree where the Tester
+  reported failure; signals Orchestrator to re-run Tester. Reads memory from
+  memory/ at the repo root.
 model: claude-opus-4-6-max-thinking
+tags:
+  - debugging
+  - spec-kit
 ---
 
 # Debugger Agent

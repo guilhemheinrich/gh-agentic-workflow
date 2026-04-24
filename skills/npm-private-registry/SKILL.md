@@ -1,6 +1,15 @@
 ---
 name: npm-private-registry
-description: "Integrate private npm packages in a Turborepo + bun + Docker monorepo. Use when adding a scoped private package (@org/pkg), configuring registry auth in Docker builds, or debugging NPM_TOKEN issues. Covers .npmrc, Dockerfile multi-stage, compose build args, and security cleanup."
+description: >-
+  Integrate private npm packages in a Turborepo + bun + Docker monorepo. Use
+  when adding a scoped private package (@org/pkg), configuring registry auth in
+  Docker builds, or debugging NPM_TOKEN issues. Covers .npmrc, Dockerfile
+  multi-stage, compose build args, and security cleanup.
+tags:
+  - ci-cd
+  - docker
+  - monorepo
+  - npm
 ---
 
 # NPM Private Registry — Turborepo + Bun + Docker

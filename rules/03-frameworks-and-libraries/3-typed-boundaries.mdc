@@ -1,6 +1,12 @@
 ---
-description: "Rule 6 — Validate all external I/O with Zod or Effect Schema; technology-prefixed infrastructure filenames."
+description: >-
+  Rule 6 — Validate all external I/O with Zod or Effect Schema;
+  technology-prefixed infrastructure filenames.
 alwaysApply: false
+tags:
+  - nestjs
+  - typescript
+  - validation
 ---
 
 # Rule 6: Typed Boundaries (Infrastructure)
