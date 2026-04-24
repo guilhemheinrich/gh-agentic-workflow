@@ -1,7 +1,15 @@
 ---
-description: Apply DDD Hexagonal architecture for Hono backend services. Use when creating or modifying files in any backend app (auth-api, app-registry, entitlements, feature-flags).
-globs: apps/auth-api/**/*.ts,apps/app-registry/**/*.ts,apps/entitlements/**/*.ts,apps/feature-flags/**/*.ts
+description: >-
+  Apply DDD Hexagonal architecture for Hono backend services. Use when creating
+  or modifying files in any backend app (auth-api, app-registry, entitlements,
+  feature-flags).
+globs: >-
+  apps/auth-api/**/*.ts,apps/app-registry/**/*.ts,apps/entitlements/**/*.ts,apps/feature-flags/**/*.ts
 alwaysApply: false
+tags:
+  - architecture
+  - backend
+  - typescript
 ---
 
 Hexagonal Architecture (Ports/Adapters):

@@ -1,7 +1,12 @@
 ---
-description: Apply private npm registry patterns for scoped packages. Use when modifying .npmrc, Dockerfiles with NPM_TOKEN, or adding private dependencies.
-globs: .npmrc, .docker/**/Dockerfile, compose.yaml, .env.example
+description: >-
+  Apply private npm registry patterns for scoped packages. Use when modifying
+  .npmrc, Dockerfiles with NPM_TOKEN, or adding private dependencies.
+globs: '.npmrc, .docker/**/Dockerfile, compose.yaml, .env.example'
 alwaysApply: false
+tags:
+  - docker
+  - npm
 ---
 
 Private npm registry — Conventions for Turborepo + bun + Docker:

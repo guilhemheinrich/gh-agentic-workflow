@@ -1,6 +1,13 @@
 ---
 name: septeo-keycloak-user-register
-description: "Register users via the Septeo Keycloak Identity API (api-identite). Use when implementing user registration, signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint with PBKDF2-SHA256 password hashing."
+description: >-
+  Register users via the Septeo Keycloak Identity API (api-identite). Use when
+  implementing user registration, signup forms, user provisioning, or password
+  hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint with
+  PBKDF2-SHA256 password hashing.
+tags:
+  - auth
+  - security
 ---
 
 # Septeo Keycloak — User Registration via API

@@ -2,8 +2,10 @@
 name: merge
 description: >-
   Merge current branch into the target using the gitter agent. Cautious about
-  regressions. If the merge strategy is ambiguous or not specified, asks the user
-  for clarification before proceeding.
+  regressions. If the merge strategy is ambiguous or not specified, asks the
+  user for clarification before proceeding.
+tags:
+  - git
 ---
 
 # `/merge` — Cautious Merge

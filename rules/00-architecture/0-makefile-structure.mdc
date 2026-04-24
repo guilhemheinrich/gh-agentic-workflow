@@ -1,7 +1,10 @@
 ---
 description: Structure and conventions for the project root Makefile
-globs: "**/Makefile"
+globs: '**/Makefile'
 alwaysApply: false
+tags:
+  - common
+  - make
 ---
 
 # Makefile — Expected Structure

@@ -1,5 +1,10 @@
 ---
-description: "A universal Docker volume pattern to reconcile hot-reload with container-isolated node_modules"
+description: >-
+  A universal Docker volume pattern to reconcile hot-reload with
+  container-isolated node_modules
+tags:
+  - docker
+  - typescript
 ---
 
 # Docker Hot-Reload Volume Pattern (Agnostic)

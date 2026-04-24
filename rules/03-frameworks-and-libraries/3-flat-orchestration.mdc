@@ -1,6 +1,11 @@
 ---
-description: "Rule 5 — NestJS use cases as thin injectable services: sequential pipe from validation to domain to persistence."
+description: >-
+  Rule 5 — NestJS use cases as thin injectable services: sequential pipe from
+  validation to domain to persistence.
 alwaysApply: false
+tags:
+  - nestjs
+  - typescript
 ---
 
 # Rule 5: Flat Orchestration (Application Layer)

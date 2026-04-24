@@ -2,10 +2,15 @@
 name: semantic-release-js-ts-pipeline
 description: >-
   Standardize release automation for JavaScript/TypeScript projects using
-  semantic-release. Covers version calculation, Git tags, release notes,
-  npm publishing policy, and CI/CD governance. Use when setting up automated
-  releases, configuring semantic-release plugins, defining branch strategies,
-  or integrating release versions with application metadata.
+  semantic-release. Covers version calculation, Git tags, release notes, npm
+  publishing policy, and CI/CD governance. Use when setting up automated
+  releases, configuring semantic-release plugins, defining branch strategies, or
+  integrating release versions with application metadata.
+tags:
+  - ci-cd
+  - git
+  - npm
+  - versioning
 ---
 
 # semantic-release — JavaScript/TypeScript Release Pipeline

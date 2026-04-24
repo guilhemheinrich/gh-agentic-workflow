@@ -1,7 +1,14 @@
 ---
-description: Live interactive playground pattern for documenting Lit web components in Astro Starlight. Apply when creating, editing, or debugging docs pages with interactive demos.
-globs: apps/docs-site/**/*.{mdx,js,mjs}
+description: >-
+  Live interactive playground pattern for documenting Lit web components in
+  Astro Starlight. Apply when creating, editing, or debugging docs pages with
+  interactive demos.
+globs: 'apps/docs-site/**/*.{mdx,js,mjs}'
 alwaysApply: false
+tags:
+  - astro
+  - documentation
+  - web-components
 ---
 
 ## Principle

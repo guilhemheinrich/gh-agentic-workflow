@@ -1,6 +1,11 @@
 ---
-description: "Rule 2 — File-level and per-function JSDoc with @description for embedding-friendly domain documentation."
+description: >-
+  Rule 2 — File-level and per-function JSDoc with @description for
+  embedding-friendly domain documentation.
 alwaysApply: false
+tags:
+  - documentation
+  - typescript
 ---
 
 # Rule 2: Semantic JSDoc (Embedding Anchors)

@@ -1,10 +1,15 @@
 ---
-description: "Cross-model evaluation of plan.md and tasks.md before implementation. Reviews feasibility, completeness, dependency ordering, risk, and parallelization correctness using a different model than was used to generate the artifacts."
+description: >-
+  Cross-model evaluation of plan.md and tasks.md before implementation. Reviews
+  feasibility, completeness, dependency ordering, risk, and parallelization
+  correctness using a different model than was used to generate the artifacts.
 scripts:
   sh: scripts/bash/check-prerequisites.sh --json --paths-only
   ps: scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly
 user-invocable: false
 agents: []
+tags:
+  - spec-kit
 ---
 
 ## User Input

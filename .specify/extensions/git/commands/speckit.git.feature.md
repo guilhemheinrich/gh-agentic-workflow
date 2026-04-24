@@ -1,5 +1,8 @@
 ---
-description: "Create a feature branch with sequential or timestamp numbering"
+description: Create a feature branch with sequential or timestamp numbering
+tags:
+  - git
+  - spec-kit
 ---
 
 # Create Feature Branch

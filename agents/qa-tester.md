@@ -4,11 +4,15 @@ description: >-
   E2E test gap analysis agent. Deeply studies ALL project specifications to
   understand conventions, depth, and patterns, then extracts UI-facing user
   stories, identifies which ones lack E2E test coverage, and produces rich,
-  context-aware /specify prompts for writing full user-journey test specs.
-  Use proactively when you need to audit E2E coverage or plan E2E test
-  specifications across the project.
-  Requires Opus 4.6 Max Thinking for thorough spec analysis and reasoning.
+  context-aware /specify prompts for writing full user-journey test specs. Use
+  proactively when you need to audit E2E coverage or plan E2E test
+  specifications across the project. Requires Opus 4.6 Max Thinking for thorough
+  spec analysis and reasoning.
 model: claude-4.6-opus-max-thinking
+tags:
+  - e2e
+  - spec-kit
+  - testing
 ---
 
 # QA Tester Agent

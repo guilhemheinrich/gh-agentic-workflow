@@ -1,6 +1,8 @@
 ---
-description: Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts.
-handoffs: 
+description: >-
+  Generate an actionable, dependency-ordered tasks.md for the feature based on
+  available design artifacts.
+handoffs:
   - label: Analyze For Consistency
     agent: speckit.analyze
     prompt: Run a project analysis for consistency
@@ -9,6 +11,9 @@ handoffs:
     agent: speckit.implement
     prompt: Start the implementation in phases
     send: true
+tags:
+  - cursor
+  - spec-kit
 ---
 
 ## User Input

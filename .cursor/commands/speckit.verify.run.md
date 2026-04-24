@@ -1,9 +1,14 @@
 ---
-description: Perform a non-destructive post-implementation verification gate validating
-  the implementation against spec.md, plan.md, tasks.md, and constitution.md.
+description: >-
+  Perform a non-destructive post-implementation verification gate validating the
+  implementation against spec.md, plan.md, tasks.md, and constitution.md.
 scripts:
   sh: .specify/scripts/bash/check-prerequisites.sh --json --paths-only
   ps: .specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly
+tags:
+  - cursor
+  - spec-kit
+  - testing
 ---
 
 

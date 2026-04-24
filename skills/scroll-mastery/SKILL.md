@@ -1,3 +1,8 @@
+---
+tags:
+  - css
+  - web-components
+---
 **Domaine :** UX / Intégration Web Component & Layout  
 **Objectif :** Éliminer les doubles barres de défilement et garantir que l'extension dynamique d'un composant (ex: menu dépliant) soit gérée nativement par le navigateur.
 

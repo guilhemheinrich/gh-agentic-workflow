@@ -1,17 +1,16 @@
 ---
 name: eslint-solid-nestjs
-description: "ESLint Flat Config standard for TypeScript/NestJS monorepos — enforces SOLID principles, Clean Architecture layer boundaries, and best practices via static analysis."
+description: >-
+  ESLint Flat Config standard for TypeScript/NestJS monorepos — enforces SOLID
+  principles, Clean Architecture layer boundaries, and best practices via static
+  analysis.
 risk: safe
-date_added: "2026-04-12"
+date_added: '2026-04-12'
 tags:
   - eslint
-  - typescript
-  - nestjs
-  - solid
-  - clean-architecture
-  - boundaries
-  - linting
   - monorepo
+  - nestjs
+  - typescript
 ---
 
 # ESLint SOLID & NestJS — Standard Configuration

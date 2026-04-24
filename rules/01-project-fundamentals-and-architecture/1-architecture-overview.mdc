@@ -1,6 +1,13 @@
 ---
-description: "Backend vertical-slice architecture for TypeScript/NestJS — overview, folder layout, and links to Rules 1–7."
+description: >-
+  Backend vertical-slice architecture for TypeScript/NestJS — overview, folder
+  layout, and links to Rules 1–7.
 alwaysApply: true
+tags:
+  - architecture
+  - fp-ts
+  - nestjs
+  - typescript
 ---
 
 # Agentic Rules — Architecture Overview

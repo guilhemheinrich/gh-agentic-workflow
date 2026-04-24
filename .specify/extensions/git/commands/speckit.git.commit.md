@@ -1,5 +1,8 @@
 ---
-description: "Auto-commit changes after a Spec Kit command completes"
+description: Auto-commit changes after a Spec Kit command completes
+tags:
+  - git
+  - spec-kit
 ---
 
 # Auto-Commit Changes

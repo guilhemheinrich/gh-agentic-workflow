@@ -1,6 +1,10 @@
 ---
-description: "Commit hygiene — semantic, feature-scoped commits with clean file grouping for human and agent readability."
+description: >-
+  Commit hygiene — semantic, feature-scoped commits with clean file grouping for
+  human and agent readability.
 alwaysApply: false
+tags:
+  - git
 ---
 
 # Semantic Commit Strategy

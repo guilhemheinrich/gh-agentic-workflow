@@ -1,6 +1,13 @@
 ---
 name: e2e-playwright
-description: "End-to-end testing with Playwright using a dedicated Docker Compose environment. Use when setting up E2E tests, writing Playwright specs, configuring test infrastructure, or debugging E2E CI pipelines."
+description: >-
+  End-to-end testing with Playwright using a dedicated Docker Compose
+  environment. Use when setting up E2E tests, writing Playwright specs,
+  configuring test infrastructure, or debugging E2E CI pipelines.
+tags:
+  - docker
+  - e2e
+  - testing
 ---
 
 # E2E Testing — Playwright + Docker Compose

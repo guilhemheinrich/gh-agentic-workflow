@@ -5,6 +5,10 @@ description: >
   practices, and minimal image sizes. Use when containerizing applications,
   creating Dockerfiles, optimizing container images, or setting up Docker
   Compose services.
+tags:
+  - ci-cd
+  - docker
+  - security
 ---
 
 # Docker Containerization

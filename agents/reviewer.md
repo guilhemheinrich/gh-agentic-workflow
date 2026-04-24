@@ -1,9 +1,12 @@
 ---
 name: reviewer
 description: >-
-  Final quality audit on phase branch after parallel spec merges: logical conflicts, Sonar.
-  ALWAYS uses /speckit.analyze command. Authorizes merge to main only after quality gate passes.
+  Final quality audit on phase branch after parallel spec merges: logical
+  conflicts, Sonar. ALWAYS uses /speckit.analyze command. Authorizes merge to
+  main only after quality gate passes.
 model: claude-opus-4-6-max-thinking
+tags:
+  - spec-kit
 ---
 
 # Reviewer Agent

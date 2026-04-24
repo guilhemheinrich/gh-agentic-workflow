@@ -1,9 +1,11 @@
 ---
 name: push
 description: >-
-  Push current branch to the remote using the gitter agent. If the current branch
-  is a feature branch, returns a link to create a Pull Request with a suggested
-  description.
+  Push current branch to the remote using the gitter agent. If the current
+  branch is a feature branch, returns a link to create a Pull Request with a
+  suggested description.
+tags:
+  - git
 ---
 
 # `/push` — Push to Remote

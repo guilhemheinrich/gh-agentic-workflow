@@ -1,7 +1,11 @@
 ---
 description: Enforce rich inline documentation to maximize AI embedding/indexing quality. Use for all TypeScript files.
-globs: **/*.ts,**/*.tsx
+globs: "**/*.ts,**/*.tsx"
 alwaysApply: false
+tags:
+  - typescript
+  - documentation
+  - cursor
 ---
 
 Goal: every code chunk must carry enough context for Cursor's embedding layer to understand its purpose, relationships, and usage — without needing to read surrounding files.

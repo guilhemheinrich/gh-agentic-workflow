@@ -1,6 +1,8 @@
 ---
-description: Execute the implementation planning workflow using the plan template to generate design artifacts.
-handoffs: 
+description: >-
+  Execute the implementation planning workflow using the plan template to
+  generate design artifacts.
+handoffs:
   - label: Create Tasks
     agent: speckit.tasks
     prompt: Break the plan into tasks
@@ -8,6 +10,9 @@ handoffs:
   - label: Create Checklist
     agent: speckit.checklist
     prompt: Create a checklist for the following domain...
+tags:
+  - cursor
+  - spec-kit
 ---
 
 ## User Input

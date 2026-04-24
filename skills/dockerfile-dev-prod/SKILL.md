@@ -1,6 +1,13 @@
 ---
 name: dockerfile-dev-prod
-description: "Write Dockerfiles with multi-stage builds for development and production. Use when creating a Dockerfile, configuring dev vs production builds, handling lockfile generation via make lock, or debugging dependency install issues in Docker."
+description: >-
+  Write Dockerfiles with multi-stage builds for development and production. Use
+  when creating a Dockerfile, configuring dev vs production builds, handling
+  lockfile generation via make lock, or debugging dependency install issues in
+  Docker.
+tags:
+  - ci-cd
+  - docker
 ---
 
 # Dockerfile — Multi-stage Development / Production

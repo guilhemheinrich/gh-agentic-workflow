@@ -1,6 +1,12 @@
 ---
-description: "Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed errors; optional single-file domain for small modules."
+description: >-
+  Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed errors;
+  optional single-file domain for small modules.
 alwaysApply: false
+tags:
+  - fp-ts
+  - nestjs
+  - typescript
 ---
 
 # Rule 4: Pure Domain (Functional Core)

@@ -1,16 +1,14 @@
 ---
+name: cartographer
+model: claude-4.6-opus-max-thinking
+description: >-
   Roadmap and feature planning agent. Delegates to this agent when the user needs to
   plan a roadmap, break down a project into features, prioritize work, or scope a phase
   of development. Runs /specify with a phase-level perspective. Use proactively when
   a project needs strategic planning before individual feature specification.
   Requires Opus 4.6 Max Thinking for deep strategic reasoning and critical analysis.
-name: cartographer
-model: claude-4.6-opus-max-thinking
-description:   Roadmap and feature planning agent. Delegates to this agent when the user needs to
-  plan a roadmap, break down a project into features, prioritize work, or scope a phase
-  of development. Runs /specify with a phase-level perspective. Use proactively when
-  a project needs strategic planning before individual feature specification.
-  Requires Opus 4.6 Max Thinking for deep strategic reasoning and critical analysis.
+tags:
+  - spec-kit
 ---
 
 # Cartographer Agent

@@ -1,7 +1,10 @@
 ---
 description: Apply TDD and testing best practices with Vitest. Use when creating or modifying test files.
-globs: **/*.test.ts,**/*.spec.ts,**/__tests__/**/*.ts,**/vitest.config.ts
+globs: "**/*.test.ts,**/*.spec.ts,**/__tests__/**/*.ts,**/vitest.config.ts"
 alwaysApply: false
+tags:
+  - testing
+  - typescript
 ---
 
 TDD Approach (ADR-014):

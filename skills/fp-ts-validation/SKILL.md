@@ -1,19 +1,14 @@
 ---
 name: fp-ts-validation
-description: Validation patterns using fp-ts with error accumulation, form validation, and API input validation
+description: >-
+  Validation patterns using fp-ts with error accumulation, form validation, and
+  API input validation
 version: 1.0.0
 author: kadu
 tags:
   - fp-ts
-  - validation
-  - either
-  - error-accumulation
-  - form-validation
-  - api-validation
-  - io-ts
-  - zod
   - typescript
-  - functional-programming
+  - validation
 ---
 
 # fp-ts Validation Patterns

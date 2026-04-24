@@ -1,6 +1,11 @@
 ---
-description: "Rule 3 — Avoid deep currying and excessive point-free style; prefer named parameters and readable steps."
+description: >-
+  Rule 3 — Avoid deep currying and excessive point-free style; prefer named
+  parameters and readable steps.
 alwaysApply: false
+tags:
+  - fp-ts
+  - typescript
 ---
 
 # Rule 3: Moderate Functional Style (Anti-Currying)

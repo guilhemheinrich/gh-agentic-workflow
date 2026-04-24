@@ -2,8 +2,11 @@
 name: specifier
 description: >-
   Technical blueprint for one spec: clear boundaries, shared-file warnings.
-  ALWAYS uses /speckit.specify command; specs live under specs/ at the repo root.
+  ALWAYS uses /speckit.specify command; specs live under specs/ at the repo
+  root.
 model: claude-opus-4-6-max-thinking
+tags:
+  - spec-kit
 ---
 
 # Specifier Agent

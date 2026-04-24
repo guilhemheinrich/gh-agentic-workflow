@@ -5,6 +5,11 @@ description: >-
   project conventions. Use when producing E2E specs, writing end-to-end test
   scenarios, specifying Playwright/Cypress tests, or when a specify/speckit
   command needs to output E2E deliverables.
+tags:
+  - documentation
+  - e2e
+  - spec-kit
+  - testing
 ---
 
 # E2E Spec Writing

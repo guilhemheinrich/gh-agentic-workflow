@@ -1,5 +1,10 @@
 ---
-description: "Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step requires user input."
+description: >-
+  Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step
+  requires user input.
+tags:
+  - cursor
+  - spec-kit
 ---
 
 ## User Input

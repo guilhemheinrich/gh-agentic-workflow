@@ -2,10 +2,14 @@
 name: qa-specify
 description: >-
   E2E specification command driven by project analysis. Scans all existing specs
-  to learn conventions, identifies E2E gaps, and directly produces complete specs
-  (spec.md, plan.md, tasks.md) aligned with project quality and patterns.
+  to learn conventions, identifies E2E gaps, and directly produces complete
+  specs (spec.md, plan.md, tasks.md) aligned with project quality and patterns.
   Unlike qa-tester (analysis only), this command produces deliverables.
 model: claude-4.6-opus-max-thinking
+tags:
+  - e2e
+  - spec-kit
+  - testing
 ---
 
 # `/qa-specify` — Analysis-Driven E2E Specification
