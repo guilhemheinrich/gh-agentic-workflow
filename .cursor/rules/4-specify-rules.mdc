@@ -1,0 +1,34 @@
+---
+description: >-
+  Meta pointer: canonical rules live under rules/ by category; use specify-rules
+  with the architecture and standards entries for this repo.
+globs: '**/*'
+alwaysApply: true
+tags:
+  - cursor
+  - meta
+  - spec-kit
+---
+
+# Where to find project rules
+
+## Desired state
+
+**Cursor** loads rule files from `rules/**` and `.cursor/rules/**` according to `globs` and `alwaysApply`. Authors edit the **canonical** files under `rules/`; this file is a short **pointer** to avoid duplicating long content.
+
+## Properties
+
+- **P1 (canonical path)**: Normative content lives in `rules/{NN-category}/*.mdc` (see [0-rules-structure.mdc](../00-architecture/0-rules-structure.mdc)).
+- **P2 (stack-specific overview)**: For NestJS vertical-slice work, see [3-nestjs-architecture.mdc](../03-frameworks-and-libraries/3-nestjs-architecture.mdc) and rules R1–R7 linked there.
+- **P3 (agnostic architecture)**: [0-vertical-slices.mdc](../00-architecture/0-vertical-slices.mdc), [0-hexagonal-ddd.mdc](../00-architecture/0-hexagonal-ddd.mdc), and related `00-*` files define language-independent structure.
+- **P4 (SpecKit)**: Constitution and plan memory, when present, align with the same structure; do not contradict [5-spec-driven-dev.mdc](../05-workflows-and-processes/5-spec-driven-dev.mdc).
+
+## Skill References
+
+- [spec-reindex](../../skills/spec-reindex/SKILL.md) for index repair when the skill exists
+- [npm-private-registry](../../skills/npm-private-registry/SKILL.md) for private package setup
+
+## Enforcement
+
+- **Detect**: Copy-pasted stack tables in multiple meta files; broken relative links after moves.
+- **Fix**: One pointer file; link to `rules/` only.
