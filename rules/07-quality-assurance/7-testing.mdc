@@ -1,55 +1,67 @@
 ---
-description: Apply TDD and testing best practices with Vitest. Use when creating or modifying test files.
-globs: "**/*.test.ts,**/*.spec.ts,**/__tests__/**/*.ts,**/vitest.config.ts"
+description: >-
+  Agnostic testing principles: TDD loop, test pyramid, naming, and AAA. No
+  framework syntax — framework rules live under 03-* or project skills.
+globs: '**/*_test.go,**/*.test.ts,**/*.spec.ts,**/__tests__/**,**/test/**,**/tests/**'
 alwaysApply: false
 tags:
+  - quality
   - testing
-  - typescript
+  - tdd
 ---
 
-TDD Approach (ADR-014):
+# Testing — principles (agnostic)
 
-- Write failing test FIRST
-- Write minimum code to pass
-- Refactor while tests stay green
+## Desired state
 
-Test Framework — Vitest 3.x:
+Automated tests **document behavior** and **guard refactors**. The suite is **shaped** so fast feedback and confidence coexist: many small, isolated checks; fewer integration checks; a thin layer of end-to-end checks as appropriate to the product.
 
-- Config per app: `vitest.config.ts`
-- Run via Docker: `docker compose exec {service} bun run test`
-- Use `describe`, `it`, `expect`, `vi.fn()`, `vi.spyOn()`
-- `vi.mock()` for module mocking, `vi.fn()` for port/interface mocking
-- `beforeEach(() => vi.clearAllMocks())` to reset between tests
+## Properties
 
-Test Organization:
+- **P1 (TDD loop)**: Preferred workflow: express intent as a failing test → make it pass with minimal code → refactor while keeping tests green. (Teams may time-box or apply selectively for exploration-only code, but the default policy favors test-first for production logic.)
+- **P2 (pyramid)**: The majority of tests are **fast and isolated**; **integration** tests assert adapters and composition; **E2E** tests cover critical paths. Inverted pyramids (mostly slow UI-only tests) are avoided for new work.
+- **P3 (AAA)**: Each test is structured in **Arrange** (context), **Act** (single behavior), **Assert** (expected outcomes). Multiple unrelated assertions in one “story” are discouraged unless they describe the same behavior outcome.
+- **P4 (naming)**: Test names or descriptions state **expected behavior** and **relevant condition** (for example: “rejects when total is negative”).
+- **P5 (boundaries)**: **Doubles, fakes, or stubs** are used at **ports**; internal implementation details are not overly mocked.
 
-- Unit tests: `src/__tests__/unit/` or co-located `__tests__/` folders
-- Route tests: `src/__tests__/unit/routes/` (Hono `app.request()`)
-- Integration tests: `test/integration/` per app
-- E2E tests: `test/e2e/` per app
+## Anti-patterns
 
-Hexagonal Testing:
+- Large integration tests with no fast unit tests for pure logic.
+- Tests that only mirror implementation (e.g. assert private helpers) instead of behavior.
+- Writing production code for non-trivial behavior without a failing test when TDD is the team policy.
 
-- Domain entities: pure unit tests, no mocks needed
-- Use cases: mock ports (interfaces) via `vi.fn()` implementing the port interface
-- Adapters: integration tests against real services (Prisma, Redis) in Docker
-- Routes: use Hono's `app.request()` with mocked use cases (no supertest needed)
+## Examples (Go — table-driven)
 
-Naming:
+```go
+func TestPriceWithTax(t *testing.T) {
+    tests := []struct {
+        name string
+        in   int64
+        rate float64
+        want int64
+    }{
+        {"round trip", 1000, 0.2, 1200},
+    }
+    for _, tc := range tests {
+        t.Run(tc.name, func(t *testing.T) {
+            got, err := domain.PriceWithTax(tc.in, tc.rate)
+            if err != nil {
+                t.Fatal(err)
+            }
+            if got != tc.want {
+                t.Errorf("got %d want %d", got, tc.want)
+            }
+        })
+    }
+}
+```
 
-- `describe('ClassName')` or `describe('use-case-name')`
-- `it('should [expected behavior] when [condition]')`
+## Skill References
 
-Assertions:
+- Vitest and TypeScript test doubles in this stack: [3-vitest-conventions.mdc](../03-frameworks-and-libraries/3-vitest-conventions.mdc)
+- E2E or Playwright: project skills and CI docs as applicable
 
-- Use AAA pattern: Arrange, Act, Assert
-- One assertion focus per test (can have multiple related asserts)
-- Test both happy path AND error cases
+## Enforcement
 
-Anti-Patterns:
-
-- Never write tests after implementation
-- Never mock internal modules — only mock at boundaries (ports)
-- Never test implementation details — test behavior
-- Never skip edge cases in coverage
-- Never use `jest` — project uses Vitest exclusively
+- **Detect**: No tests for complex pure functions; E2E-only coverage of business rules; tests coupled to private fields.
+- **Fix**: Add unit tests at the core; keep doubles at ports; rename tests for behavior.

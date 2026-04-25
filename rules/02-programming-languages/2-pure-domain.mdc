@@ -2,6 +2,7 @@
 description: >-
   Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed errors;
   optional single-file domain for small modules.
+globs: '**/domain/**/*.ts,**/*.domain.ts'
 alwaysApply: false
 tags:
   - fp-ts
@@ -54,6 +55,7 @@ export class PriceService {
 
 ## Skill References
 
+- Language-agnostic properties: [1-pure-domain.mdc](../01-standards/1-pure-domain.mdc)
 - Typed errors and `Either` / `TaskEither`: [fp-ts errors skill](../../skills/fp-ts-errors/SKILL.md).
 - Reader / environment-style DI for shells (not inside pure domain): [fp-ts backend skill](../../skills/fp-ts-backend/SKILL.md).
 

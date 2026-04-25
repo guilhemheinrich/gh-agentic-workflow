@@ -1,33 +1,34 @@
 ---
 description: >-
-  Repo meta — SpecKit context pointer; backend architecture rules live under
-  rules/ (AIDD buckets) and are mirrored in .cursor/rules.
-globs:
-  - '**/*'
+  Meta pointer: canonical rules live under rules/ by category; use specify-rules
+  with the architecture and standards entries for this repo.
+globs: '**/*'
 alwaysApply: true
 tags:
-  - nestjs
+  - cursor
+  - meta
   - spec-kit
 ---
 
-# gh-agentic-workflow — Cursor Rules
+# Where to find project rules
 
-## Primary guidance (backend TypeScript / NestJS)
+## Desired state
 
-For **architecture, vertical slices, fp-ts/Effect, and NestJS orchestration**, follow:
+**Cursor** loads rule files from `rules/**` and `.cursor/rules/**` according to `globs` and `alwaysApply`. Authors edit the **canonical** files under `rules/`; this file is a short **pointer** to avoid duplicating long content.
 
-- **[1-architecture-overview.mdc](../../rules/01-project-fundamentals-and-architecture/1-architecture-overview.mdc)** — stack, folder layout, rule index, skill links (always applied alongside this file).
-- **Rule files** in `rules/02-typescript-and-domain-conventions/` (R1–R4) and `rules/03-frameworks-and-libraries/` (R5–R7) — load the rule that matches the layer you are editing.
+## Properties
 
-This file stays short to avoid duplicating `alwaysApply` content: do **not** re-define stack or layout here; use the overview + numbered rules.
+- **P1 (canonical path)**: Normative content lives in `rules/{NN-category}/*.mdc` (see [0-rules-structure.mdc](../00-architecture/0-rules-structure.mdc)).
+- **P2 (stack-specific overview)**: For NestJS vertical-slice work, see [3-nestjs-architecture.mdc](../03-frameworks-and-libraries/3-nestjs-architecture.mdc) and rules R1–R7 linked there.
+- **P3 (agnostic architecture)**: [0-vertical-slices.mdc](../00-architecture/0-vertical-slices.mdc), [0-hexagonal-ddd.mdc](../00-architecture/0-hexagonal-ddd.mdc), and related `00-*` files define language-independent structure.
+- **P4 (SpecKit)**: Constitution and plan memory, when present, align with the same structure; do not contradict [5-spec-driven-dev.mdc](../05-workflows-and-processes/5-spec-driven-dev.mdc).
 
-## SpecKit / plans
+## Skill References
 
-Auto-generated plan context may list technologies from active features. Treat **1-architecture-overview.mdc** and **constitution** (`.specify/memory/constitution.md`) as authoritative for backend structure.
+- [spec-reindex](../../skills/spec-reindex/SKILL.md) for index repair when the skill exists
+- [npm-private-registry](../../skills/npm-private-registry/SKILL.md) for private package setup
 
-## Commands (when applicable)
+## Enforcement
 
-Use project scripts from `package.json` when present (e.g. `npm test`, `npm run lint`).
-
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->
+- **Detect**: Copy-pasted stack tables in multiple meta files; broken relative links after moves.
+- **Fix**: One pointer file; link to `rules/` only.

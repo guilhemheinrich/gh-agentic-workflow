@@ -1,0 +1,61 @@
+---
+description: >-
+  Vertical-slice and functional-core / imperative-shell properties: where pure
+  logic lives, how slices integrate, and a decision policy for where edits go.
+globs: '**/src/**,**/modules/**,**/domain/**,**/application/**,**/infrastructure/**'
+alwaysApply: false
+tags:
+  - architecture
+  - vertical-slices
+---
+
+# Vertical slices and functional core
+
+## Desired state
+
+Software is organized in **vertical slices** (per feature or capability) with a **functional core** and an **imperative shell**: pure, deterministic logic is isolated from I/O, frameworks, and orchestration.
+
+## Properties
+
+- **P1 (slice ownership)**: Each slice owns its domain, application, and infrastructure concerns for its scope; cross-slice work goes through **shared kernel** types, **published facades**, or **integration events** — not by reaching into another slice’s internal folders.
+- **P2 (functional core)**: Business rules and domain transformations are **referentially transparent** where feasible: no hidden I/O, no time or randomness in core functions unless injected as values.
+- **P3 (imperative shell)**: Side effects (HTTP, DB, messaging, clocks) live at the edge: controllers, repositories, schedulers, and composition roots call into the core with plain inputs and collect outputs or typed errors/values.
+- **P4 (thinness at the edge)**: Orchestration at the boundary is **linear and shallow**: validate → call domain → persist or respond — not deep nested branching that duplicates business rules.
+
+## Decision policy (where to change)
+
+1. **Business rules or invariants?** — Change the **core** (pure functions / domain module) and keep shell adapters dumb.
+2. **Protocol or transport?** — Change **infrastructure** adapters; keep core signatures stable.
+3. **Cross-slice shared concept?** — Move to a **shared** contract or event schema, not copy-paste between slices.
+
+## Examples (pseudo-code)
+
+### Compliant — core vs shell
+
+```go
+// core — pure
+func PriceWithTax(cents int64, rate float64) (int64, error) { /* no I/O */ }
+
+// shell — I/O
+func (h *HTTP) PostQuote(w http.ResponseWriter, r *http.Request) {
+    in := parseRequest(r)       // I/O
+    v, err := domain.PriceWithTax(in.Cents, h.taxRate) // call core
+    writeJSON(w, v, err)         // I/O
+}
+```
+
+### Non-compliant
+
+```go
+// core file performing HTTP and SQL directly
+func CalculateAndSave() { http.Get(...); db.Exec(...) }
+```
+
+## Skill References
+
+- Functional error and effect styles (e.g. fp-ts) when the stack uses them: `skills/fp-ts-*/` as listed in project framework rules.
+
+## Enforcement
+
+- **Detect**: Business `if/else` trees inside transport handlers; DB calls in the same file as tax calculations without ports; direct imports between slice internals.
+- **Fix**: Move rules to core; introduce ports; expose slice integration via facades or events.

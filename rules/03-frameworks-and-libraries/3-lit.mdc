@@ -1,49 +1,40 @@
 ---
-description: Lit 3 patterns for calendar web components. Apply to component files.
-globs: "src/components/**/*.ts"
+description: >-
+  Invariants for Lit-based Web Components: reactivity, lifecycle, shadow DOM, and
+  event contract. Cheatsheet and detailed patterns are in a skill.
+globs: '**/src/components/**/*.ts,**/components/**/*.ts'
 alwaysApply: false
 tags:
+  - lit
   - web-components
 ---
 
-Base component:
-- Extend `LitElement`, import from `lit`
-- `render()` returns a `TemplateResult` via `html\`...\``
-- Styles via `static styles = css\`...\`` (scoped to shadow DOM)
-- Registration via `@customElement('septeo-xxx')`
+# Lit Web Components — desired properties
 
-Reactive properties:
-- `@property()` for public props (reflected as attributes)
-- `@state()` for internal state (no attribute)
-- Specify `{ type: Number }`, `{ type: Boolean }`, `{ type: Array }` for attribute → property conversion
-- `{ reflect: true }` only if the attribute must be readable from the outside
+## Desired state
 
-Lifecycle:
-- `connectedCallback()`: setup (global listeners, timers)
-- `disconnectedCallback()`: cleanup (remove listeners, clear timers)
-- `willUpdate(changed)`: derived computations before render
-- `updated(changed)`: post-render effects (focus, scroll)
-- `firstUpdated()`: one-time initialization after first render
+Components built with **Lit** (or compatible `@customElement` classes) follow the framework’s **reactivity, lifecycle, and composition** model. Behavior remains predictable under Shadow DOM, attribute reflection, and nested custom elements.
 
-Templates:
-- Bindings: `.prop=${val}`, `@event=${handler}`, `?bool=${flag}`
-- Lists: `${items.map(i => html\`...\`)}` with `key` via `repeat()`
-- Conditional: `${condition ? html\`...\` : nothing}`
-- Slots: `<slot name="header"></slot>` for composition
+## Properties
 
-Events:
-- Dispatch via `this.dispatchEvent(new CustomEvent('septeo-xxx', { detail, bubbles: true, composed: true }))`
-- `composed: true` to traverse shadow DOM
-- Name events `septeo-xxx`
+- **P1 (element contract)**: Custom elements are registered with stable tag names; public behavior is exposed via **properties and attributes** according to the design system’s rules (reflection when attributes must be inspectable in markup).
+- **P2 (reactivity)**: Authoritative state flows through declared reactive fields; the render method does not perform heavy I/O or assign reactive fields in ways that create update loops.
+- **P3 (lifecycle)**: `connected` / `disposed` (or framework equivalents) pair setup and teardown (listeners, timers) so there are no leaks.
+- **P4 (templates)**: Markup is built with the framework’s template system, not by injecting uncontrolled HTML from untrusted strings.
+- **P5 (events)**: Custom events that cross the shadow boundary use `composed` and naming consistent with the design system; handlers do not assume child readiness without the framework’s update guarantees.
+- **P6 (child readiness)**: Before invoking imperative APIs on child custom elements, the tree satisfies **defined** and **update-complete** (or project-specific) readiness — see skill.
 
-Overlay / Popover lifecycle:
-- Parent's `updateComplete` does NOT guarantee that child custom elements are defined and rendered
-- Before calling a method on a child: `await customElements.whenDefined('septeo-xxx')` then `await child.updateComplete`
-- A host with `overflow: hidden` clips `position: fixed` children in its shadow DOM — toggle `overflow: visible` via an attribute when an overlay is open
+## Anti-patterns
 
-Avoid:
-- `innerHTML` — always use `html\`...\``
-- `querySelector` in `render()` — use `@query()`
-- Heavy logic in `render()` — pre-compute in `willUpdate()`
-- Modifying properties in `render()` (infinite loop)
-- Calling methods on a child custom element without awaiting `whenDefined()` + `updateComplete`
+- Using `querySelector` in render for what should be declarative state.
+- Calling imperative methods on children before the element is defined/updated.
+- `innerHTML` with untrusted content.
+
+## Skill References
+
+- [lit-web-components](../../skills/lit-web-components/SKILL.md)
+
+## Enforcement
+
+- **Detect**: render-time side effects; missing teardown; ad hoc DOM mutation outside Lit templates.
+- **Fix**: Move logic to lifecycle hooks; use declarative bindings; follow the skill’s checklist.

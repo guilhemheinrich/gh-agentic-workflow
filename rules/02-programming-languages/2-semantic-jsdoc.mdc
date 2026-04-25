@@ -2,6 +2,7 @@
 description: >-
   Rule 2 — File-level and per-function JSDoc with @description for
   embedding-friendly domain documentation.
+globs: '**/domain/**/*.ts,**/*.domain.ts'
 alwaysApply: false
 tags:
   - documentation

@@ -1,0 +1,70 @@
+---
+description: >-
+  Rich inline documentation so embeddings and static analysis can resolve intent,
+  relationships, and usage without reading the whole file.
+globs: '**/*.ts,**/*.tsx,**/*.go,**/*.js,**/*.mjs,**/*.rs,**/*.py'
+alwaysApply: false
+tags:
+  - documentation
+  - indexing
+  - quality
+---
+
+# Code documentation for indexing
+
+## Desired state
+
+Every **module and exported surface** carries enough **structured natural language** that retrieval (embeddings) and human navigation can place the symbol in context: **what** it is, **why** it exists, and **how** it connects to neighbors.
+
+## Properties
+
+- **P1 (module prologue)**: Each source file opens with a short block (comment or doc) stating responsibility, bounded context, and key exports.
+- **P2 (public API)**: Every exported function, type, or constant documents **intent** and contracts: inputs, outputs, and failure modes as values the indexer can chunk.
+- **P3 (cross-refs)**: Related symbols are linked by name in prose or doc tags supported by the language, so the indexer can build a graph.
+- **P4 (constants)**: Named constants state **business meaning**, not only their literal value.
+- **P5 (no orphan exports)**: No exported symbol without a one-line “why it exists” in the same file.
+
+## Anti-patterns
+
+- Vague one-word descriptions (“utils”, “helpers”) without domain meaning.
+- Documenting only what the type already says, with no business context.
+- Undocumented public exports.
+
+## Examples (language-agnostic / pseudo)
+
+### Compliant — file header and function contract
+
+```go
+// Module: sessionstore — Redis-backed SessionStore for the Auth bounded context.
+// Key exports: NewRedisStore, Session type.
+
+// ExchangeCode turns an OAuth authorization code into a Session.
+// It fails with ErrCodeExpired if the code was already used or timed out.
+func ExchangeCode(ctx context.Context, code string, redirectURI string) (Session, error) {
+    return Session{}, nil
+}
+```
+
+### Compliant — port interface (cross-refs in prose)
+
+```text
+# Port "SessionStore" — persistence for Session.
+# Implementations: RedisSessionStore (prod), InMemoryStore (tests).
+type SessionStore interface { Save(s Session) error; Find(id ID) (Session, bool) }
+```
+
+### Non-compliant
+
+```go
+// does stuff
+func f(x int) int { return x }
+```
+
+## Skill References
+
+- For JSDoc-heavy TypeScript stacks: [2-semantic-jsdoc.mdc](../02-programming-languages/2-semantic-jsdoc.mdc) (language-specific style).
+
+## Enforcement
+
+- **Detect**: Exported symbols with empty or missing module-level context; constants without business rationale.
+- **Fix**: Add file prologue; document contracts and link related types in prose or doc tags.

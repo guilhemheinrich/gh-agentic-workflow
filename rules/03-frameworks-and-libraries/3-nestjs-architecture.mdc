@@ -1,0 +1,84 @@
+---
+description: >-
+  NestJS stack and canonical folder layout for vertical-slice modules; index of
+  rules R1–R7 and links to fp-ts skills. Use with 0-vertical-slices and slice rules.
+globs: '**/src/modules/**/*.ts,**/use-cases/**/*.ts,**/*.module.ts,**/main.ts'
+alwaysApply: false
+tags:
+  - architecture
+  - fp-ts
+  - nestjs
+  - typescript
+---
+
+# NestJS — architecture overview (slice layout)
+
+## Desired state
+
+This document applies when the **shell** is **NestJS**: injectable use cases, modules, and controllers. It complements the language-agnostic **vertical slice** and **hexagonal** rules under `rules/00-architecture/`.
+
+**Cursor** loads more specific rule files for each layer; prefer opening the file that matches the code you edit.
+
+## Stack (illustrative)
+
+| Layer        | Technology |
+|-------------|------------|
+| Language    | TypeScript (strict) |
+| Shell       | NestJS (`@Injectable` use cases, controllers, modules) |
+| Core        | `fp-ts` and/or `Effect` — errors as values in domain where adopted |
+| Validation  | Zod or `@effect/schema` at HTTP and persistence edges |
+
+## Canonical layout
+
+```text
+src/
+  modules/
+    <feature>/
+      domain/                    # Pure functions — rules R1–R4
+        <feature>.model.ts
+        <feature>.logic.ts
+      application/
+        use-cases/               # Rule 5 — orchestration
+      infrastructure/
+        persistence/            # Rule 6 — e.g. sql_* repositories
+        http/                     # Rule 6 — controllers, DTOs, gateways
+  shared/
+    domain/                      # Cross-cutting types — rule 7
+    infrastructure/              # Shared clients
+```
+
+## Rule index (open the matching file)
+
+| ID | File | When to apply |
+|----|------|----------------|
+| R1 | [2-explicit-typing.mdc](../02-programming-languages/2-explicit-typing.mdc) | Editing `/domain` types and signatures |
+| R2 | [2-semantic-jsdoc.mdc](../02-programming-languages/2-semantic-jsdoc.mdc) | Adding docs in domain |
+| R3 | [2-anti-currying.mdc](../02-programming-languages/2-anti-currying.mdc) | FP style in domain |
+| R4 | [2-pure-domain.mdc](../02-programming-languages/2-pure-domain.mdc) | Keeping domain pure; typed errors |
+| R5 | [3-flat-orchestration.mdc](./3-flat-orchestration.mdc) | Use cases and application layer |
+| R6 | [3-typed-boundaries.mdc](./3-typed-boundaries.mdc) | Controllers, repositories, external APIs |
+| R7 | [3-module-isolation.mdc](./3-module-isolation.mdc) | Imports between modules |
+
+## Decision policy
+
+1. **Pure business logic?** → Rules **R1–R4**, then **R7** for imports.
+2. **Nest use case?** → Rule **R5**, then **R6** for DTO validation.
+3. **HTTP or DB code?** → Rule **R6**, then **R7** for cross-module access.
+4. **Unsure?** → Start with **R4** (pure domain) and **R7** (isolation).
+
+## Skill References
+
+- [fp-ts pragmatic](../../skills/fp-ts-pragmatic/SKILL.md)
+- [fp-ts errors](../../skills/fp-ts-errors/SKILL.md)
+- [fp-ts validation](../../skills/fp-ts-validation/SKILL.md)
+- [fp-ts backend](../../skills/fp-ts-backend/SKILL.md)
+- [fp-ts async practical](../../skills/fp-ts-async-practical/SKILL.md)
+
+## SpecKit
+
+Planning workflows may reference `.specify/memory/constitution.md` where present; keep backend layout consistent with the rules above.
+
+## Enforcement
+
+- **Detect**: Use cases with framework or DB mixed into domain files; cross-slice deep imports; missing validation at controllers.
+- **Fix**: Align folder placement with the table; apply R5–R7; extract pure logic to `domain/`.

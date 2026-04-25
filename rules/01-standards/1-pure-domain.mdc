@@ -1,0 +1,63 @@
+---
+description: >-
+  Language-agnostic pure domain: no side effects in core logic, errors as
+  values, no I/O in domain types. Complements language-specific 2-pure-domain.
+globs: '**/domain/**'
+alwaysApply: false
+tags:
+  - architecture
+  - domain
+  - purity
+---
+
+# Pure domain (agnostic)
+
+## Desired state
+
+**Domain** logic expresses business rules with **no direct side effects** and **no knowledge of** transport, storage, or framework. **Failures** are **values** in the return type, not control-flow exceptions, unless the host language’s idioms and team standards explicitly define otherwise in a different rule.
+
+## Properties
+
+- **P1 (no I/O)**: Domain functions do not open files, sockets, or databases; they do not read clocks or random sources unless those are passed in as **parameters** (effectively pure for the function under test).
+- **P2 (no framework imports)**: Domain modules do not depend on web frameworks, ORMs, or UI toolkits.
+- **P3 (errors as data)**: Expected business failures are returned (sum types, `Result`, `Either`, `(T, error)`, and so on) **or** a documented project-wide equivalent — not as unchecked exceptions in the happy path of domain code.
+- **P4 (referential transparency)**: For given inputs, domain outputs are deterministic (modulo explicit dependency injection of time/randomness for testing).
+
+## Anti-patterns
+
+- `throw` / panic for **expected** business cases (e.g. “user not found”) mixed into domain *calculation* paths when the project mandates errors-as-values.
+- Hiding a DB or HTTP call inside a function that looks like a pure calculation.
+
+## Examples (Go-style)
+
+### Compliant
+
+```go
+type DomainError struct { Code string; Field string }
+
+func EnsurePositive(n int, field string) (int, *DomainError) {
+    if n < 0 {
+        return 0, &DomainError{Code: "NEGATIVE", Field: field}
+    }
+    return n, nil
+}
+```
+
+### Non-compliant
+
+```go
+func MustPositive(n int) int {
+    if n < 0 { panic("bad") } // expected case as panic
+    return n
+}
+```
+
+## Skill References
+
+- TypeScript / fp-ts specifics: [2-pure-domain.mdc](../02-programming-languages/2-pure-domain.mdc)
+- [fp-ts errors](../../skills/fp-ts-errors/SKILL.md) when the stack uses fp-ts
+
+## Enforcement
+
+- **Detect**: I/O imports in `domain/`; throws/panics for business validation; time/random used without injection.
+- **Fix**: Move I/O to shells; return typed errors; inject effects as parameters or ports.

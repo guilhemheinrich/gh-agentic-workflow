@@ -1,54 +1,86 @@
 ---
 description: >-
-  Apply DDD Hexagonal architecture for Hono backend services. Use when creating
-  or modifying files in any backend app (auth-api, app-registry, entitlements,
-  feature-flags).
-globs: >-
-  apps/auth-api/**/*.ts,apps/app-registry/**/*.ts,apps/entitlements/**/*.ts,apps/feature-flags/**/*.ts
+  Hexagonal (ports/adapters) layering: pure domain, application use cases,
+  infrastructure adapters. Dependency rule and mandatory design properties.
+globs: '**/domain/**,**/application/**,**/infrastructure/**,**/ports/**'
 alwaysApply: false
 tags:
   - architecture
-  - backend
-  - typescript
+  - ddd
+  - hexagonal
 ---
 
-Hexagonal Architecture (Ports/Adapters):
+# Hexagonal architecture — desired state
 
-- `domain/` = pure business logic, ZERO external dependencies
-- `application/` = use cases, DTOs, orchestration
-- `infrastructure/` = adapters, HTTP routes, config
+## Layers
 
-Domain Layer Rules:
+- **Domain**: business rules and types; no knowledge of delivery or persistence frameworks.
+- **Application**: use cases that orchestrate domain logic and ports.
+- **Infrastructure**: HTTP handlers, DB adapters, caches, message buses — framework and driver code.
 
-- NO import from `hono`, `prisma`, `redis`, `ioredis`, `openai` in `domain/`
-- NO import from `hono`, `prisma` in `application/`
-- Entities and Value Objects are plain TypeScript classes
-- Ports are interfaces defined in `domain/ports/` or `packages/hub-contracts`
+## Properties
 
-Dependency Direction:
+- **P1 (inward dependencies)**: Infrastructure and application depend on domain abstractions; domain does not depend on outer layers.
+- **P2 (domain purity)**: The domain layer does not import HTTP frameworks, ORM clients, cache clients, or host-specific SDKs.
+- **P3 (ports)**: External capabilities are expressed as interfaces (ports) owned by the domain or shared contracts; adapters implement them in infrastructure.
+- **P4 (composition root)**: A single place (or few) wires concrete adapters to use cases; domain types are not constructed with global singletons inside domain functions.
 
-- `infrastructure/` → `application/` → `domain/` (inward only)
-- `domain/` NEVER depends on outer layers
-- Use manual DI in `index.ts` to provide adapters to use cases (ADR-028)
+## Mandatory design properties (ports/adapters)
 
-Hono Scope:
+The system SHOULD exhibit these capabilities at boundaries:
 
-- Hono is ONLY in `infrastructure/` (routes, middleware, error handler)
-- Each service has a single `index.ts` composition root
-- Route files create sub-apps via `new Hono()` and are mounted with `app.route()`
+- **Strategy**: swappable implementations behind a shared port (e.g. auth, storage).
+- **Adapter**: translate external APIs to internal contracts.
+- **Repository**: persistence behind domain-defined interfaces.
+- **Facade**: narrow entry points to complex subsystems where appropriate.
+- **Resilience**: bounded retry/circuit behavior for cross-service calls where required.
+- **Observer / events**: decouple producers and consumers when asynchronous integration is needed.
 
-Mandatory Patterns (ADR-012):
+## Anti-patterns
 
-- Strategy: swap implementations (auth provider, event bus, storage)
-- Adapter: normalize external interfaces to internal contracts
-- Repository: abstract persistence behind domain interfaces
-- Facade: simplify complex subsystem access
-- Circuit Breaker: prevent cascade failures on inter-service calls
-- Observer: decouple producers and consumers via events
+- ORM or HTTP client types leaking into domain entities or use-case signatures as concrete classes.
+- Domain or application layers importing the web framework or transport directly.
+- “Anemic” domain with no behavior; “god” modules that mix multiple bounded contexts.
 
-Anti-Patterns:
+## Examples (pseudo-code / Go)
 
-- Avoid importing `PrismaClient` directly in use cases
-- Avoid Hono or framework imports in domain or application layers
-- Avoid anemic domain models (put behavior in entities)
-- Avoid god modules (split by bounded context)
+### Compliant — dependency direction
+
+```go
+// domain/invoice.go — no imports from net/http or sql driver
+type Invoice struct { ID string; Total int64 }
+
+type InvoiceRepository interface {
+    Save(ctx context.Context, inv Invoice) error
+}
+
+// application/create_invoice.go
+type CreateInvoice struct { repo InvoiceRepository }
+
+func (uc *CreateInvoice) Run(ctx context.Context, lineItems []LineItem) (Invoice, error) {
+    inv := buildInvoice(lineItems) // pure
+    return inv, uc.repo.Save(ctx, inv)
+}
+
+// infrastructure/sql_invoice_repository.go — adapter
+type SQLInvoiceRepository struct { /* db handle */ }
+
+func (r *SQLInvoiceRepository) Save(ctx context.Context, inv Invoice) error { /* ... */ }
+```
+
+### Non-compliant
+
+```go
+// domain must not import HTTP or ORM packages
+import "net/http"
+import "database/sql"
+```
+
+## Skill References
+
+- Project-specific stack wiring (when applicable): see framework rules under `rules/03-frameworks-and-libraries/`.
+
+## Enforcement
+
+- **Detect**: Forbidden imports in `domain/`; domain types referencing framework types; use cases instantiating concrete DB/HTTP clients instead of ports.
+- **Fix**: Introduce ports and move framework code to `infrastructure/`; inject dependencies at the composition root.

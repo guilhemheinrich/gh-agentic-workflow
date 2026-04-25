@@ -1,0 +1,42 @@
+---
+description: >-
+  Vitest usage for this stack: run via Docker, configs per app, mocks, and file
+  layout for Hono/hexagonal services.
+globs: '**/*.test.ts,**/*.spec.ts,**/__tests__/**/*.ts,**/vitest.config.ts,**/vitest.config.*.ts'
+alwaysApply: false
+tags:
+  - testing
+  - typescript
+  - vitest
+---
+
+# Vitest — stack conventions
+
+## Desired state
+
+**Vitest** is the default test runner for TypeScript packages that adopt it. Tests run in the **documented** environment (commonly **inside** the project’s dev container or compose service) so the host toolchain is not assumed.
+
+## Properties
+
+- **P1 (config)**: Config lives in `vitest.config.ts` (or a clearly named variant) at app or package scope as the project standard defines.
+- **P2 (API)**: Use Vitest’s `describe` / `it` / `expect`, `vi.fn`, `vi.spyOn`, and `vi.mock` per local conventions.
+- **P3 (reset)**: Mocks and spies are reset between cases when they could leak state (`beforeEach` clearing mocks where needed).
+- **P4 (layout)**: Unit tests are under `**/__tests__/**` or `src/**/__tests__` as the repo defines; route tests may live under a `unit/routes` or similar subtree; integration and E2E use separate top-level or service-local folders.
+- **P5 (hexagonal tests)**: Domain tests stay pure; use cases get port doubles; adapter tests use real or container-backed dependencies per policy; HTTP route tests use the framework’s request helper with mocked use cases.
+- **P6 (runner)**: Prefer the project’s **Docker** or `make` targets for `test` and `coverage`, not ad hoc host `npm` when the standard forbids it.
+
+## Anti-patterns
+
+- Using another runner (for example Jest) in the same package without an explicit exception.
+- Mocking **internal** module paths when a **port** double would keep the test stable.
+- Skipping the documented container flow for private CI or local parity.
+
+## Skill References
+
+- [7-testing.mdc](../07-quality-assurance/7-testing.mdc) for TDD and pyramid
+- E2E and Playwright: use the project’s E2E skill or CI documentation when present
+
+## Enforcement
+
+- **Detect**: Jest-only APIs in a Vitest repo; `any` mocks at domain layer; host-only `npm test` in Docker-first workflows.
+- **Fix**: Switch APIs; inject ports; run via `make` or compose as documented.

@@ -1,0 +1,67 @@
+---
+description: >-
+  Conventions for the rules/ tree: category folders, .mdc naming, required
+  frontmatter, and how globs scope each rule. Apply when creating or moving rules.
+globs: 'rules/**/*.mdc'
+alwaysApply: false
+tags:
+  - cursor
+  - meta
+  - rules
+---
+
+# Rules repository structure
+
+## Desired State
+
+The `rules/` directory is organized as a **taxonomy of ten top-level categories** (numeric prefixes `00`–`09`). Every authoring decision (where a file lives, how it is named, what it matches) MUST align with that taxonomy so agents load the right invariants for the files they edit.
+
+## Category folders (authoritative)
+
+| Prefix | Folder | Scope |
+|--------|--------|--------|
+| 00 | `00-architecture/` | Filesystem and structural architecture; cross-cutting patterns (language-agnostic) |
+| 01 | `01-standards/` | Code standards, documentation norms, naming (language-agnostic) |
+| 02 | `02-programming-languages/` | Language-specific rules (globs on extensions, e.g. `**/*.ts`) |
+| 03 | `03-frameworks-and-libraries/` | Framework- and library-specific rules (globs on paths or stacks) |
+| 04 | `04-tools-and-configurations/` | Tools: Git, package managers, Docker, editors |
+| 05 | `05-workflows-and-processes/` | Workflows: spec-driven dev, indexing, process |
+| 06 | `06-templates-and-models/` | Reserved for templates and model conventions |
+| 07 | `07-quality-assurance/` | Testing, quality gates (principles may be agnostic) |
+| 08 | `08-domain-specific-rules/` | Reserved for product-domain-specific rules |
+| 09 | `09-other/` | Reserved |
+
+## File naming
+
+- **Pattern**: `{N}-{kebab-slug}.mdc` where `N` is a small integer matching the area within the category (e.g. `0-`, `1-`, `2-` for ordering inside `00-architecture/`).
+- **Stability**: Renames and moves update all relative links and the asset registry; prefer additive changes when possible.
+
+## Frontmatter (required)
+
+Each `.mdc` file MUST define YAML frontmatter with at least:
+
+- **`description`**: Short, declarative summary of the desired state the rule enforces.
+- **`globs`**: A non-empty [glob](https://en.wikipedia.org/wiki/Glob_(programming)) pattern (or comma-separated list) for files this rule applies to. Architecture rules may use wide patterns; language rules MUST narrow by extension or path.
+- **`alwaysApply`**: `true` or `false` (use sparingly for repo-wide meta rules only).
+- **`tags`**: List of short labels for registry and search.
+
+## Content shape
+
+- Rules describe **invariants, constraints, and properties** of desirable code and layout — not step-by-step tutorials.
+- Procedural “how to” content belongs in **skills** under `skills/<name>/SKILL.md`, linked from the rule when needed.
+
+## Properties
+
+- **P1**: A rule file MUST live in exactly one category folder; if content spans categories, the author MUST split it into two files.
+- **P2**: Globs MUST be chosen so the rule loads when (and only when) relevant files are edited — not broader than necessary.
+- **P3**: Examples in agnostic categories (`00`, `01`, `04`, `05`, `07`) MUST use pseudo-code or Go — not a specific application framework in syntax examples.
+
+## Skill References
+
+- For Makefile templates and target recipes: [makefile-conventions](../../skills/makefile-conventions/SKILL.md)
+- For private npm in Docker: [npm-private-registry](../../skills/npm-private-registry/SKILL.md)
+
+## Enforcement
+
+- **Detect**: Rule in wrong folder; missing or empty `globs`; procedural tutorial blocks without a skill link.
+- **Fix**: Move or split files; narrow `globs`; move procedural content to a skill and keep a short declarative rule.

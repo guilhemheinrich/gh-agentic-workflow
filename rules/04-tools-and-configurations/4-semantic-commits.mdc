@@ -2,6 +2,7 @@
 description: >-
   Commit hygiene — semantic, feature-scoped commits with clean file grouping for
   human and agent readability.
+globs: '**/*'
 alwaysApply: false
 tags:
   - git

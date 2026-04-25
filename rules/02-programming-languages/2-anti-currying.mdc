@@ -2,6 +2,7 @@
 description: >-
   Rule 3 — Avoid deep currying and excessive point-free style; prefer named
   parameters and readable steps.
+globs: '**/domain/**/*.ts,**/*.domain.ts'
 alwaysApply: false
 tags:
   - fp-ts

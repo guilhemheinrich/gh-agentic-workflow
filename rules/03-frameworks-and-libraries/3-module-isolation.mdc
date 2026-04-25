@@ -2,6 +2,7 @@
 description: >-
   Rule 7 — No deep imports across vertical slices; use shared kernel or public
   facades (services/events).
+globs: '**/src/modules/**/*.ts,**/modules/**/*.ts,**/shared/**/*.ts'
 alwaysApply: false
 tags:
   - architecture

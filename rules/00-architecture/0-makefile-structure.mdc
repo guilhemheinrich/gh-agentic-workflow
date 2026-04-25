@@ -1,160 +1,40 @@
 ---
-description: Structure and conventions for the project root Makefile
-globs: '**/Makefile'
+description: >-
+  Root Makefile invariants: mandatory targets, env-driven configuration, PHONY
+  targets, and Docker-first execution. Templates live in a skill.
+globs: 'Makefile,**/Makefile'
 alwaysApply: false
 tags:
-  - common
+  - docker
   - make
 ---
 
-# Makefile — Expected Structure
+# Makefile — desired properties
 
-Every project MUST have a `Makefile` at the root with the commands below.
+## Desired state
 
-## Environment Variables
+A project root **Makefile** MUST expose a consistent interface for local development and CI-aligned workflows. Values that vary by developer or environment MUST NOT be hardcoded in targets.
 
-All configurable values (ports, service URLs, images, etc.) MUST be read from the `.env` file with a fallback to `.env.example` values.
+## Properties
 
-```makefile
-include .env
-export
+- **P1 (configuration)**: Ports, URLs, image names, and similar values MUST be read from environment (for example `.env` with documented fallbacks in `.env.example`), using `make` variable defaults (`?=`).
+- **P2 (mandatory targets)**: The Makefile SHOULD provide, when applicable: `up`, `down`, `test` (possibly split into `test-unit`, `test-integration`, `test-e2e`), `setup` (idempotent), and database or migration helpers (`db-migrate`, `db-reset`, or project-specific names).
+- **P3 (idempotent setup)**: The `setup` target MUST be safe to run multiple times (non-destructive retries, copy-if-missing patterns).
+- **P4 (Docker-first)**: Where the project standard is containerized development, install and test commands SHOULD run inside the defined containers, not assume host toolchain state.
+- **P5 (phony targets)**: All non-file targets MUST be listed in `.PHONY` to avoid silent misbehavior when a file with the same name exists.
+- **P6 (coverage)**: When coverage is required, there MUST be an explicit target (for example `coverage`) that runs coverage for each testable unit the policy requires.
 
-# Application URLs (derived from PORT variables from .env)
-APP_URL ?= http://localhost:$(APP_PORT)
-ADMIN_URL ?= http://localhost:$(ADMIN_PORT)
-API_URL ?= http://localhost:$(API_PORT)
-DB_STUDIO_URL ?= http://localhost:$(DB_STUDIO_PORT)
-REDIS_URL ?= redis://localhost:$(REDIS_PORT)
-PROMETHEUS_URL ?= http://localhost:$(PROMETHEUS_PORT)
-GRAFANA_URL ?= http://localhost:$(GRAFANA_PORT)
-PGADMIN_URL ?= http://localhost:$(PGADMIN_PORT)
-SENTRY_URL ?= http://localhost:$(SENTRY_PORT)
-KIBANA_URL ?= http://localhost:$(KIBANA_PORT)
+## Anti-patterns
 
-# Fallback .env.example values (if .env is missing)
-APP_PORT ?= 3000
-ADMIN_PORT ?= 3001
-API_PORT ?= 8080
-DB_STUDIO_PORT ?= 5555
-REDIS_PORT ?= 6379
-PROMETHEUS_PORT ?= 9090
-GRAFANA_PORT ?= 3000
-PGADMIN_PORT ?= 5050
-SENTRY_PORT ?= 8000
-KIBANA_PORT ?= 5601
-```
+- Hardcoded absolute paths or secrets in the Makefile.
+- One monolithic `test` with no way to run faster unit tests separately.
+- Missing `setup` or a setup that fails on second run.
 
-## Mandatory Commands
+## Skill References
 
-### `up` — Start the project (EXAMPLE TEMPLATE)
+- Full templates and example recipes: [makefile-conventions](../../skills/makefile-conventions/SKILL.md)
 
-```makefile
-up:
-	docker compose up -d --build
-	@echo ""
-	@echo "🚀 Services started successfully!"
-	@echo ""
-	@echo "Visit the following services (Cmd/Ctrl+Click to open URLs):"
-	@echo ""
-	@echo "┌──────────────────────────────┬────────────────────┐"
-	@echo "│ Service                          │ URL                   │"
-	@echo "├──────────────────────────────┼────────────────────┤"
-	@echo "│ App                              │ $(APP_URL)            │"
-	@echo "│ Admin Dashboard                  │ $(ADMIN_URL)          │"
-	@echo "│ API Docs                         │ $(API_URL)            │"
-	@echo "│ Database Studio                  │ $(DB_STUDIO_URL)      │"
-	@echo "│ Redis Commander                  │ $(REDIS_URL)          │"
-	@echo "│ Prometheus                       │ $(PROMETHEUS_URL)     │"
-	@echo "│ Grafana                          │ $(GRAFANA_URL)        │"
-	@echo "│ PgAdmin                          │ $(PGADMIN_URL)        │"
-	@echo "│ Kibana                           │ $(KIBANA_URL)         │"
-	@echo "└──────────────────────────────┴────────────────────┘"
-	@echo ""
-	@echo "💡 Cmd/Ctrl+Click to open in browser"
-	@echo ""
-	@echo "To stop: make down (or press Ctrl+C)"
-	@echo ""
-```
+## Enforcement
 
-### `down` — Stop the project
-
-```makefile
-down:
-	docker compose down
-```
-
-### `test` — Full test suite
-
-Run tests for EVERY app/package in the monorepo. Distinguish test types:
-
-```makefile
-test: test-unit test-integration test-e2e
-
-test-unit:
-	docker compose exec <service> npm run test:unit
-	# Repeat for each app/package
-
-test-integration:
-	docker compose exec <service> npm run test:integration
-
-test-e2e:
-	docker compose exec <service> npm run test:e2e
-```
-
-If the project is not a monorepo, adapt with a single target per type.
-
-### `coverage` — Coverage report
-
-Run the coverage check for EVERY app/package individually:
-
-```makefile
-coverage:
-	docker compose exec <service-1> npm run test:coverage
-	docker compose exec <service-2> npm run test:coverage
-	# One line per app/package
-```
-
-## Conditional Commands (if applicable)
-
-### `setup` — Idempotent initialization
-
-Run once. Must be idempotent (re-running does not break anything).
-
-```makefile
-setup:
-	cp -n .env.example .env || true
-	docker compose build
-	$(MAKE) db-migrate
-	# Other initializations (seed, etc.)
-```
-
-### `db-*` — Database operations
-
-```makefile
-db-migrate:
-	docker compose exec <service> npx prisma migrate deploy
-
-db-reset:
-	docker compose exec <service> npx prisma migrate reset --force
-
-db-seed:
-	docker compose exec <service> npx prisma db seed
-
-db-studio:
-	docker compose exec <service> npx prisma studio
-```
-
-Adapt `db-*` commands to the ORM/migration tool used (Prisma, Drizzle, TypeORM, Alembic, etc.).
-
-## Rules
-
-- **NEVER hardcode values** — always `$(VARIABLE)` with `?=` fallback
-- **ALWAYS execute via Docker** — no direct commands on the host
-- **One target per test type** — `test-unit`, `test-integration`, `test-e2e`
-- **One coverage target per app/package** — or a loop over packages
-- **`setup` MUST be idempotent** — use `cp -n`, `|| true`, existence checks
-- **`.PHONY`** — declare all targets as PHONY
-
-```makefile
-.PHONY: up down setup test test-unit test-integration test-e2e coverage db-migrate db-reset db-seed db-studio
-```
+- **Detect**: Hardcoded host-only commands where Docker is the project standard; missing core targets; `setup` that overwrites user config destructively.
+- **Fix**: Move values to env; split targets; align with the skill’s templates.

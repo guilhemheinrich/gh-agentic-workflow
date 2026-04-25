@@ -1,51 +1,42 @@
 ---
 description: >-
-  Apply private npm registry patterns for scoped packages. Use when modifying
-  .npmrc, Dockerfiles with NPM_TOKEN, or adding private dependencies.
-globs: '.npmrc, .docker/**/Dockerfile, compose.yaml, .env.example'
+  Declarative invariants for private npm scopes: single root .npmrc, token via
+  env, Docker build hygiene, no token in runtime images. Procedures in a skill.
+globs: '.npmrc,.docker/**/Dockerfile,docker-compose.yaml,compose.yaml,compose.yml,.env.example'
 alwaysApply: false
 tags:
   - docker
+  - monorepo
   - npm
+  - security
 ---
 
-Private npm registry — Conventions for Turborepo + bun + Docker:
+# Private npm registry — desired properties
 
-Architecture:
-- Single `.npmrc` at monorepo root — NEVER `.npmrc` in `apps/` or `packages/`
-- Bun automatically reads the root `.npmrc` for all workspaces
-- Token via env interpolation `${NPM_TOKEN}` — NEVER hardcoded tokens
-- Each private scope = one `@scope:registry=URL` line + one `//URL/:_authToken=${TOKEN}` line
+## Desired state
 
-Token flow in Docker:
-- `.env` → `compose.yaml` (`build.args`) → `Dockerfile` (`ARG` + `ENV`) → `.npmrc` → `bun install`
-- Token is passed via `build.args` (build-time), NOT via `environment` (runtime)
-- Only services with private dependencies receive the token
+Scoped private packages resolve through a **single** configuration at the workspace root, with **secrets** supplied only via **environment** and **build** arguments — never baked into images or committed files.
 
-Dockerfile security (MANDATORY):
-- `ARG NPM_TOKEN` + `ENV NPM_TOKEN=${NPM_TOKEN}` at the beginning of the deps stage
-- `COPY .npmrc .npmrc` BEFORE `bun install`
-- `RUN rm -f .npmrc` + `ENV NPM_TOKEN=` AFTER `bun install`
-- The runtime stage (stage 2) must contain neither `.npmrc` nor `NPM_TOKEN`
-- Only `node_modules` is copied from the deps stage to the runtime stage
+## Properties
 
-compose.yaml:
-- `build.args.NPM_TOKEN: ${NPM_TOKEN:-}` — empty default value
-- `context: .` must point to the monorepo root (access to `.npmrc`)
+- **P1 (single manifest of registry config)**: One `.npmrc` (or tool-equivalent) at the **monorepo root** — not duplicated per sub-package unless the tool requires an exception documented in the repo.
+- **P2 (token indirection)**: Authentication uses **environment variable placeholders** in `.npmrc` (for example `${NPM_TOKEN}`), not literal tokens.
+- **P3 (Docker build)**: Token is available only in the **dependency-install** stage: `ARG` / `ENV`, file present for install, then **removed** with `ENV` cleared for that stage; the **runtime** image contains **neither** `.npmrc` nor non-empty token variables.
+- **P4 (compose)**: Build-time tokens pass through `build.args` (or equivalent), not as long-lived container `environment` secrets for install-only needs.
+- **P5 (documentation)**: `.env.example` lists required token variable names with empty values; real values stay in ignored `.env`.
+- **P6 (dockerignore)**: `.env` is excluded from the build context; `.npmrc` is **not** excluded if the Dockerfile must copy it for install.
 
-.env.example:
-- Document each token variable: `NPM_TOKEN=`
-- Dedicated section `# ─── NPM Private Registry ───`
+## Anti-patterns
 
-.dockerignore:
-- `.npmrc` must NOT be in `.dockerignore` (needed for the build)
-- `.env` MUST be in `.dockerignore` (contains the actual token)
+- Committing a token to Git or copying it into a final runtime layer.
+- Per-app `.npmrc` files that disagree with the root.
+- `NPM_TOKEN` in runtime `environment` when only install needs it.
 
-Related skill: `.cursor/skills/npm-private-registry/SKILL.md` — full procedure, checklist, debugging
+## Skill References
 
-Avoid:
-- Hardcoded token in `.npmrc`, Dockerfile, or compose.yaml
-- `.npmrc` in sub-packages
-- `NPM_TOKEN` in `environment` (unnecessary at runtime, leak risk)
-- `.npmrc` in `.dockerignore`
-- `bun install` on the host to resolve private packages
+- Step-by-step: [npm-private-registry](../../skills/npm-private-registry/SKILL.md)
+
+## Enforcement
+
+- **Detect**: Hardcoded `//registry/..._authToken=npm_...` in repo; `FROM` final image still containing `.npmrc`; token in `docker compose` `environment` for a web service that only needs it at build.
+- **Fix**: Switch to env indirection; multi-stage strip; follow the skill’s checklist.

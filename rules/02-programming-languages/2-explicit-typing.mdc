@@ -2,6 +2,7 @@
 description: >-
   Rule 1 — Explicit typing in domain code (no any, explicit function signatures)
   for LSP and RAG-friendly contracts.
+globs: '**/domain/**/*.ts,**/*.domain.ts'
 alwaysApply: false
 tags:
   - typescript

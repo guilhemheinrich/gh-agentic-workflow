@@ -2,6 +2,7 @@
 description: >-
   Rule 6 — Validate all external I/O with Zod or Effect Schema;
   technology-prefixed infrastructure filenames.
+globs: '**/*controller*.ts,**/infrastructure/**/*.ts,**/http/**/*.ts,**/sql_*.ts,**/http_*.ts,**/dto/**/*.ts'
 alwaysApply: false
 tags:
   - nestjs

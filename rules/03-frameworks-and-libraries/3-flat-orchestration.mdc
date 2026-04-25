@@ -2,6 +2,7 @@
 description: >-
   Rule 5 — NestJS use cases as thin injectable services: sequential pipe from
   validation to domain to persistence.
+globs: '**/use-cases/**/*.ts,**/application/**/*.ts,**/*use-case*.ts,**/*.module.ts'
 alwaysApply: false
 tags:
   - nestjs

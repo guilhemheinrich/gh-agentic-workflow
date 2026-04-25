@@ -1,46 +1,56 @@
 ---
 description: >-
-  Apply monorepo conventions for Bun 1.3 + Turborepo 2.8 workspace. Use when
-  modifying package.json, turbo.json, or cross-package imports.
-globs: 'package.json,turbo.json,apps/*/package.json,packages/*/package.json'
+  Monorepo workspace invariants: package boundaries, acyclic package graph,
+  shared contracts, and no upward imports from shared libraries to apps.
+globs: 'package.json,**/package.json,pnpm-workspace.yaml,turbo.json,bun.lockb,bun.lock,package-lock.json,yarn.lock'
 alwaysApply: false
 tags:
+  - architecture
   - monorepo
-  - typescript
 ---
 
-Monorepo Structure:
+# Monorepo — desired properties
 
-- `apps/*` = deployable services (auth-api, app-registry, entitlements, feature-flags, hub-shell)
-- `packages/*` = shared libraries (hub-contracts, hub-events, hub-ui)
-- Each workspace has its own `package.json`
+## Desired state
 
-Package Manager:
+A **monorepo** arranges multiple packages (applications and shared libraries) in one repository with a single workspace root. The dependency graph between packages MUST stay predictable and acyclic at the level of public APIs.
 
-- Bun 1.3 = package manager ONLY (install, scripts)
-- Node.js 24 LTS = runtime for Hono services via @hono/node-server
-- Use `workspace:*` for internal dependencies
+## Properties
 
-Turborepo:
+- **P1 (layout)**: Deployable applications and reusable libraries are separated by directory convention (for example `apps/*` and `packages/*` or the project’s equivalent). Each workspace member has its own package manifest.
+- **P2 (internal dependencies)**: Internal dependencies are declared by **package name** in manifests, not by ad-hoc deep relative imports that bypass published entry points.
+- **P3 (acyclic graph)**: There MUST be no circular dependencies between workspace packages. Shared abstractions that would create a cycle are lifted to a common contract or kernel package.
+- **P4 (direction)**: Shared libraries (`packages/*`) MUST NOT depend on application-specific code (`apps/*`). Applications may depend on packages; not the reverse.
+- **P5 (build graph)**: Task runners (if any) respect dependency order: a package is built or tested after its internal dependencies, according to the manifest graph.
+- **P6 (single source of types)**: Domain-facing types and ports are not duplicated across packages; a single contract package (or similar) holds shared interfaces.
 
-- `turbo run build` respects dependency graph (`^build`)
-- `turbo run dev` is not cached (`"cache": false`)
-- Task outputs: `dist/**`, `src/generated/prisma/**` for builds
+## Tooling (agnostic)
 
-Cross-Package Imports:
+- **Package manager** (npm, pnpm, Yarn, Bun, and so on) is a project choice; the rule does not require a specific one.
+- **Task orchestration** (Turborepo, Nx, Lerna, npm workspaces, and so on) MUST honor the dependency graph; dev tasks that must not be cached are marked accordingly in the tool’s config.
 
-- Import from package name, not relative paths
-- `@modelo/hub-contracts` for shared interfaces and ports
-- `@modelo/hub-events` for event bus, domain events, outbox
-- `@modelo/hub-ui` for shared UI components and design tokens
-  Adding a New Package:
+## Anti-patterns
 
-- ALL consuming Dockerfiles need `COPY packages/{new-pkg}/package.json` in deps stage
-- ALL consuming Dockerfiles need `bun run build` + `cp -r` into `node_modules/@modelo/`
-- Purge stale volumes after adding: `docker compose rm -sfv {service}`
+- Copy-pasting the same type definitions in multiple `packages/`.
+- Importing a path deep inside another app’s `src` instead of a declared public API.
+- Letting `packages/A` depend on `packages/B` while `B` depends on `A`.
 
-Anti-Patterns:
+## Examples (directory layout — conceptual)
 
-- Avoid circular dependencies between packages
-- Avoid importing from `apps/*` in `packages/*`
-- Avoid duplicating types across packages — centralize in `hub-contracts`
+```text
+apps/
+  service-a/
+  service-b/
+packages/
+  contracts/
+  ui-kit/
+```
+
+## Skill References
+
+- For Bun/Turborepo/Docker-specific recipes in this org: see internal skills and Docker guides as applicable.
+
+## Enforcement
+
+- **Detect**: Cycles in workspace `depends`; imports from `apps` inside `packages`; duplicate type exports.
+- **Fix**: Extract contracts; add proper workspace deps; re-export public APIs from package entry points.

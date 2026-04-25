@@ -1,50 +1,40 @@
 ---
 description: >-
-  Apply Spec-Driven Development (SpecKit) workflow. Use when working with specs/
-  folder or implementing features.
+  Spec-driven workflow: spec folder layout, indexation, and implementation
+  handoff using SpecKit-style commands.
 globs: 'specs/**/*,fixes/**/*'
 alwaysApply: false
 tags:
   - spec-kit
+  - workflow
 ---
 
-SpecKit Workflow:
+# Spec-driven development
 
-- `/specify [feature]` → create spec in `specs/{id}-{name}/`
-- `/index` → verify and fix spec/fix indexation (conflicts, gaps)
-- Review `spec.md`, `plan.md`, `tasks.md`
-- `/implement {id}` → execute tasks following TDD
-- `/review-implement` → code review
-- Track progress in `tasks.md` and `_todo.md`
+## Desired state
 
-Spec Structure:
+Product and fix work is **documented** in versioned spec folders with **checklists**; implementation follows the spec and updates task state. **Index** numbers for specs and fixes stay **sequential and conflict-free** across the shared namespace.
 
-- `specs/{id}-{name}/spec.md` — detailed specification
-- `specs/{id}-{name}/plan.md` — implementation plan
-- `specs/{id}-{name}/tasks.md` — task breakdown with checkboxes
-- `specs/{id}-{name}/research.md` — optional research notes
+## Properties
 
-Indexation:
+- **P1 (structure)**: Each spec lives under `specs/{id}-{name}/` with `spec.md`, `plan.md`, `tasks.md` as the project standard; optional `research.md` and other artifacts as needed.
+- **P2 (indexation)**: New folders use the **next** index per project rules; conflicts are resolved with the reindex process — see [5-spec-indexing.mdc](./5-spec-indexing.mdc).
+- **P3 (traceability)**: `tasks.md` checkboxes reflect actual delivery; completed work is not left unmarked; scope changes update the spec.
+- **P4 (quality gate)**: Implementation respects tests and review steps defined in the spec or team policy; **TDD** applies where [7-testing.mdc](../07-quality-assurance/7-testing.mdc) and project rules require it.
+- **P5 (commands)**: The team uses the agreed slash-commands (for example specify, plan, index, implement) to reduce drift between docs and code.
 
-- **See rule `5-spec-indexing.mdc`** for complete indexation rules
-- Index format: 3-digit zero-padded (`001`, `002`, ..., `999`)
-- Shared index space: `specs/` + `fixes/` + `specs/archive/`
-- Sequence must be continuous with increment of 1 — no gaps, no duplicates
-- Use `/index` to detect and resolve conflicts after branch merges
+## Anti-patterns
 
-Roadmap (from ROADMAP_AGENTS_IA.md):
+- Implementing from memory without reading the current `spec.md` / `tasks.md`.
+- Creating a new folder with a **duplicate** index.
+- Dropping the spec after merge (unless archived per policy) while knowledge remains tribal.
 
-- Phase 0: Bootstrap & DX (`specs/001-bootstrap-dx/`)
-- Phase 1: auth-api + App Registry (`specs/002-auth-bff/`, `specs/003-app-registry/`)
-- Phase 2: Entitlements + Hub Shell (`specs/004-entitlements/`, `specs/005-hub-shell/`)
-- Phase 3: App Starter + Integration Kits (`specs/006-app-starter/`)
-- Phase 4: Feature Flags + Hub AI Module (`specs/007-feature-flags/`, `specs/008-hub-ai-module/`)
-- Phase 5: Event Bus + Documentation Hub (`specs/009-event-bus/`, `specs/010-documentation-hub/`)
-- Platform: Local Dev DNS/TLS (`specs/011-local-dev-platform/`)
+## Skill References
 
-Rules:
+- [spec-reindex](../../skills/spec-reindex/SKILL.md) if present in the project
+- [5-spec-indexing.mdc](./5-spec-indexing.mdc) for index rules
 
-- Always read the relevant spec before implementing
-- Update tasks.md as you complete work
-- Follow TDD — write failing test first
-- Before creating a new spec/fix, apply indexation rules from `5-spec-indexing.mdc`
+## Enforcement
+
+- **Detect**: Stale `tasks.md`; duplicate `{NNN}-*` folder names; spec without `tasks.md` when the team requires it.
+- **Fix**: Reconcile checklists; run `/index` or reindex script; add missing files.
