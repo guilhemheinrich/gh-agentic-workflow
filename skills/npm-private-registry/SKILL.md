@@ -14,6 +14,8 @@ tags:
 
 # NPM Private Registry — Turborepo + Bun + Docker
 
+**Declarative invariants** (token flow, single root `.npmrc`, image hygiene) live in `rules/04-tools-and-configurations/4-npm-private-registry.mdc`. This skill is the **procedure** and debugging guide.
+
 This skill documents the complete procedure for integrating a private npm package (scoped) in a Turborepo + bun monorepo with Docker multi-stage builds.
 
 ## When to Use This Skill
