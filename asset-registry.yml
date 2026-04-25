@@ -10,37 +10,51 @@ x-tag-descriptions:
   common: Transverse, applicable à tout projet
   css: CSS, Tailwind, UX layout
   cursor: Cursor IDE skills, hooks, rules
+  ddd: "[NEW] ddd"
   debugging: Debugging, investigation
   docker: Docker, Dockerfile, images
   docker-compose: Docker Compose orchestration
   documentation: Documentation, Diátaxis, JSDoc
+  domain: "[NEW] domain"
   e2e: Tests end-to-end (Playwright, Cypress)
   eslint: Linting, static analysis
   fp-ts: fp-ts / Effect functional programming
   git: Git, branching, commits
   github: GitHub CLI, Actions, PRs
+  hexagonal: "[NEW] hexagonal"
   hub: Modelo Hub, app registry, SSO ecosystem
+  indexing: "[NEW] indexing"
   kubernetes: Kubernetes, Helm
+  lit: "[NEW] lit"
   make: Makefile patterns
+  meta: "[NEW] meta"
   monorepo: Turborepo, workspaces
   nestjs: NestJS framework
   npm: npm, registre privé, packages
   nuxt: Nuxt framework
   prisma: Prisma ORM
+  purity: "[NEW] purity"
   python: Python
+  quality: "[NEW] quality"
   react: React ecosystem
   refactoring: Refactoring, amélioration de code
+  rules: "[NEW] rules"
   security: Sécurité, hardening
   sentry: Sentry observability
   shell: Shell scripts, CLI tools
   sonarqube: SonarQube quality
   spec-kit: SpecKit workflow
+  starlight: "[NEW] starlight"
+  tdd: "[NEW] tdd"
   testing: Tests unitaires, intégration
   typescript: TypeScript / JavaScript
   validation: Validation (Zod, Effect Schema, io-ts)
   versioning: Versioning, semantic-release
+  vertical-slices: "[NEW] vertical-slices"
+  vitest: "[NEW] vitest"
   vue: Vue.js ecosystem
   web-components: Lit, Web Components
+  workflow: "[NEW] workflow"
 assets:
   - path: .agents/skills/documentation-writer/
     type: skill
@@ -188,8 +202,11 @@ assets:
     type: rule
     tags:
       - cursor
+      - meta
       - spec-kit
-    description: Repo meta — SpecKit context pointer; backend architecture rules live in architecture-overview and rule-0X files.
+    description: >-
+      Meta pointer: canonical project rules are under rules/; use this file to find architecture, NestJS, and spec-kit
+      context without duplicating long rules.
   - path: .specify/extensions/fleet/commands/fleet.md
     type: command
     tags:
@@ -401,52 +418,74 @@ assets:
     type: rule
     tags:
       - architecture
-      - backend
-      - typescript
+      - ddd
+      - hexagonal
     description: >-
-      Apply DDD Hexagonal architecture for Hono backend services. Use when creating or modifying files in any backend
-      app (auth-api, app-registry, entitlements, feature-flags).
+      Hexagonal (ports/adapters) layering: pure domain, application use cases, infrastructure adapters. Dependency rule
+      and mandatory design properties.
   - path: rules/00-architecture/0-makefile-structure.mdc
     type: rule
     tags:
-      - common
+      - docker
       - make
-    description: Structure and conventions for the project root Makefile
+    description: >-
+      Root Makefile invariants: mandatory targets, env-driven configuration, PHONY targets, and Docker-first execution.
+      Templates live in a skill.
   - path: rules/00-architecture/0-monorepo.mdc
     type: rule
     tags:
-      - monorepo
-      - typescript
-    description: >-
-      Apply monorepo conventions for Bun 1.3 + Turborepo 2.8 workspace. Use when modifying package.json, turbo.json, or
-      cross-package imports.
-  - path: rules/01-project-fundamentals-and-architecture/1-architecture-overview.mdc
-    type: rule
-    tags:
       - architecture
-      - fp-ts
-      - nestjs
-      - typescript
-    description: Backend vertical-slice architecture for TypeScript/NestJS — overview, folder layout, and links to Rules 1–7.
-  - path: rules/01-project-fundamentals-and-architecture/1-code-documentation-for-indexing.mdc
+      - monorepo
+    description: >-
+      Monorepo workspace invariants: package boundaries, acyclic package graph, shared contracts, and no upward imports
+      from shared libraries to apps.
+  - path: rules/00-architecture/0-rules-structure.mdc
     type: rule
     tags:
       - cursor
+      - meta
+      - rules
+    description: >-
+      Conventions for the rules/ tree: category folders, .mdc naming, required frontmatter, and how globs scope each
+      rule. Apply when creating or moving rules.
+  - path: rules/00-architecture/0-vertical-slices.mdc
+    type: rule
+    tags:
+      - architecture
+      - vertical-slices
+    description: >-
+      Vertical-slice and functional-core / imperative-shell properties: where pure logic lives, how slices integrate,
+      and a decision policy for where edits go.
+  - path: rules/01-standards/1-code-documentation-for-indexing.mdc
+    type: rule
+    tags:
       - documentation
-      - typescript
-    description: Enforce rich inline documentation to maximize AI embedding/indexing quality. Use for all TypeScript files.
-  - path: rules/02-programming-language/2-anti-currying.mdc
+      - indexing
+      - quality
+    description: >-
+      Rich inline documentation so embeddings and static analysis can resolve intent, relationships, and usage without
+      reading the whole file.
+  - path: rules/01-standards/1-pure-domain.mdc
+    type: rule
+    tags:
+      - architecture
+      - domain
+      - purity
+    description: >-
+      Language-agnostic pure domain: no side effects in core logic, errors as values, no I/O in domain types.
+      Complements language-specific 2-pure-domain.
+  - path: rules/02-programming-languages/2-anti-currying.mdc
     type: rule
     tags:
       - fp-ts
       - typescript
     description: Rule 3 — Avoid deep currying and excessive point-free style; prefer named parameters and readable steps.
-  - path: rules/02-programming-language/2-explicit-typing.mdc
+  - path: rules/02-programming-languages/2-explicit-typing.mdc
     type: rule
     tags:
       - typescript
     description: Rule 1 — Explicit typing in domain code (no any, explicit function signatures) for LSP and RAG-friendly contracts.
-  - path: rules/02-programming-language/2-pure-domain.mdc
+  - path: rules/02-programming-languages/2-pure-domain.mdc
     type: rule
     tags:
       - fp-ts
@@ -455,7 +494,7 @@ assets:
     description: >-
       Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed errors; optional single-file domain for small
       modules.
-  - path: rules/02-programming-language/2-semantic-jsdoc.mdc
+  - path: rules/02-programming-languages/2-semantic-jsdoc.mdc
     type: rule
     tags:
       - documentation
@@ -470,14 +509,27 @@ assets:
   - path: rules/03-frameworks-and-libraries/3-lit.mdc
     type: rule
     tags:
+      - lit
       - web-components
-    description: Lit 3 patterns for calendar web components. Apply to component files.
+    description: >-
+      Invariants for Lit-based Web Components: reactivity, lifecycle, shadow DOM, and event contract. Cheatsheet and
+      detailed patterns are in a skill.
   - path: rules/03-frameworks-and-libraries/3-module-isolation.mdc
     type: rule
     tags:
       - architecture
       - nestjs
     description: Rule 7 — No deep imports across vertical slices; use shared kernel or public facades (services/events).
+  - path: rules/03-frameworks-and-libraries/3-nestjs-architecture.mdc
+    type: rule
+    tags:
+      - architecture
+      - fp-ts
+      - nestjs
+      - typescript
+    description: >-
+      NestJS stack and canonical folder layout for vertical-slice modules; index of rules R1–R7 and links to fp-ts
+      skills. Use with 0-vertical-slices and slice rules.
   - path: rules/03-frameworks-and-libraries/3-typed-boundaries.mdc
     type: rule
     tags:
@@ -485,23 +537,33 @@ assets:
       - typescript
       - validation
     description: Rule 6 — Validate all external I/O with Zod or Effect Schema; technology-prefixed infrastructure filenames.
+  - path: rules/03-frameworks-and-libraries/3-vitest-conventions.mdc
+    type: rule
+    tags:
+      - testing
+      - typescript
+      - vitest
+    description: "Vitest usage for this stack: run via Docker, configs per app, mocks, and file layout for Hono/hexagonal services."
   - path: rules/03-frameworks-and-libraries/3-wc-live-demos-in-starlight.mdc
     type: rule
     tags:
       - astro
       - documentation
+      - starlight
       - web-components
     description: >-
-      Live interactive playground pattern for documenting Lit web components in Astro Starlight. Apply when creating,
-      editing, or debugging docs pages with interactive demos.
+      Invariants for live Web Component docs in Starlight: iframe isolation, bidirectional code↔preview sync, vanilla
+      playground host, controlled component contract.
   - path: rules/04-tools-and-configurations/4-npm-private-registry.mdc
     type: rule
     tags:
       - docker
+      - monorepo
       - npm
+      - security
     description: >-
-      Apply private npm registry patterns for scoped packages. Use when modifying .npmrc, Dockerfiles with NPM_TOKEN, or
-      adding private dependencies.
+      Declarative invariants for private npm scopes: single root .npmrc, token via env, Docker build hygiene, no token
+      in runtime images. Procedures in a skill.
   - path: rules/04-tools-and-configurations/4-semantic-commits.mdc
     type: rule
     tags:
@@ -510,16 +572,18 @@ assets:
   - path: rules/04-tools-and-configurations/4-specify-rules.mdc
     type: rule
     tags:
-      - nestjs
+      - cursor
+      - meta
       - spec-kit
     description: >-
-      Repo meta — SpecKit context pointer; backend architecture rules live under rules/ (AIDD buckets) and are mirrored
-      in .cursor/rules.
+      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
+      entries for this repo.
   - path: rules/05-workflows-and-processes/5-spec-driven-dev.mdc
     type: rule
     tags:
       - spec-kit
-    description: Apply Spec-Driven Development (SpecKit) workflow. Use when working with specs/ folder or implementing features.
+      - workflow
+    description: "Spec-driven workflow: spec folder layout, indexation, and implementation handoff using SpecKit-style commands."
   - path: rules/05-workflows-and-processes/5-spec-indexing.mdc
     type: rule
     tags:
@@ -530,9 +594,12 @@ assets:
   - path: rules/07-quality-assurance/7-testing.mdc
     type: rule
     tags:
+      - quality
+      - tdd
       - testing
-      - typescript
-    description: Apply TDD and testing best practices with Vitest. Use when creating or modifying test files.
+    description: >-
+      Agnostic testing principles: TDD loop, test pyramid, naming, and AAA. No framework syntax — framework rules live
+      under 03-* or project skills.
   - path: skills/app-version-surface/
     type: skill
     tags:
@@ -721,6 +788,23 @@ assets:
     description: >-
       Documents TypeScript code with JSDoc comments, generates API documentation, and creates type-safe documentation.
       Use when users request "JSDoc", "code documentation", "API docs", "TypeDoc", or "inline documentation".
+  - path: skills/lit-web-components/
+    type: skill
+    tags:
+      - lit
+      - web-components
+    description: >-
+      Lit 3 web components: base class, reactivity, lifecycle, templates, events, overlay patterns, and anti-patterns.
+      Use when building or debugging Lit WCs.
+  - path: skills/makefile-conventions/
+    type: skill
+    tags:
+      - docker
+      - make
+      - monorepo
+    description: >-
+      Templates and procedures for a project-root Makefile: env vars, targets up, down, test, setup, db-*, coverage. Use
+      when authoring or debugging Makefiles.
   - path: skills/multi-stage-dockerfile/
     type: skill
     tags:
@@ -812,3 +896,13 @@ assets:
       Verify and fix spec/fix folder indexation. Maintains two independent index sequences (specs and fixes), detects
       conflicts (duplicates, gaps) per sequence, and re-indexes each into its own continuous sequence. Use when running
       /index, reindexing specs, fixing spec numbering, or resolving index conflicts after branch merges.
+  - path: skills/wc-live-demos-starlight/
+    type: skill
+    tags:
+      - astro
+      - documentation
+      - starlight
+      - web-components
+    description: >-
+      Live playground for Web Components in Astro Starlight: iframe srcdoc, CodeMirror, bidirectional sync, controlled
+      components, IIFE bundling, Docker pitfalls.

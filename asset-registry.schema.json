@@ -4,7 +4,11 @@
   "title": "Tagged asset registry",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "assets", "x-tag-descriptions"],
+  "required": [
+    "version",
+    "assets",
+    "x-tag-descriptions"
+  ],
   "properties": {
     "version": {
       "type": "string",
@@ -14,94 +18,286 @@
     "assets": {
       "type": "array",
       "minItems": 0,
-      "items": { "$ref": "#/$defs/assetEntry" }
+      "items": {
+        "$ref": "#/$defs/assetEntry"
+      }
     },
     "x-tag-descriptions": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "common",
-        "typescript",
-        "python",
-        "nestjs",
-        "fp-ts",
-        "vue",
-        "nuxt",
-        "react",
-        "docker",
-        "docker-compose",
-        "git",
-        "github",
+        "architecture",
+        "astro",
+        "auth",
+        "backend",
         "bitbucket",
         "ci-cd",
-        "testing",
+        "common",
+        "css",
+        "cursor",
+        "ddd",
+        "debugging",
+        "docker",
+        "docker-compose",
+        "documentation",
+        "domain",
         "e2e",
         "eslint",
-        "validation",
-        "npm",
-        "monorepo",
-        "documentation",
-        "architecture",
-        "backend",
-        "security",
-        "auth",
+        "fp-ts",
+        "git",
+        "github",
+        "hexagonal",
         "hub",
-        "prisma",
-        "sentry",
-        "sonarqube",
+        "indexing",
         "kubernetes",
+        "lit",
         "make",
-        "spec-kit",
-        "cursor",
-        "web-components",
-        "css",
-        "astro",
-        "versioning",
-        "debugging",
+        "meta",
+        "monorepo",
+        "nestjs",
+        "npm",
+        "nuxt",
+        "prisma",
+        "purity",
+        "python",
+        "quality",
+        "react",
         "refactoring",
-        "shell"
+        "rules",
+        "security",
+        "sentry",
+        "shell",
+        "sonarqube",
+        "spec-kit",
+        "starlight",
+        "tdd",
+        "testing",
+        "typescript",
+        "validation",
+        "versioning",
+        "vertical-slices",
+        "vitest",
+        "vue",
+        "web-components",
+        "workflow"
       ],
       "properties": {
-        "common": { "type": "string", "const": "Transverse, applicable à tout projet" },
-        "typescript": { "type": "string", "const": "TypeScript / JavaScript" },
-        "python": { "type": "string", "const": "Python" },
-        "nestjs": { "type": "string", "const": "NestJS framework" },
-        "fp-ts": { "type": "string", "const": "fp-ts / Effect functional programming" },
-        "vue": { "type": "string", "const": "Vue.js ecosystem" },
-        "nuxt": { "type": "string", "const": "Nuxt framework" },
-        "react": { "type": "string", "const": "React ecosystem" },
-        "docker": { "type": "string", "const": "Docker, Dockerfile, images" },
-        "docker-compose": { "type": "string", "const": "Docker Compose orchestration" },
-        "git": { "type": "string", "const": "Git, branching, commits" },
-        "github": { "type": "string", "const": "GitHub CLI, Actions, PRs" },
-        "bitbucket": { "type": "string", "const": "Bitbucket Pipelines" },
-        "ci-cd": { "type": "string", "const": "CI/CD pipelines, releases" },
-        "testing": { "type": "string", "const": "Tests unitaires, intégration" },
-        "e2e": { "type": "string", "const": "Tests end-to-end (Playwright, Cypress)" },
-        "eslint": { "type": "string", "const": "Linting, static analysis" },
-        "validation": { "type": "string", "const": "Validation (Zod, Effect Schema, io-ts)" },
-        "npm": { "type": "string", "const": "npm, registre privé, packages" },
-        "monorepo": { "type": "string", "const": "Turborepo, workspaces" },
-        "documentation": { "type": "string", "const": "Documentation, Diátaxis, JSDoc" },
-        "architecture": { "type": "string", "const": "Patterns d'architecture (hexagonal, DDD, vertical slices)" },
-        "backend": { "type": "string", "const": "Patterns backend génériques" },
-        "security": { "type": "string", "const": "Sécurité, hardening" },
-        "auth": { "type": "string", "const": "Authentification, SSO, Keycloak" },
-        "hub": { "type": "string", "const": "Modelo Hub, app registry, SSO ecosystem" },
-        "prisma": { "type": "string", "const": "Prisma ORM" },
-        "sentry": { "type": "string", "const": "Sentry observability" },
-        "sonarqube": { "type": "string", "const": "SonarQube quality" },
-        "kubernetes": { "type": "string", "const": "Kubernetes, Helm" },
-        "make": { "type": "string", "const": "Makefile patterns" },
-        "spec-kit": { "type": "string", "const": "SpecKit workflow" },
-        "cursor": { "type": "string", "const": "Cursor IDE skills, hooks, rules" },
-        "web-components": { "type": "string", "const": "Lit, Web Components" },
-        "css": { "type": "string", "const": "CSS, Tailwind, UX layout" },
-        "astro": { "type": "string", "const": "Astro / Starlight" },
-        "versioning": { "type": "string", "const": "Versioning, semantic-release" },
-        "debugging": { "type": "string", "const": "Debugging, investigation" },
-        "refactoring": { "type": "string", "const": "Refactoring, amélioration de code" },
-        "shell": { "type": "string", "const": "Shell scripts, CLI tools" }
+        "common": {
+          "type": "string",
+          "const": "Transverse, applicable à tout projet"
+        },
+        "typescript": {
+          "type": "string",
+          "const": "TypeScript / JavaScript"
+        },
+        "python": {
+          "type": "string",
+          "const": "Python"
+        },
+        "nestjs": {
+          "type": "string",
+          "const": "NestJS framework"
+        },
+        "fp-ts": {
+          "type": "string",
+          "const": "fp-ts / Effect functional programming"
+        },
+        "vue": {
+          "type": "string",
+          "const": "Vue.js ecosystem"
+        },
+        "nuxt": {
+          "type": "string",
+          "const": "Nuxt framework"
+        },
+        "react": {
+          "type": "string",
+          "const": "React ecosystem"
+        },
+        "docker": {
+          "type": "string",
+          "const": "Docker, Dockerfile, images"
+        },
+        "docker-compose": {
+          "type": "string",
+          "const": "Docker Compose orchestration"
+        },
+        "git": {
+          "type": "string",
+          "const": "Git, branching, commits"
+        },
+        "github": {
+          "type": "string",
+          "const": "GitHub CLI, Actions, PRs"
+        },
+        "bitbucket": {
+          "type": "string",
+          "const": "Bitbucket Pipelines"
+        },
+        "ci-cd": {
+          "type": "string",
+          "const": "CI/CD pipelines, releases"
+        },
+        "testing": {
+          "type": "string",
+          "const": "Tests unitaires, intégration"
+        },
+        "e2e": {
+          "type": "string",
+          "const": "Tests end-to-end (Playwright, Cypress)"
+        },
+        "eslint": {
+          "type": "string",
+          "const": "Linting, static analysis"
+        },
+        "validation": {
+          "type": "string",
+          "const": "Validation (Zod, Effect Schema, io-ts)"
+        },
+        "npm": {
+          "type": "string",
+          "const": "npm, registre privé, packages"
+        },
+        "monorepo": {
+          "type": "string",
+          "const": "Turborepo, workspaces"
+        },
+        "documentation": {
+          "type": "string",
+          "const": "Documentation, Diátaxis, JSDoc"
+        },
+        "architecture": {
+          "type": "string",
+          "const": "Patterns d'architecture (hexagonal, DDD, vertical slices)"
+        },
+        "backend": {
+          "type": "string",
+          "const": "Patterns backend génériques"
+        },
+        "security": {
+          "type": "string",
+          "const": "Sécurité, hardening"
+        },
+        "auth": {
+          "type": "string",
+          "const": "Authentification, SSO, Keycloak"
+        },
+        "hub": {
+          "type": "string",
+          "const": "Modelo Hub, app registry, SSO ecosystem"
+        },
+        "prisma": {
+          "type": "string",
+          "const": "Prisma ORM"
+        },
+        "sentry": {
+          "type": "string",
+          "const": "Sentry observability"
+        },
+        "sonarqube": {
+          "type": "string",
+          "const": "SonarQube quality"
+        },
+        "kubernetes": {
+          "type": "string",
+          "const": "Kubernetes, Helm"
+        },
+        "make": {
+          "type": "string",
+          "const": "Makefile patterns"
+        },
+        "spec-kit": {
+          "type": "string",
+          "const": "SpecKit workflow"
+        },
+        "cursor": {
+          "type": "string",
+          "const": "Cursor IDE skills, hooks, rules"
+        },
+        "web-components": {
+          "type": "string",
+          "const": "Lit, Web Components"
+        },
+        "css": {
+          "type": "string",
+          "const": "CSS, Tailwind, UX layout"
+        },
+        "astro": {
+          "type": "string",
+          "const": "Astro / Starlight"
+        },
+        "versioning": {
+          "type": "string",
+          "const": "Versioning, semantic-release"
+        },
+        "debugging": {
+          "type": "string",
+          "const": "Debugging, investigation"
+        },
+        "refactoring": {
+          "type": "string",
+          "const": "Refactoring, amélioration de code"
+        },
+        "shell": {
+          "type": "string",
+          "const": "Shell scripts, CLI tools"
+        },
+        "starlight": {
+          "type": "string",
+          "const": "[NEW] starlight"
+        },
+        "lit": {
+          "type": "string",
+          "const": "[NEW] lit"
+        },
+        "quality": {
+          "type": "string",
+          "const": "[NEW] quality"
+        },
+        "tdd": {
+          "type": "string",
+          "const": "[NEW] tdd"
+        },
+        "workflow": {
+          "type": "string",
+          "const": "[NEW] workflow"
+        },
+        "meta": {
+          "type": "string",
+          "const": "[NEW] meta"
+        },
+        "vitest": {
+          "type": "string",
+          "const": "[NEW] vitest"
+        },
+        "domain": {
+          "type": "string",
+          "const": "[NEW] domain"
+        },
+        "purity": {
+          "type": "string",
+          "const": "[NEW] purity"
+        },
+        "indexing": {
+          "type": "string",
+          "const": "[NEW] indexing"
+        },
+        "vertical-slices": {
+          "type": "string",
+          "const": "[NEW] vertical-slices"
+        },
+        "rules": {
+          "type": "string",
+          "const": "[NEW] rules"
+        },
+        "ddd": {
+          "type": "string",
+          "const": "[NEW] ddd"
+        },
+        "hexagonal": {
+          "type": "string",
+          "const": "[NEW] hexagonal"
+        }
       }
     }
   },
@@ -109,70 +305,100 @@
     "tag": {
       "type": "string",
       "enum": [
-        "common",
-        "typescript",
-        "python",
-        "nestjs",
-        "fp-ts",
-        "vue",
-        "nuxt",
-        "react",
-        "docker",
-        "docker-compose",
-        "git",
-        "github",
+        "architecture",
+        "astro",
+        "auth",
+        "backend",
         "bitbucket",
         "ci-cd",
-        "testing",
+        "common",
+        "css",
+        "cursor",
+        "ddd",
+        "debugging",
+        "docker",
+        "docker-compose",
+        "documentation",
+        "domain",
         "e2e",
         "eslint",
-        "validation",
-        "npm",
-        "monorepo",
-        "documentation",
-        "architecture",
-        "backend",
-        "security",
-        "auth",
+        "fp-ts",
+        "git",
+        "github",
+        "hexagonal",
         "hub",
-        "prisma",
-        "sentry",
-        "sonarqube",
+        "indexing",
         "kubernetes",
+        "lit",
         "make",
-        "spec-kit",
-        "cursor",
-        "web-components",
-        "css",
-        "astro",
-        "versioning",
-        "debugging",
+        "meta",
+        "monorepo",
+        "nestjs",
+        "npm",
+        "nuxt",
+        "prisma",
+        "purity",
+        "python",
+        "quality",
+        "react",
         "refactoring",
-        "shell"
+        "rules",
+        "security",
+        "sentry",
+        "shell",
+        "sonarqube",
+        "spec-kit",
+        "starlight",
+        "tdd",
+        "testing",
+        "typescript",
+        "validation",
+        "versioning",
+        "vertical-slices",
+        "vitest",
+        "vue",
+        "web-components",
+        "workflow"
       ]
     },
     "assetType": {
       "type": "string",
-      "enum": ["skill", "command", "rule", "agent", "hook"]
+      "enum": [
+        "skill",
+        "command",
+        "rule",
+        "agent",
+        "hook"
+      ]
     },
     "assetEntry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["path", "type", "tags"],
+      "required": [
+        "path",
+        "type",
+        "tags"
+      ],
       "properties": {
         "path": {
           "type": "string",
           "minLength": 1,
           "description": "Relative path to the asset. For skills, points to the skill directory (e.g. skills/my-skill/) so that companion files (references/, scripts/, templates/) are included. For other asset types, points to the file."
         },
-        "type": { "$ref": "#/$defs/assetType" },
+        "type": {
+          "$ref": "#/$defs/assetType"
+        },
         "tags": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "$ref": "#/$defs/tag" }
+          "items": {
+            "$ref": "#/$defs/tag"
+          }
         },
-        "description": { "type": "string" }
+        "description": {
+          "type": "string"
+        }
       }
     }
   }
