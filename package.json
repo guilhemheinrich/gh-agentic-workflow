@@ -8,6 +8,7 @@
     "js-yaml": "^4.1.0"
   },
   "devDependencies": {
+    "pi-mcp-adapter": "^2.5.1",
     "tsx": "^4.19.3"
   }
 }
