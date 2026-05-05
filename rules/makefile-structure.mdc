@@ -1,0 +1,115 @@
+---
+description: Structure and conventions for the project root Makefile
+globs: "**/Makefile"
+alwaysApply: false
+---
+
+# Makefile — Expected Structure
+
+Every project MUST have a `Makefile` at the root with the commands below.
+
+## Environment Variables
+
+All configurable values (ports, service names, images, etc.) MUST be read from the `.env` file with a fallback to `.env.example` values.
+
+```makefile
+include .env
+export
+
+# Fallbacks (.env.example values)
+APP_PORT ?= 3000
+DB_PORT ?= 5432
+REDIS_PORT ?= 6379
+```
+
+## Mandatory Commands
+
+### `up` — Start the project
+
+```makefile
+up:
+	docker compose up -d --build
+```
+
+### `down` — Stop the project
+
+```makefile
+down:
+	docker compose down
+```
+
+### `test` — Full test suite
+
+Run tests for EVERY app/package in the monorepo. Distinguish test types:
+
+```makefile
+test: test-unit test-integration test-e2e
+
+test-unit:
+	docker compose exec <service> npm run test:unit
+	# Repeat for each app/package
+
+test-integration:
+	docker compose exec <service> npm run test:integration
+
+test-e2e:
+	docker compose exec <service> npm run test:e2e
+```
+
+If the project is not a monorepo, adapt with a single target per type.
+
+### `coverage` — Coverage report
+
+Run the coverage check for EVERY app/package individually:
+
+```makefile
+coverage:
+	docker compose exec <service-1> npm run test:coverage
+	docker compose exec <service-2> npm run test:coverage
+	# One line per app/package
+```
+
+## Conditional Commands (if applicable)
+
+### `setup` — Idempotent initialization
+
+Run once. Must be idempotent (re-running does not break anything).
+
+```makefile
+setup:
+	cp -n .env.example .env || true
+	docker compose build
+	$(MAKE) db-migrate
+	# Other initializations (seed, etc.)
+```
+
+### `db-*` — Database operations
+
+```makefile
+db-migrate:
+	docker compose exec <service> npx prisma migrate deploy
+
+db-reset:
+	docker compose exec <service> npx prisma migrate reset --force
+
+db-seed:
+	docker compose exec <service> npx prisma db seed
+
+db-studio:
+	docker compose exec <service> npx prisma studio
+```
+
+Adapt `db-*` commands to the ORM/migration tool used (Prisma, Drizzle, TypeORM, Alembic, etc.).
+
+## Rules
+
+- **NEVER hardcode values** — always `$(VARIABLE)` with `?=` fallback
+- **ALWAYS execute via Docker** — no direct commands on the host
+- **One target per test type** — `test-unit`, `test-integration`, `test-e2e`
+- **One coverage target per app/package** — or a loop over packages
+- **`setup` MUST be idempotent** — use `cp -n`, `|| true`, existence checks
+- **`.PHONY`** — declare all targets as PHONY
+
+```makefile
+.PHONY: up down setup test test-unit test-integration test-e2e coverage db-migrate db-reset db-seed db-studio
+```

@@ -1,0 +1,14 @@
+{
+    "$schema": "https://opencode.ai/config.json",
+    "mcp": {
+      "mcp_everything": {
+        "type": "local",
+        "command": ["npx", "-y", "@modelcontextprotocol/server-everything"],
+      },
+      "playwright": {
+        "type": "local",
+        "enabled": true,
+        "command": ["npx", "-y", "@playwright/mcp@latest"]
+      },
+    },
+  }

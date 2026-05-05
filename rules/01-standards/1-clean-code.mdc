@@ -1,0 +1,41 @@
+---
+description: Apply Clean Code and SOLID principles. Use for all TypeScript files across the monorepo.
+globs: **/*.ts,**/*.tsx
+alwaysApply: false
+---
+
+SOLID Principles:
+
+- Single Responsibility: one class/function = one reason to change
+- Open/Closed: extend via interfaces, not modification
+- Liskov: subtypes must be substitutable for base types
+- Interface Segregation: prefer many small interfaces over fat ones
+- Dependency Inversion: depend on abstractions (interfaces), not concretions
+
+Clean Code:
+
+- Functions: max 20 lines, single level of abstraction
+- Files: max 200 lines (split if larger)
+- Parameters: max 3 per function (use object for more)
+- Nesting: max 2 levels deep (extract early returns or helper functions)
+- Comments: only explain WHY, never WHAT
+
+Development Principles (ADR-014):
+
+- TDD: write tests before implementation
+- DRY: factorize systematically
+- KISS: simplest solution that works
+- YAGNI: don't code what's not needed now
+
+Code Against Interfaces:
+
+- Always program to an interface, never to an implementation
+- Use dependency injection for all external dependencies
+- Test via mocks of interfaces
+
+Anti-Patterns:
+
+- Avoid magic numbers/strings — use named constants or enums
+- Avoid deep inheritance — prefer composition
+- Avoid premature optimization
+- Avoid dead code — remove unused imports, variables, functions

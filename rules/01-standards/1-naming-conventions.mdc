@@ -1,0 +1,38 @@
+---
+description: Apply naming conventions for the Modelo Hub monorepo. Use for all TypeScript files.
+globs: **/*.ts,**/*.tsx
+alwaysApply: false
+---
+
+TypeScript Naming:
+
+- Interfaces: prefix with `I` (e.g., `IAuthProvider`, `ISessionStore`)
+- Classes: PascalCase (e.g., `KeycloakAuthAdapter`, `RedisSessionStore`)
+- Functions/Methods: camelCase (e.g., `exchangeCode`, `findBySlug`)
+- Constants: UPPER_SNAKE_CASE (e.g., `SESSION_TTL_SECONDS`)
+- Files: kebab-case (e.g., `auth-provider.ts`, `session-store.ts`)
+
+DDD Naming:
+
+- Entities: singular noun (e.g., `HubSession`, `App`, `Plan`)
+- Value Objects: descriptive noun (e.g., `SessionId`, `AppSlug`, `OrgId`)
+- Use Cases: verb + noun (e.g., `LoginUseCase`, `GetSessionUseCase`)
+- DTOs: noun + `Dto` suffix (e.g., `LoginDto`, `SessionDto`)
+- Ports: `I` + capability (e.g., `IAuthProvider`, `IAppRepository`)
+- Adapters: implementation + `Adapter` (e.g., `KeycloakAuthAdapter`)
+
+File Organization:
+
+- `domain/entities/*.ts` for entities
+- `domain/value-objects/*.ts` for value objects
+- `domain/ports/*.ts` for port interfaces
+- `application/use-cases/*.ts` for use cases
+- `application/dtos/*.ts` for DTOs
+- `infrastructure/adapters/*.ts` for adapters
+- `infrastructure/http/*.ts` for controllers
+
+Anti-Patterns:
+
+- Avoid generic names (`Manager`, `Service`, `Helper`, `Utils`)
+- Avoid abbreviations — use full words
+- Avoid Hungarian notation (except `I` for interfaces per project convention)

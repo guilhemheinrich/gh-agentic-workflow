@@ -1,0 +1,30 @@
+---
+description: APPLY Kubernetes and Helm conventions WHEN working with helm/ directory
+globs: helm/**/*.yaml
+alwaysApply: false
+---
+
+- All Helm charts use apiVersion v2
+- Never create Namespace, ClusterRole, or ClusterRoleBinding resources
+- Never create Ingress resources — ingress and TLS are managed by infrastructure team
+- Never hardcode namespace — use {{ .Release.Namespace }}
+- Namespace names are provided by the infrastructure team — never auto-generate them
+- Only two environments: pprod (pre-production) and prod (production) — no dev, no staging
+- Values overrides: values-pprod.yaml and values-prod.yaml only (no values-dev.yaml, no values-staging.yaml)
+- Service port is always 80, targetPort maps to the container port
+- Exposed services use service.type: LoadBalancer, non-exposed use ClusterIP
+- Use _helpers.tpl for all repeated label/name patterns
+- Secrets go through Kubernetes Secrets, never ConfigMaps
+- Health probes must match actual application health endpoints
+- Resource requests and limits are mandatory for every container and must fit within namespace quotas
+- Image registry: modelo-registry.septeo.fr/modelo/hub
+- Image tags must be overridable via --set image.tag
+- Only frontend and backend application services are deployed — databases, caches, and brokers are external
+- Database, cache, and broker services are deployed from a separate infrastructure repository
+- CI/CD pipeline builds/pushes Docker images and updates image tag in Git — deployment is handled by ArgoCD (GitOps)
+- Pipeline uses BB_TOKEN for GitOps commit with [skip ci] to avoid loops
+- Database migrations run as ArgoCD PreSync Jobs (one-shot, fail-closed) — never in application pods
+- Entrypoints check `SKIP_MIGRATIONS=true` (set in ConfigMap) to skip migrations in K8s pods
+- Seed Jobs are optional, gated by `seed.enabled` in values.yaml (default false in production)
+- Migration Jobs use `argocd.argoproj.io/hook: PreSync` and `hook-delete-policy: BeforeHookCreation`
+- Seed Jobs use `argocd.argoproj.io/sync-wave: "1"` to run after migration Jobs complete

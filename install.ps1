@@ -18,7 +18,7 @@ $ClaudeDesktopConfig = Join-Path $env:APPDATA 'Claude\claude_desktop_config.json
 
 # Resources to copy for each target
 $CursorResources = @('skills', 'rules', 'hooks', 'agents', 'commands')
-$PiResources = @('skills', 'rules', 'hooks', 'agents', 'commands')
+$PiResources = @('skills', 'rules', 'hooks', 'agents', 'prompts')
 $OpenCodeResources = @('skills', 'commands')
 
 # Ensure Claude Desktop config directory exists
@@ -36,8 +36,12 @@ function Copy-Resources {
 
     foreach ($res in $Resources) {
         $src = Join-Path $RepoDir $res
-        if (-not (Test-Path $src -PathType Container)) { continue }
-        $dest = Join-Path $Target $res
+          # Special case: for PI target, copy commands to prompts folder
+        if ($target -eq $PiTarget -and $res -eq 'commands') {
+               $dest = Join-Path $Target prompts
+           } else {
+               $dest = Join-Path $Target $res
+           }
         New-Item -ItemType Directory -Path $dest -Force | Out-Null
         Copy-Item -Path (Join-Path $src '*') -Destination $dest -Recurse -Force
         Write-Host "  $res -> $dest"

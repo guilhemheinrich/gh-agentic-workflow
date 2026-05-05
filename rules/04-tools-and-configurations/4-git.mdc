@@ -1,0 +1,25 @@
+---
+description: Apply Git conventions for commits, branches, and PRs. Use for all version control operations.
+globs:
+alwaysApply: true
+---
+
+Commits:
+
+- Language: English
+- Format: Conventional Commits (`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`)
+- Scope: package or app name (e.g., `feat(auth-api): add login endpoint`)
+- Body: explain WHY, not WHAT
+
+Branches:
+
+- `main` = production-ready
+- `feat/{spec-id}-{description}` for features (e.g., `feat/001-bootstrap-dx`)
+- `fix/{issue-id}-{description}` for fixes
+- `chore/{description}` for tooling
+
+Anti-Patterns:
+
+- Avoid committing `.env`, secrets, or credentials
+- Avoid large commits — split by logical change
+- Avoid force-pushing to shared branches

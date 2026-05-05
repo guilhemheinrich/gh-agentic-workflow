@@ -1,130 +1,263 @@
 ---
+name: makefile-conventions
 description: >-
-  Templates and procedures for a project-root Makefile: env vars, targets up,
-  down, test, setup, db-*, coverage. Use when authoring or debugging Makefiles.
-tags:
-  - docker
-  - make
-  - monorepo
+  Write project-root Makefiles with Docker-first execution, .env-driven
+  configuration, and standardized targets. Use when authoring or debugging
+  Makefiles, adding make targets, configuring docker compose orchestration,
+  or when the user mentions "Makefile", "make up", "make test", or
+  "docker compose" workflow.
 ---
 
-# Makefile conventions — templates and procedures
+# Makefile — conventions et templates
 
-## Context
+## Principes fondamentaux
 
-Use this skill when implementing the **concrete** recipes and copy-paste templates for a root `Makefile`. The **declarative invariants** (what targets must exist, naming) live in the rule `rules/00-architecture/0-makefile-structure.mdc`.
+1. **Docker-first** : toutes les commandes s'exécutent dans des conteneurs, jamais sur l'hôte.
+2. **Configuration par `.env`** : tous les ports, URLs, images sont lus depuis `.env` avec des fallbacks `?=`.
+3. **Sortie exploitable** : après un `make up`, les URLs/ports sont affichés et cliquables dans le terminal. Après des tests, le chemin vers le rapport est indiqué.
+4. **`.PHONY`** : tous les targets non-fichier sont déclarés PHONY.
 
-## Environment variables
+---
 
-All configurable values (ports, service URLs, images, and so on) SHOULD be read from `.env` with fallbacks consistent with `.env.example`.
+## Structure du fichier
 
 ```makefile
-include .env
+# ──── Configuration ───────────────────────────────────────────
+-include .env
 export
 
-# Application URLs (derived from PORT variables from .env)
-APP_URL ?= http://localhost:$(APP_PORT)
-ADMIN_URL ?= http://localhost:$(ADMIN_PORT)
-API_URL ?= http://localhost:$(API_PORT)
-DB_STUDIO_URL ?= http://localhost:$(DB_STUDIO_PORT)
-REDIS_URL ?= redis://localhost:$(REDIS_PORT)
-PROMETHEUS_URL ?= http://localhost:$(PROMETHEUS_PORT)
-GRAFANA_URL ?= http://localhost:$(GRAFANA_PORT)
-PGADMIN_URL ?= http://localhost:$(PGADMIN_PORT)
-SENTRY_URL ?= http://localhost:$(SENTRY_PORT)
-KIBANA_URL ?= http://localhost:$(KIBANA_PORT)
+# Fallbacks (valeurs .env.example)
+APP_PORT     ?= 3000
+API_PORT     ?= 8080
 
-# Fallback .env.example values (if .env is missing)
-APP_PORT ?= 3000
-ADMIN_PORT ?= 3001
-API_PORT ?= 8080
-DB_STUDIO_PORT ?= 5555
-REDIS_PORT ?= 6379
-PROMETHEUS_PORT ?= 9090
-GRAFANA_PORT ?= 3000
-PGADMIN_PORT ?= 5050
-SENTRY_PORT ?= 8000
-KIBANA_PORT ?= 5601
+# ──── Variables dérivées ──────────────────────────────────────
+COMPOSE      = docker compose
+EXEC_BACKEND = $(COMPOSE) exec -T backend
+RUN_BACKEND  = $(COMPOSE) run --rm backend
+
+APP_URL      ?= http://localhost:$(APP_PORT)
+API_URL      ?= http://localhost:$(API_PORT)
+
+# ──── Helpers (affichage) ─────────────────────────────────────
+BOLD   = \033[1m
+CYAN   = \033[36m
+GREEN  = \033[32m
+YELLOW = \033[33m
+RESET  = \033[0m
+LINE   = \033[90m──────────────────────────────────────────────────\033[0m
+
+define print_resource
+	@printf "  $(CYAN)%-18s$(RESET) %s\n" "$(1)" "$(2)"
+endef
+
+# ──── PHONY ───────────────────────────────────────────────────
+.PHONY: help up down copy-vendors locks test test-e2e test-api
+.DEFAULT_GOAL := help
 ```
 
-## Target: `up` — start the stack (example)
+> **`-include .env`** (avec le tiret) empêche une erreur si `.env` n'existe pas encore.
+
+---
+
+## Targets obligatoires
+
+### `help` — affiche les targets disponibles
 
 ```makefile
-up:
-	docker compose up -d --build
-	@echo ""
-	@echo "Services started."
-	@echo "App:     $(APP_URL)"
-	@echo "API:     $(API_URL)"
-	@echo "To stop: make down"
+help: ## Affiche les targets disponibles
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 ```
 
-## Target: `down`
+### `up` — démarrage de la stack
+
+Démarre tous les services et affiche les ressources exposées (URLs cliquables).
 
 ```makefile
-down:
-	docker compose down
+up: ## Démarre la stack complète
+	@printf "\n$(BOLD)Starting services...$(RESET)\n"
+	@$(COMPOSE) up -d --build --remove-orphans
+	@printf "\n$(LINE)\n"
+	@printf "$(BOLD)$(GREEN)  Stack is up$(RESET)\n"
+	@printf "$(LINE)\n"
+	$(call print_resource,App,$(APP_URL))
+	$(call print_resource,API,$(API_URL))
+	$(call print_resource,API Docs,$(API_URL)/api)
+	@printf "$(LINE)\n"
+	@printf "  $(YELLOW)Logs$(RESET)  make logs     $(YELLOW)Stop$(RESET)  make down\n\n"
 ```
 
-## Target: `test` — full suite (monorepo)
+**Règles** :
+- Chaque service avec un port exposé doit apparaître dans la sortie.
+- Utiliser `$(call print_resource,Label,URL)` pour un formatage cohérent.
+- Les ports viennent de variables `?=`, jamais en dur.
+
+### `down` — arrêt de la stack
 
 ```makefile
-test: test-unit test-integration test-e2e
-
-test-unit:
-	docker compose exec <service> npm run test:unit
-
-test-integration:
-	docker compose exec <service> npm run test:integration
-
-test-e2e:
-	docker compose exec <service> npm run test:e2e
+down: ## Arrête tous les services
+	@$(COMPOSE) down
 ```
 
-Repeat `docker compose exec` lines per app/package in a monorepo; for a single package, collapse to one service.
+### `copy-vendors` — sync des dépendances pour le LSP hôte
 
-## Target: `coverage`
+Copie les `node_modules` (ou équivalent) du conteneur vers l'hôte pour que le LSP et le linter de l'IDE fonctionnent.
 
 ```makefile
-coverage:
-	docker compose exec <service-1> npm run test:coverage
-	docker compose exec <service-2> npm run test:coverage
+copy-vendors: ## Copie node_modules des conteneurs vers l'hôte (IDE)
+	@printf "\n$(BOLD)Syncing node_modules to host...$(RESET)\n"
+	rm -rf ./node_modules
+	$(COMPOSE) cp backend:/app/node_modules ./node_modules
+	@printf "$(GREEN)  node_modules synced. IDE linter should resolve deps.$(RESET)\n\n"
 ```
 
-## Target: `setup` — idempotent init
+**Règles** :
+- Toujours `rm -rf` l'ancien dossier avant la copie (évite les conflits de symlinks).
+- Adapter le nombre de `cp` au nombre de packages/apps du monorepo.
+
+### `locks` — copie des lockfiles
+
+Copie le lockfile généré dans le conteneur vers l'hôte (pour le versionning et la CI).
 
 ```makefile
-setup:
-	cp -n .env.example .env || true
-	docker compose build
-	$(MAKE) db-migrate
+locks: ## Copie les lockfiles du conteneur vers l'hôte
+	@printf "\n$(BOLD)Exporting lockfiles...$(RESET)\n"
+	@$(COMPOSE) cp backend:/build-lock/bun.lock ./bun.lock 2>/dev/null \
+		&& printf "$(GREEN)  bun.lock copied.$(RESET)\n" \
+		|| printf "$(YELLOW)  bun.lock not found (rebuild with make up).$(RESET)\n"
 ```
 
-## Target: `db-*`
+### `test` — tests unitaires
 
 ```makefile
-db-migrate:
-	docker compose exec <service> npx prisma migrate deploy
-
-db-reset:
-	docker compose exec <service> npx prisma migrate reset --force
-
-db-seed:
-	docker compose exec <service> npx prisma db seed
-
-db-studio:
-	docker compose exec <service> npx prisma studio
+test: ## Tests unitaires
+	@printf "\n$(BOLD)Running unit tests...$(RESET)\n"
+	$(EXEC_BACKEND) npm run test
+	@printf "$(GREEN)  Tests passed.$(RESET)\n\n"
 ```
 
-Adapt to your ORM (Drizzle, TypeORM, Alembic, and so on).
+### `test-e2e` — tests end-to-end (Playwright)
 
-## PHONY
+Utilise un `compose.e2e.yml` dédié. La sortie affiche le chemin du rapport.
 
 ```makefile
-.PHONY: up down setup test test-unit test-integration test-e2e coverage db-migrate db-reset db-seed db-studio
+test-e2e: ## Tests E2E (Playwright, compose.e2e.yml)
+	$(COMPOSE) -f compose.yml -f compose.e2e.yml --profile e2e up -d --build
+	@printf "⏳ Waiting for services...\n"
+	@for i in $$(seq 1 20); do \
+		$(COMPOSE) -f compose.yml -f compose.e2e.yml exec -T backend \
+			sh -c 'wget -qO /dev/null http://localhost:$${PORT:-3000}/health 2>/dev/null' \
+			&& break; \
+		sleep 2; \
+	done
+	@e2e_exit=0; \
+	$(COMPOSE) -f compose.yml -f compose.e2e.yml --profile e2e \
+		run --rm playwright npx playwright test || e2e_exit=$$?; \
+	rm -rf playwright-report && \
+		cp -r apps/e2e/playwright-report playwright-report 2>/dev/null || true; \
+	printf "\n📊 Rapport E2E : playwright-report/index.html\n"; \
+	printf "   Ouvrir     : open playwright-report/index.html\n\n"; \
+	exit $$e2e_exit
 ```
 
-## Rules of thumb
+**Règles** :
+- Toujours copier le rapport vers un emplacement connu et l'indiquer en sortie.
+- Restaurer la stack normale après les tests si le profil E2E modifie des services.
+- Le code de sortie de Playwright doit être propagé (`exit $$e2e_exit`).
 
-- Prefer executing test and install commands **inside** containers, not on the host, when the project uses Docker for dev.
-- Keep token and secret values out of the Makefile; use environment variables from `.env`.
+### `test-api` — tests d'API (le cas échéant)
+
+```makefile
+test-api: ## Tests d'API (integration)
+	@printf "\n$(BOLD)Running API tests...$(RESET)\n"
+	$(EXEC_BACKEND) npm run test:api
+	@printf "$(GREEN)  API tests passed.$(RESET)\n\n"
+```
+
+---
+
+## Bonnes pratiques
+
+### Variables `.env` avec fallback
+
+```makefile
+-include .env
+export
+
+BACKEND_PORT ?= 3000
+FRONTEND_PORT ?= 3001
+DB_PORT ?= 5432
+```
+
+- Utiliser `-include` (silencieux si absent).
+- Toujours définir un fallback `?=` cohérent avec `.env.example`.
+- Exposer via `export` pour que les subshells héritent.
+
+### Sortie des ressources créées
+
+Quand un target produit un artefact (rapport de test, fichier généré), **toujours** afficher le chemin :
+
+```makefile
+	@printf "\n📊 Report: ./coverage/lcov-report/index.html\n"
+	@printf "   Open: open ./coverage/lcov-report/index.html\n"
+```
+
+### Affichage des URLs dans `up`
+
+Utiliser la macro `print_resource` pour un alignement propre et des URLs cliquables :
+
+```makefile
+define print_resource
+	@printf "  $(CYAN)%-18s$(RESET) %s\n" "$(1)" "$(2)"
+endef
+
+# Usage :
+$(call print_resource,App,http://localhost:$(APP_PORT))
+$(call print_resource,API Docs,http://localhost:$(API_PORT)/api)
+$(call print_resource,DB Studio,http://localhost:$(DB_STUDIO_PORT))
+```
+
+### Healthcheck avant action
+
+Quand un target dépend d'un service prêt (E2E, seed), boucler sur un healthcheck :
+
+```makefile
+@for i in $$(seq 1 20); do \
+    $(COMPOSE) exec -T backend \
+        sh -c 'wget -qO /dev/null http://localhost:$${PORT}/health 2>/dev/null' \
+        && break; \
+    sleep 2; \
+done
+```
+
+### Monorepo : adapter les commandes par service
+
+```makefile
+EXEC_BACKEND  = $(COMPOSE) exec -T backend
+EXEC_FRONTEND = $(COMPOSE) exec -T frontend
+EXEC_WORKER   = $(COMPOSE) exec -T worker
+
+test:
+	$(EXEC_BACKEND) npm run test
+	$(EXEC_FRONTEND) npm run test
+	$(EXEC_WORKER) npm run test
+```
+
+---
+
+## Anti-patterns
+
+| Anti-pattern | Correction |
+|---|---|
+| Port hardcodé (`localhost:3000`) | `http://localhost:$(APP_PORT)` |
+| Commande directe sur l'hôte (`npm test`) | `$(EXEC_BACKEND) npm test` |
+| Pas de `.PHONY` | Déclarer tous les targets |
+| `include .env` sans `-` | `-include .env` (silencieux si absent) |
+| Test E2E sans rapport de sortie | Toujours afficher le chemin du rapport |
+| `make up` muet | Toujours lister les ressources exposées |
+
+---
+
+## Ressources complémentaires
+
+- Pour des exemples complets de Makefiles réels, voir [examples.md](examples.md)

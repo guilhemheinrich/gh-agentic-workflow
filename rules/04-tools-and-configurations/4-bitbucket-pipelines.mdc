@@ -1,0 +1,46 @@
+---
+description: Bitbucket Pipelines CI/CD conventions for Septeo projects. Load when editing bitbucket-pipelines.yml, CI/CD configuration, or Docker build steps.
+globs:
+  - bitbucket-pipelines.yml
+alwaysApply: false
+---
+
+# Bitbucket Pipelines Conventions
+
+## Deployment Variables — FORBIDDEN
+
+**NEVER use Bitbucket deployment variables** (`deployment: staging`, `deployment: production` on steps).
+
+Reasons:
+- Deployment variables create implicit, invisible configuration that is not tracked in Git
+- They break the GitOps principle: all configuration must be auditable in the repository
+- They cause step duplication when the only difference is an environment variable value
+- They make pipeline debugging harder (variable values are hidden in Bitbucket UI)
+
+Instead:
+- Use **repository variables** for shared secrets (`NPM_TOKEN`, `REGISTRY_USER`, etc.)
+- Pass environment-specific values as **Docker build-args** with sensible defaults
+- Keep pipeline steps DRY — one reusable step definition per service, never duplicated per environment
+
+## Pipeline Structure
+
+- Use YAML anchors (`&name` / `*name`) for reusable step definitions
+- Use YAML fragments for shared script blocks (`_enable-docker-buildkit`, `_check-vars`, etc.)
+- One step per service (backend, frontend) — not per environment
+- GitOps step updates Helm values with image tags
+
+## Docker Build Args
+
+- Pass `VITE_*` variables as `--build-arg` from repository variables with defaults:
+  ```yaml
+  --build-arg VITE_HUB_URL="${VITE_HUB_URL:-https://hub.modelo.dev}"
+  ```
+- Secrets use `--secret` (never `--build-arg`): `--secret id=npm_token,env=NPM_TOKEN`
+- Defaults in Dockerfile `ARG` lines are the development fallback
+
+## Anti-Patterns
+
+- Duplicating steps per environment (staging vs production) for a single variable difference
+- Using `deployment:` keyword on build steps (reserved for actual deployment steps if ever needed)
+- Hardcoding environment-specific values in pipeline YAML — use repository variables
+- Committing secrets or tokens in pipeline files

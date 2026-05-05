@@ -37,6 +37,7 @@
         "cursor",
         "ddd",
         "debugging",
+        "devops",
         "docker",
         "docker-compose",
         "documentation",
@@ -49,6 +50,7 @@
         "hexagonal",
         "hub",
         "indexing",
+        "infrastructure",
         "kubernetes",
         "lit",
         "make",
@@ -57,6 +59,7 @@
         "nestjs",
         "npm",
         "nuxt",
+        "playwright",
         "prisma",
         "purity",
         "python",
@@ -64,6 +67,7 @@
         "react",
         "refactoring",
         "rules",
+        "scraping",
         "security",
         "sentry",
         "shell",
@@ -297,6 +301,22 @@
         "hexagonal": {
           "type": "string",
           "const": "[NEW] hexagonal"
+        },
+        "devops": {
+          "type": "string",
+          "const": "[NEW] devops"
+        },
+        "infrastructure": {
+          "type": "string",
+          "const": "[NEW] infrastructure"
+        },
+        "playwright": {
+          "type": "string",
+          "const": "[NEW] playwright"
+        },
+        "scraping": {
+          "type": "string",
+          "const": "[NEW] scraping"
         }
       }
     }
@@ -316,6 +336,7 @@
         "cursor",
         "ddd",
         "debugging",
+        "devops",
         "docker",
         "docker-compose",
         "documentation",
@@ -328,6 +349,7 @@
         "hexagonal",
         "hub",
         "indexing",
+        "infrastructure",
         "kubernetes",
         "lit",
         "make",
@@ -336,6 +358,7 @@
         "nestjs",
         "npm",
         "nuxt",
+        "playwright",
         "prisma",
         "purity",
         "python",
@@ -343,6 +366,7 @@
         "react",
         "refactoring",
         "rules",
+        "scraping",
         "security",
         "sentry",
         "shell",

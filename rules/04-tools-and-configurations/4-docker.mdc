@@ -1,0 +1,47 @@
+---
+description: Apply Docker and Docker Compose conventions for development. Use when modifying Docker-related files.
+globs: compose.yml,.docker/**/*,Makefile,Dockerfile*
+alwaysApply: false
+---
+
+Docker Compose v2:
+
+- File: `compose.yml` (not `docker-compose.yml`)
+- No `version:` field (deprecated)
+- Use `depends_on` with `condition: service_healthy` when available
+- Use named networks (`modelo-network`)
+
+Dockerfile Patterns:
+
+- Multi-stage builds: `deps` → `runtime`
+- `oven/bun:1.3-alpine` for dependency installation stage
+- `node:24-alpine` for runtime stage (Hono via @hono/node-server)
+- `dos2unix` for Windows/WSL2 compatibility on entrypoints
+- Mount `node_modules` as anonymous volume to avoid host conflicts
+- `bun install --linker hoisted` inside Docker for reliable module resolution
+
+Services:
+
+- Traefik 3.6: reverse proxy, Docker + HTTP + File providers
+- Keycloak 26.5: identity provider, realm import from .docker/keycloak/
+- PostgreSQL 18 (pgvector/pgvector:pg18): primary database + vector extension
+- Redis 8: sessions, cache, pub/sub (event bus streams)
+- auth-api (3000), hub-shell (3001), app-registry (3002), entitlements (3003), feature-flags (3004)
+- All Hub services route through Traefik on `*.modelo.dev`
+
+Makefile Targets:
+
+- `make up` / `make down` for compose lifecycle
+- `make up-build` to rebuild and start
+- `make logs` / `make logs-{service}` for logging
+- `make shell-{service}` for shell access (auth, registry, entitlements, flags, ai, docs, hub, postgres, redis)
+- `make certs` for mkcert TLS certificates (`*.modelo.dev`)
+- `make setup` for full local setup (DNS check, certs, port check)
+- `make check-dns` / `make check-ports` for diagnostics
+- `make sync-keycloak-client` for Keycloak client alignment
+
+Anti-Patterns:
+
+- NEVER run node/bun/npm/pip directly on host — use containers
+- Avoid exposing service ports directly — route through Traefik
+- Avoid hardcoded container names in code — use Docker DNS

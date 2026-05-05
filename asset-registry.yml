@@ -12,6 +12,7 @@ x-tag-descriptions:
   cursor: Cursor IDE skills, hooks, rules
   ddd: "[NEW] ddd"
   debugging: Debugging, investigation
+  devops: "[NEW] devops"
   docker: Docker, Dockerfile, images
   docker-compose: Docker Compose orchestration
   documentation: Documentation, Diátaxis, JSDoc
@@ -24,6 +25,7 @@ x-tag-descriptions:
   hexagonal: "[NEW] hexagonal"
   hub: Modelo Hub, app registry, SSO ecosystem
   indexing: "[NEW] indexing"
+  infrastructure: "[NEW] infrastructure"
   kubernetes: Kubernetes, Helm
   lit: "[NEW] lit"
   make: Makefile patterns
@@ -32,6 +34,7 @@ x-tag-descriptions:
   nestjs: NestJS framework
   npm: npm, registre privé, packages
   nuxt: Nuxt framework
+  playwright: "[NEW] playwright"
   prisma: Prisma ORM
   purity: "[NEW] purity"
   python: Python
@@ -39,6 +42,7 @@ x-tag-descriptions:
   react: React ecosystem
   refactoring: Refactoring, amélioration de code
   rules: "[NEW] rules"
+  scraping: "[NEW] scraping"
   security: Sécurité, hardening
   sentry: Sentry observability
   shell: Shell scripts, CLI tools
@@ -71,6 +75,20 @@ assets:
     description: >-
       GitHub CLI (gh) comprehensive reference for repositories, issues, pull requests, Actions, projects, releases,
       gists, codespaces, organizations, extensions, and all GitHub operations from the command line.
+  - path: .agents/skills/git-commit/
+    type: skill
+    tags:
+      - git
+  - path: .agents/skills/k8s-troubleshoot/
+    type: skill
+    tags:
+      - devops
+      - docker
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues using kubectl via Docker. Covers pod diagnostics, ConfigMap
+      modifications, rollout management, and DevOps report generation for out-of-scope actions.
   - path: .agents/skills/speckit-git-commit/
     type: skill
     tags:
@@ -101,6 +119,15 @@ assets:
       - git
       - spec-kit
     description: Validate current branch follows feature branch naming conventions
+  - path: .cursor/commands/k8s-troubleshoot.md
+    type: command
+    tags:
+      - devops
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues. Identifies pod errors, applies in-scope fixes (ConfigMap,
+      rollout), and generates DevOps reports for out-of-scope problems. All kubectl commands run inside Docker.
   - path: .cursor/commands/speckit.analyze.md
     type: command
     tags:
@@ -198,6 +225,24 @@ assets:
       - cursor
       - spec-kit
     description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step requires user input.
+  - path: .cursor/rules/0-rules-structure.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - rules
+    description: >-
+      Conventions for the rules/ tree: category folders, .mdc naming, required frontmatter, and how globs scope each
+      rule. Apply when creating or moving rules.
+  - path: .cursor/rules/4-specify-rules.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - spec-kit
+    description: >-
+      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
+      entries for this repo.
   - path: .cursor/rules/specify-rules.mdc
     type: rule
     tags:
@@ -343,6 +388,15 @@ assets:
     description: >-
       Final quality audit on phase branch after parallel spec merges: logical conflicts, Sonar. ALWAYS uses
       /speckit.analyze command. Authorizes merge to main only after quality gate passes.
+  - path: agents/scraper.md
+    type: agent
+    tags:
+      - playwright
+      - scraping
+    description: >-
+      Web scraper agent powered by Playwright MCP. Crawls a website (same-domain BFS), extracts structure, CTAs, user
+      journeys, and assets. Produces a reusable markdown report in SCRAP/{domain}/ with sitemap, overview, journeys,
+      screenshots, and downloaded images.
   - path: agents/specifier.md
     type: agent
     tags:
@@ -381,6 +435,15 @@ assets:
     description: >-
       Continuous code improvement agent. Iterates on project quality by leveraging SonarQube (MCP + CLI scanner) and
       dedicated Git branches. Loop: Scan → Analyze → Plan → Fix → Review → Re-scan until Quality Gate is green.
+  - path: commands/k8s-troubleshoot.md
+    type: command
+    tags:
+      - devops
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues. Identifies pod errors, applies in-scope fixes (ConfigMap,
+      rollout), and generates DevOps reports for out-of-scope problems. All kubectl commands run inside Docker.
   - path: commands/merge.md
     type: command
     tags:
@@ -388,6 +451,16 @@ assets:
     description: >-
       Merge current branch into the target using the gitter agent. Cautious about regressions. If the merge strategy is
       ambiguous or not specified, asks the user for clarification before proceeding.
+  - path: commands/pre-kubify.md
+    type: command
+    tags:
+      - devops
+      - infrastructure
+      - kubernetes
+    description: >-
+      Scans a project to produce a concise infrastructure readiness report for the DevOps team before running /kubify.
+      Detects env vars, secrets, build-time vs runtime config, services topology, and generates ASCII architecture
+      diagrams for pprod and prod environments.
   - path: commands/push.md
     type: command
     tags:
@@ -405,6 +478,14 @@ assets:
       E2E specification command driven by project analysis. Scans all existing specs to learn conventions, identifies
       E2E gaps, and directly produces complete specs (spec.md, plan.md, tasks.md) aligned with project quality and
       patterns. Unlike qa-tester (analysis only), this command produces deliverables.
+  - path: commands/scrape-site.md
+    type: command
+    tags:
+      - playwright
+      - scraping
+    description: >-
+      Delegates to the scraper agent to crawl a website and produce a structured report in SCRAP/{domain}/. Verifies
+      that all expected deliverables exist after the agent completes.
   - path: commands/spec-release-and-versioning.md
     type: command
     tags:
@@ -414,6 +495,12 @@ assets:
       Transform a versioning or release-related need into a full Speckit specification. Covers application version
       metadata contracts, UI display rules, semantic-release CI/CD governance, and migration planning. References the
       app-version-surface and semantic-release-js-ts-pipeline skills.
+  - path: commands/spt.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step requires user input.
   - path: rules/00-architecture/0-hexagonal-ddd.mdc
     type: rule
     tags:
@@ -652,6 +739,12 @@ assets:
       Write Dockerfiles with multi-stage builds for development and production. Use when creating a Dockerfile,
       configuring dev vs production builds, handling lockfile generation via make lock, or debugging dependency install
       issues in Docker.
+  - path: skills/dockerfile-multi-stage/
+    type: skill
+    tags:
+      - common
+      - docker
+    description: Create optimized multi-stage Dockerfiles for any language or framework
   - path: skills/documentation-writer/
     type: skill
     tags:
@@ -788,6 +881,16 @@ assets:
     description: >-
       Documents TypeScript code with JSDoc comments, generates API documentation, and creates type-safe documentation.
       Use when users request "JSDoc", "code documentation", "API docs", "TypeDoc", or "inline documentation".
+  - path: skills/k8s-troubleshoot/
+    type: skill
+    tags:
+      - devops
+      - docker
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues using kubectl via Docker. Covers pod diagnostics, ConfigMap
+      modifications, rollout management, and DevOps report generation for out-of-scope actions.
   - path: skills/lit-web-components/
     type: skill
     tags:

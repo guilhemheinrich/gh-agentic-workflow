@@ -1,0 +1,40 @@
+---
+description: Apply TypeScript 5.9 patterns and strict type safety. Use for all TypeScript files.
+globs: **/*.ts,**/*.tsx
+alwaysApply: false
+---
+
+TypeScript 5.9 Config:
+
+- `"strict": true` always enabled
+- `"module": "nodenext"` for Prisma 7 ESM compatibility
+- `"moduleResolution": "nodenext"`
+- `"target": "ES2022"`
+- `"esModuleInterop": true`
+
+Type Safety:
+
+- No `any` — use `unknown` if type is uncertain, then narrow
+- Prefer `interface` over `type` for object shapes (extendable)
+- Use `readonly` for immutable properties
+- Use branded types for domain identifiers (e.g., `SessionId`, `AppSlug`)
+- Use discriminated unions for state machines
+
+Error Handling:
+
+- Use custom error classes extending `Error`
+- Domain errors in `domain/` (e.g., `SessionExpiredError`)
+- Never throw generic `Error` — always domain-specific
+- Use `Result<T, E>` pattern for use case return types when appropriate
+
+Imports:
+
+- Use explicit file extensions for ESM (`.js` in imports for compiled output)
+- Group imports: external → internal packages → relative
+
+Anti-Patterns:
+
+- Avoid `as` type assertions — use type guards instead
+- Avoid `enum` for simple string unions — use `const` objects or literal unions
+- Avoid `namespace` — use ES modules
+- Avoid non-null assertion `!` — handle null explicitly
