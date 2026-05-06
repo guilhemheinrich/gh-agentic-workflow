@@ -6,7 +6,7 @@ $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 
 # Original targets
 $CursorTarget = Join-Path $env:USERPROFILE '.cursor'
-$PiTarget = Join-Path $env:USERPROFILE '.pi'
+$PiTarget = Join-Path $env:USERPROFILE '.pi' 'agent'
 $Targets = @($CursorTarget, $PiTarget)
 
 # New targets

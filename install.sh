@@ -5,7 +5,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Original targets
 CURSOR_TARGET="$HOME/.cursor"
-PI_TARGET="$HOME/.pi"
+PI_TARGET="$HOME/.pi/agent"
 TARGETS=("$CURSOR_TARGET" "$PI_TARGET")
 
 # New targets
