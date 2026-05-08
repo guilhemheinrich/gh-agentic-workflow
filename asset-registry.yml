@@ -394,9 +394,9 @@ assets:
       - playwright
       - scraping
     description: >-
-      Web scraper agent powered by Playwright MCP. Crawls a website (same-domain BFS), extracts structure, CTAs, user
-      journeys, and assets. Produces a reusable markdown report in SCRAP/{domain}/ with sitemap, overview, journeys,
-      screenshots, and downloaded images.
+      Pure web navigator powered by Playwright MCP. Crawls pages (same-domain BFS), extracts raw DOM data (tables,
+      structured data, metadata), captures screenshots and accessibility snapshots. Produces artifacts in
+      SCRAP/{domain}/. Never analyzes or interprets — only navigates and reports raw observations.
   - path: agents/specifier.md
     type: agent
     tags:
@@ -484,8 +484,21 @@ assets:
       - playwright
       - scraping
     description: >-
-      Delegates to the scraper agent to crawl a website and produce a structured report in SCRAP/{domain}/. Verifies
-      that all expected deliverables exist after the agent completes.
+      Intent-driven scraping orchestrator. Detects scraping goal (data extraction, user flow, site structure), builds a
+      scoped brief, delegates to the scraper agent, and verifies deliverables. Never navigates or extracts data itself.
+  - path: .agents/skills/web-analysis/SKILL.md
+    type: skill
+    tags:
+      - web-analysis
+      - docker
+      - performance
+      - accessibility
+      - seo
+      - security
+    description: >-
+      Deterministic web analysis tools executable via Docker. Covers Lighthouse (performance), pa11y (accessibility),
+      sitespeed.io (metrics), broken-link-checker, security headers, Wappalyzer (tech detection), and html-validate.
+      All tools produce machine-readable output without host dependencies.
   - path: commands/spec-release-and-versioning.md
     type: command
     tags:
@@ -911,9 +924,13 @@ assets:
   - path: skills/multi-stage-dockerfile/
     type: skill
     tags:
+      - ci-cd
       - common
       - docker
-    description: Create optimized multi-stage Dockerfiles for any language or framework
+    description: >-
+      Create optimized multi-stage Dockerfiles for any language or framework, with dev/prod lockfile strategy. Use when
+      creating a Dockerfile, configuring dev vs production builds, handling lockfile generation via make lock, or
+      debugging dependency install issues in Docker (especially in monorepos with turbo prune).
   - path: skills/npm-private-registry/
     type: skill
     tags:
@@ -999,6 +1016,13 @@ assets:
       Verify and fix spec/fix folder indexation. Maintains two independent index sequences (specs and fixes), detects
       conflicts (duplicates, gaps) per sequence, and re-indexes each into its own continuous sequence. Use when running
       /index, reindexing specs, fixing spec numbering, or resolving index conflicts after branch merges.
+  - path: skills/systematic-debugging/
+    type: skill
+    tags:
+      - common
+    description: >-
+      Multi-layer investigation methodology: Static, Network, Code and Logs. See RESOURCES.md for complete Docker
+      command reference.
   - path: skills/wc-live-demos-starlight/
     type: skill
     tags:

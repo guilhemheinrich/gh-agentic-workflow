@@ -3,181 +3,136 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Original targets
+# ─────────────────────────────────────────────────────────────────────────────
+# IDE / Tool target directories
+# ─────────────────────────────────────────────────────────────────────────────
 CURSOR_TARGET="$HOME/.cursor"
 PI_TARGET="$HOME/.pi/agent"
-TARGETS=("$CURSOR_TARGET" "$PI_TARGET")
-
-# New targets
 OPENCODE_TARGET="$HOME/.config/opencode"
-OPENCODE_COMMANDS="$OPENCODE_TARGET/commands"
-AGENTS_SKILLS="$HOME/.agents/skills"
+AGENTS_SHARED="$HOME/.agents"
+
+# Claude configs (MCP-only, no file copy)
 CLAUDE_CODE_CONFIG="$HOME/.claude.json"
-
-# On macOS, Claude Desktop config is in ~/Library/Application Support/Claude
-# On Windows, it's in %APPDATA%\Claude
 if [[ "$OSTYPE" == "darwin"* ]]; then
-	# macOS
 	CLAUDE_DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+elif [[ -n "${APPDATA:-}" ]]; then
+	CLAUDE_DESKTOP_CONFIG="$APPDATA/Claude/claude_desktop_config.json"
 else
-	# For Windows when running under WSL, Cygwin, or similar
-	if [[ -n "${APPDATA:-}" ]]; then
-		CLAUDE_DESKTOP_CONFIG="$APPDATA/Claude/claude_desktop_config.json"
-	else
-		# Skip Claude Desktop if we can't determine the location
-		echo "Warning: Cannot determine Claude Desktop config location, skipping"
-		CLAUDE_DESKTOP_CONFIG=""
-	fi
+	echo "Warning: Cannot determine Claude Desktop config location, skipping"
+	CLAUDE_DESKTOP_CONFIG=""
 fi
 
-# Create directory for Claude Desktop config if needed
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy mapping: each entry is  "source_dir:target_dir"
+#
+#   source_dir  = folder name inside this repo (skills, commands, agents, …)
+#   target_dir  = absolute destination path
+#
+# To add a new IDE or a new resource type, just add a line here.
+# ─────────────────────────────────────────────────────────────────────────────
+COPY_MAP=(
+	# ── Cursor ──────────────────────────────────────────────────────────────
+	"skills:$CURSOR_TARGET/skills"
+	"rules:$CURSOR_TARGET/rules"
+	"hooks:$CURSOR_TARGET/hooks"
+	"agents:$CURSOR_TARGET/agents"
+	"commands:$CURSOR_TARGET/commands"
+
+	# ── PI ──────────────────────────────────────────────────────────────────
+	"skills:$PI_TARGET/skills"
+	"rules:$PI_TARGET/rules"
+	"hooks:$PI_TARGET/hooks"
+	"agents:$PI_TARGET/agents"
+	"commands:$PI_TARGET/prompts"          # PI uses "prompts" instead of "commands"
+
+	# ── OpenCode ────────────────────────────────────────────────────────────
+	"skills:$OPENCODE_TARGET/skills"
+	"commands:$OPENCODE_TARGET/commands"
+	"agents:$OPENCODE_TARGET/agents"
+
+	# ── Shared agents directory (Claude Code / generic) ─────────────────────
+	"skills:$AGENTS_SHARED/skills"
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MCP transformation mapping: each entry is  "format:config_path"
+#
+# Source MCP config is always Cursor's  ~/.cursor/mcp.json
+# The transform-mcp + merge-mcp scripts handle format conversion.
+# ─────────────────────────────────────────────────────────────────────────────
+MCP_MAP=(
+	"opencode:$OPENCODE_TARGET/opencode.jsonc"
+	"claude-code:$CLAUDE_CODE_CONFIG"
+)
 if [[ -n "$CLAUDE_DESKTOP_CONFIG" ]]; then
-	mkdir -p "$(dirname "$CLAUDE_DESKTOP_CONFIG")"
+	MCP_MAP+=("claude-desktop:$CLAUDE_DESKTOP_CONFIG")
 fi
 
-# Resources to copy for each target
-CURSOR_RESOURCES=(skills rules hooks agents commands)
-PI_RESOURCES=(skills rules hooks agents prompts)
-OPENCODE_RESOURCES=(skills commands)
-OPENCODE_COMMANDS_RESOURCES=(commands)
-AGENTS_SKILLS_RESOURCES=(skills)
-
-# Function to copy resources
-copy_resources() {
-	local target=$1
-	shift
-	local resources=("$@")
-
-	for res in "${resources[@]}"; do
-		src="$REPO_DIR/$res"
-		[ -d "$src" ] || continue
-
-		# Special case: for PI target, copy commands to prompts folder
-		if [[ "$target" == "$PI_TARGET" && "$res" == "commands" ]]; then
-			dst="$target/prompts"
-		else
-			dst="$target/$res"
-		fi
-
-		mkdir -p "$dst"
-		cp -Rf "$src"/* "$dst"/ || true
-		echo "  $res -> $dst"
-	done
+# Default config content for each MCP format (used when creating a new file)
+# Plain function instead of associative array for bash 3.2 (macOS default) compat
+mcp_default_content() {
+	case "$1" in
+		opencode)       echo '{"$schema": "https://opencode.ai/config.json", "mcp": {}}' ;;
+		claude-code)    echo '{"mcpServers": {}}' ;;
+		claude-desktop) echo '{"mcpServers": {}}' ;;
+	esac
 }
 
-# Function to ensure parent directories exist
-ensure_dir() {
-	mkdir -p "$(dirname "$1")"
-}
+# ─────────────────────────────────────────────────────────────────────────────
+# Copy resources
+# ─────────────────────────────────────────────────────────────────────────────
+echo "Copying resources…"
+echo ""
 
-# Copy resources to traditional targets (Cursor, PI)
-for target in "${TARGETS[@]}"; do
-	copy_resources "$target" "${CURSOR_RESOURCES[@]}"
-	echo ""
-done
+for entry in "${COPY_MAP[@]}"; do
+	src_name="${entry%%:*}"
+	dst="${entry#*:}"
+	src="$REPO_DIR/$src_name"
 
-# Copy resources to OpenCode
-mkdir -p "$OPENCODE_TARGET"
-for res in "${OPENCODE_RESOURCES[@]}"; do
-	src="$REPO_DIR/$res"
 	[ -d "$src" ] || continue
-	mkdir -p "$OPENCODE_TARGET/$res"
-	cp -Rf "$src"/* "$OPENCODE_TARGET/$res"/ || true
-	echo "  $res -> $OPENCODE_TARGET/$res"
+
+	mkdir -p "$dst"
+	cp -Rf "$src"/* "$dst"/ 2>/dev/null || true
+	echo "  $src_name -> $dst"
 done
-
-# Copy commands to ~/.config/opencode/commands
-mkdir -p "$OPENCODE_COMMANDS"
-src="$REPO_DIR/commands"
-if [ -d "$src" ]; then
-	cp -Rf "$src"/* "$OPENCODE_COMMANDS"/ || true
-	echo "  commands -> $OPENCODE_COMMANDS"
-fi
-
-# Copy skills to ~/.agents/skills
-mkdir -p "$AGENTS_SKILLS"
-src="$REPO_DIR/skills"
-if [ -d "$src" ]; then
-	cp -Rf "$src"/* "$AGENTS_SKILLS"/ || true
-	echo "  skills -> $AGENTS_SKILLS"
-fi
 
 echo ""
 
-# Check if Node.js is installed for MCP transformations
+# ─────────────────────────────────────────────────────────────────────────────
+# MCP config transformations  (requires Node.js)
+# ─────────────────────────────────────────────────────────────────────────────
+CURSOR_MCP="$CURSOR_TARGET/mcp.json"
+
 if ! command -v node &>/dev/null; then
 	echo "Warning: Node.js is required for MCP config transformations but not found"
 	echo "MCP configurations will not be updated"
+elif [ ! -f "$CURSOR_MCP" ]; then
+	echo "Warning: Cursor MCP config not found at $CURSOR_MCP"
+	echo "MCP configurations will not be updated"
 else
-	# Source MCP config from Cursor
-	CURSOR_MCP="$CURSOR_TARGET/mcp.json"
+	echo "Found Cursor MCP config, transforming for other tools…"
 
-	if [ -f "$CURSOR_MCP" ]; then
-		echo "Found Cursor MCP config, transforming for other tools..."
+	for entry in "${MCP_MAP[@]}"; do
+		format="${entry%%:*}"
+		config="${entry#*:}"
+		tmp="$(mktemp)"
 
-		# Transform for OpenCode
-		OPENCODE_MCP="$OPENCODE_TARGET/opencode.jsonc"
-		TEMP_OPENCODE_MCP="$(mktemp)"
+		mkdir -p "$(dirname "$config")"
 
-		# Create OpenCode config if it doesn't exist
-		if [ ! -f "$OPENCODE_MCP" ]; then
-			echo '{"$schema": "https://opencode.ai/config.json", "mcp": {}}' >"$OPENCODE_MCP"
+		if [ ! -f "$config" ]; then
+			mcp_default_content "$format" >"$config"
 		fi
 
-		# Transform Cursor MCP to OpenCode format
-		node "$REPO_DIR/scripts/mcptools/transform-mcp.cjs" --from cursor --to opencode --input "$CURSOR_MCP" --output "$TEMP_OPENCODE_MCP"
+		node "$REPO_DIR/scripts/mcptools/transform-mcp.cjs" \
+			--from cursor --to "$format" \
+			--input "$CURSOR_MCP" --output "$tmp"
 
-		# Merge with existing OpenCode config
-		node "$REPO_DIR/scripts/mcptools/merge-mcp.cjs" --source "$TEMP_OPENCODE_MCP" --target "$OPENCODE_MCP" --format opencode
+		node "$REPO_DIR/scripts/mcptools/merge-mcp.cjs" \
+			--source "$tmp" --target "$config" --format "$format"
 
-		# Remove temporary file
-		rm "$TEMP_OPENCODE_MCP"
-
-		echo "  Updated OpenCode MCP config at $OPENCODE_MCP"
-
-		# Transform for Claude Code
-		TEMP_CLAUDE_CODE_MCP="$(mktemp)"
-
-		# Create Claude Code config if it doesn't exist
-		if [ ! -f "$CLAUDE_CODE_CONFIG" ]; then
-			echo '{"mcpServers": {}}' >"$CLAUDE_CODE_CONFIG"
-		fi
-
-		# Transform Cursor MCP to Claude Code format
-		node "$REPO_DIR/scripts/mcptools/transform-mcp.cjs" --from cursor --to claude-code --input "$CURSOR_MCP" --output "$TEMP_CLAUDE_CODE_MCP"
-
-		# Merge with existing Claude Code config
-		node "$REPO_DIR/scripts/mcptools/merge-mcp.cjs" --source "$TEMP_CLAUDE_CODE_MCP" --target "$CLAUDE_CODE_CONFIG" --format claude-code
-
-		# Remove temporary file
-		rm "$TEMP_CLAUDE_CODE_MCP"
-
-		echo "  Updated Claude Code MCP config at $CLAUDE_CODE_CONFIG"
-
-		# Transform for Claude Desktop (if available)
-		if [[ -n "$CLAUDE_DESKTOP_CONFIG" ]]; then
-			TEMP_CLAUDE_DESKTOP_MCP="$(mktemp)"
-
-			# Create Claude Desktop config if it doesn't exist
-			if [ ! -f "$CLAUDE_DESKTOP_CONFIG" ]; then
-				echo '{"mcpServers": {}}' >"$CLAUDE_DESKTOP_CONFIG"
-			fi
-
-			# Transform Cursor MCP to Claude Desktop format
-			node "$REPO_DIR/scripts/mcptools/transform-mcp.cjs" --from cursor --to claude-desktop --input "$CURSOR_MCP" --output "$TEMP_CLAUDE_DESKTOP_MCP"
-
-			# Merge with existing Claude Desktop config
-			node "$REPO_DIR/scripts/mcptools/merge-mcp.cjs" --source "$TEMP_CLAUDE_DESKTOP_MCP" --target "$CLAUDE_DESKTOP_CONFIG" --format claude-desktop
-
-			# Remove temporary file
-			rm "$TEMP_CLAUDE_DESKTOP_MCP"
-
-			echo "  Updated Claude Desktop MCP config at $CLAUDE_DESKTOP_CONFIG"
-		fi
-	else
-		echo "Warning: Cursor MCP config not found at $CURSOR_MCP"
-		echo "MCP configurations will not be updated"
-	fi
+		rm -f "$tmp"
+		echo "  MCP ($format) -> $config"
+	done
 fi
 
 echo ""
