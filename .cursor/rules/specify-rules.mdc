@@ -36,3 +36,10 @@ Rules are filed under `rules/00-…-09-…` with `{N}-{slug}.mdc` names — see 
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->
+
+## Active Technologies
+- Markdown (agent/command/skill definitions), Bash (Docker commands in skill) + Playwright MCP (`user-playwright`), Docker (deterministic tools) (010-refactor-scraper-separation)
+- Filesystem (`SCRAP/{DOMAIN}/` output directory) (010-refactor-scraper-separation)
+
+## Recent Changes
+- 010-refactor-scraper-separation: Added Markdown (agent/command/skill definitions), Bash (Docker commands in skill) + Playwright MCP (`user-playwright`), Docker (deterministic tools)
