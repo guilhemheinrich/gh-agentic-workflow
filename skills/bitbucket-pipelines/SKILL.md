@@ -3,6 +3,7 @@ name: bitbucket-pipelines
 description: BitBucket Pipelines CI/CD YAML configuration reference
 version: 1.0.0
 language: en-US
+tag: common
 ---
 
 # BitBucket Pipelines
