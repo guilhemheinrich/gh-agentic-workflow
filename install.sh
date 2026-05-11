@@ -41,7 +41,7 @@ COPY_MAP=(
 	# ── PI ──────────────────────────────────────────────────────────────────
 	"skills:$PI_TARGET/skills"
 	"rules:$PI_TARGET/rules"
-	"hooks:$PI_TARGET/hooks"
+	"hooks:$PI_TARGET/extensions"
 	"agents:$PI_TARGET/agents"
 	"commands:$PI_TARGET/prompts"          # PI uses "prompts" instead of "commands"
 

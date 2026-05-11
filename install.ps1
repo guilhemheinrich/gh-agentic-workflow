@@ -36,7 +36,7 @@ $CopyMap = @(
     # ── PI ──────────────────────────────────────────────────────────────────
     @{ Src = 'skills';   Dst = "$PiTarget\skills" }
     @{ Src = 'rules';    Dst = "$PiTarget\rules" }
-    @{ Src = 'hooks';    Dst = "$PiTarget\hooks" }
+    @{ Src = 'hooks';    Dst = "$PiTarget\extensions" }
     @{ Src = 'agents';   Dst = "$PiTarget\agents" }
     @{ Src = 'commands'; Dst = "$PiTarget\prompts" }   # PI uses "prompts" instead of "commands"
 
