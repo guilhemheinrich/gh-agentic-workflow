@@ -921,6 +921,21 @@ assets:
     description: >-
       Templates and procedures for a project-root Makefile: env vars, targets up, down, test, setup, db-*, coverage. Use
       when authoring or debugging Makefiles.
+  - path: skills/mcp-server-backend/
+    type: skill
+    tags:
+      - architecture
+      - backend
+      - documentation
+      - nestjs
+      - python
+      - spec-kit
+      - typescript
+    description: >-
+      Create technology-agnostic specifications for adding a Model Context Protocol (MCP) server to an existing backend
+      application. Use when planning backend MCP server integration, choosing stdio vs Streamable HTTP transport,
+      documenting MCP transport endpoints, JSON-RPC lifecycle, tools/resources/prompts, authorization, security,
+      observability, and MCP client/server roles.
   - path: skills/multi-stage-dockerfile/
     type: skill
     tags:

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP Server Backend"
+  short_description: "Specify backend MCP server integration"
+  default_prompt: "Use $mcp-server-backend to draft a backend MCP server specification for an existing application."
