@@ -1,7 +1,7 @@
 ---
 description: >-
   Spec and fix indexing rules. Defines the format, sequence, index conflict
-  resolution, and archive handling. Referenced by /specify, /qa-specify, and
+  resolution, and archive handling. Referenced by /specify, /specify-qa, and
   /index.
 globs: 'specs/**/*,fixes/**/*'
 alwaysApply: false
@@ -125,7 +125,7 @@ Before creating a spec folder:
 2. Verify no conflict exists (section 5.1)
 3. If conflict detected → run `/index` before continuing
 
-### `/qa-specify`
+### `/specify-qa`
 
 Same rules as `/specify`. When creating multiple specs in one session:
 - Increment sequentially from the first computed index

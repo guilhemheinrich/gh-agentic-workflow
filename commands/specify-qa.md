@@ -1,5 +1,5 @@
 ---
-name: qa-specify
+name: specify-qa
 description: >-
   E2E specification command driven by project analysis. Scans all existing specs
   to learn conventions, identifies E2E gaps, and directly produces complete
@@ -12,25 +12,25 @@ tags:
   - testing
 ---
 
-# `/qa-specify` — Analysis-Driven E2E Specification
+# `/specify-qa` — Analysis-Driven E2E Specification
 
 This command combines deep project analysis with the direct production of complete E2E specifications. It doesn't just find gaps — it fills them.
 
 ## Usage
 
 ```
-/qa-specify [optional scope description]
+/specify-qa [optional scope description]
 ```
 
 **Examples**:
 
-- `/qa-specify` — full analysis, produces specs for all E2E gaps
-- `/qa-specify auth flows` — targets authentication flows only
-- `/qa-specify specs/047-*` — targets a specific spec
+- `/specify-qa` — full analysis, produces specs for all E2E gaps
+- `/specify-qa auth flows` — targets authentication flows only
+- `/specify-qa specs/047-*` — targets a specific spec
 
 ## Difference with `/specify` and qa-tester
 
-| Aspect | `/specify` | qa-tester (agent) | `/qa-specify` |
+| Aspect | `/specify` | qa-tester (agent) | `/specify-qa` |
 |--------|-----------|-------------------|---------------|
 | Input | Feature description | None (full scan) | Optional scope |
 | Prior analysis | No | Yes (gap analysis) | Yes (deep context + gap) |
@@ -258,7 +258,7 @@ git checkout -b feature/[NNN]-e2e-[description]
 ### 3.3 Save the Prompt
 
 Create `specs/[NNN]-e2e-[description]/prompt.md` with:
-- The `/qa-specify` command invoked
+- The `/specify-qa` command invoked
 - The analysis context (summary of the identified gap)
 - The targeted user stories
 
@@ -407,7 +407,7 @@ Follow the project's `stats.md` format (observed in `$BENCHMARK_SPECS`).
 After producing all specs, present:
 
 ```markdown
-## /qa-specify Report
+## /specify-qa Report
 
 ### Project Analysis
 

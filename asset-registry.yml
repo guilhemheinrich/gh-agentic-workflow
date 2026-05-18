@@ -444,6 +444,30 @@ assets:
     description: >-
       Diagnose and resolve Kubernetes infrastructure issues. Identifies pod errors, applies in-scope fixes (ConfigMap,
       rollout), and generates DevOps reports for out-of-scope problems. All kubectl commands run inside Docker.
+  - path: commands/specify-mcp-backend.md
+    type: command
+    tags:
+      - architecture
+      - backend
+      - documentation
+      - security
+      - spec-kit
+    description: >-
+      Generic prompt for /speckit.specify to create a backend MCP server specification. Covers transport choice,
+      endpoint contract, JSON-RPC lifecycle, capability modeling, security, observability, testing, and rollout.
+  - path: commands/specify-mcp-chatbot.md
+    type: command
+    tags:
+      - architecture
+      - backend
+      - react
+      - security
+      - spec-kit
+      - typescript
+    description: >-
+      Generic prompt for /speckit.specify to create an MCP-powered chatbot or frontend client specification. Covers chat
+      UI, product chat endpoints, streaming events, MCP client lifecycle, backend orchestration boundaries, security,
+      testing, and rollout.
   - path: commands/merge.md
     type: command
     tags:
@@ -468,7 +492,7 @@ assets:
     description: >-
       Push current branch to the remote using the gitter agent. If the current branch is a feature branch, returns a
       link to create a Pull Request with a suggested description.
-  - path: commands/qa-specify.md
+  - path: commands/specify-qa.md
     type: command
     tags:
       - e2e
@@ -690,7 +714,7 @@ assets:
       - spec-kit
     description: >-
       Spec and fix indexing rules. Defines the format, sequence, index conflict resolution, and archive handling.
-      Referenced by /specify, /qa-specify, and /index.
+      Referenced by /specify, /specify-qa, and /index.
   - path: rules/07-quality-assurance/7-testing.mdc
     type: rule
     tags:
