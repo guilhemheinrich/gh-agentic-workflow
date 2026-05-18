@@ -4,7 +4,7 @@ description: >-
   Pure web navigator powered by Playwright MCP. Crawls pages, extracts raw DOM
   data (tables, structured data, metadata), captures screenshots and accessibility
   snapshots. Produces artifacts in SCRAP/{domain}/. Never analyzes or interprets.
-model: composer-2-fast
+model: claude-4.5-haiku
 tags:
   - scraping
   - playwright

@@ -4,7 +4,7 @@ description: >-
   Runs the test suite in the isolated worktree; gates merge until success. On
   failure, produces logs for the Debugger in the same worktree context. Reads
   specs from specs/ and memory from memory/ at the repo root.
-model: claude-opus-4-6-max
+model: claude-4.5-haiku
 tags:
   - spec-kit
   - testing

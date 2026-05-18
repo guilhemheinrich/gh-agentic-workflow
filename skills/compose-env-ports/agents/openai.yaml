@@ -1,0 +1,4 @@
+interface:
+  display_name: "Compose Env Ports"
+  short_description: "Resolve Docker Compose .env port collisions"
+  default_prompt: "Use $compose-env-ports to update my .env with free Docker Compose host ports."

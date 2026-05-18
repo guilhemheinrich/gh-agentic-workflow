@@ -5,7 +5,7 @@ description: >-
   cross-worktree reads; follows project standards for later Sonar/review on the
   phase branch. Reads specs from specs/ at the repo root; uses Speckit commands
   when applicable.
-model: composer-2-fast
+model: claude-4.5-haiku
 tags:
   - spec-kit
 ---

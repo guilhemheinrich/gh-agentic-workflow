@@ -718,6 +718,16 @@ assets:
     description: >-
       Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production
       deployment
+  - path: skills/compose-env-ports/
+    type: skill
+    tags:
+      - docker
+      - docker-compose
+      - shell
+    description: >-
+      Detect and resolve local Docker Compose host-port collisions by reading compose files, extracting .env-backed
+      published-port variables, checking Docker Engine and local listener ports, and generating deterministic free port
+      assignments.
   - path: skills/docker-containerization/
     type: skill
     tags:
@@ -921,6 +931,22 @@ assets:
     description: >-
       Templates and procedures for a project-root Makefile: env vars, targets up, down, test, setup, db-*, coverage. Use
       when authoring or debugging Makefiles.
+  - path: skills/mcp-chatbot-client/
+    type: skill
+    tags:
+      - architecture
+      - backend
+      - documentation
+      - nestjs
+      - python
+      - react
+      - security
+      - spec-kit
+      - typescript
+    description: >-
+      Create technology-agnostic specifications for adding an MCP-powered chatbot or MCP client to an application.
+      Covers frontend chat UI, backend orchestration, MCP client lifecycle, Streamable HTTP or stdio transport,
+      conversation/message endpoints, streaming updates, tool discovery, and chatbot/MCP participant roles.
   - path: skills/mcp-server-backend/
     type: skill
     tags:

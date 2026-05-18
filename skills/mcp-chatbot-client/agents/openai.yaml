@@ -1,0 +1,4 @@
+interface:
+  display_name: "MCP Chatbot Client"
+  short_description: "Specify MCP chatbot clients and transport"
+  default_prompt: "Use $mcp-chatbot-client to draft a specification for adding an MCP-powered chatbot to this application."
