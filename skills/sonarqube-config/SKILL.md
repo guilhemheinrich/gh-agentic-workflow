@@ -1,10 +1,11 @@
 ---
 name: sonarqube-config
 description: >-
-  Write and maintain sonar-project.properties files for local SonarScanner CLI
-  analysis. Covers analysis scope (exclusions, test detection), copy-paste
-  detection exclusions, coverage report paths, rule suppression strategies, and
-  language-specific examples. Use when creating or editing
+  Write and maintain sonar-project.properties files and Dockerized
+  SonarScanner setup for local SonarQube analysis. Covers analysis scope
+  (exclusions, test detection), copy-paste detection exclusions, coverage
+  report paths, rule suppression strategies, environment-driven scanner
+  invocation, and language-specific examples. Use when creating or editing
   sonar-project.properties, configuring SonarQube analysis scope, excluding
   files from scan, ignoring SonarQube rules, or setting up local sonar-scanner.
 tags:
@@ -13,13 +14,29 @@ tags:
   - testing
 ---
 
-# SonarQube Configuration — sonar-project.properties
+# SonarQube Configuration — Dockerized Scanner and sonar-project.properties
 
-How to write a correct, maintainable `sonar-project.properties` for **local SonarScanner CLI** analysis.
+How to write a correct, maintainable `sonar-project.properties` and run **local SonarScanner** analysis through Docker.
 
 ## File Location
 
 Place `sonar-project.properties` at the **project root** (same level as `package.json`, `pom.xml`, `build.gradle`, etc.). The scanner reads it automatically when invoked from that directory.
+
+## Default Runtime Contract
+
+By default, scanner connection and identity arguments live in `.env` only:
+
+```dotenv
+SONAR_HOST_URL=https://sonarqube.example.com
+SONAR_TOKEN=sqp_xxxx
+SONAR_PROJECT_KEY=my-project-key
+```
+
+Rules:
+- Keep `SONAR_HOST_URL`, `SONAR_TOKEN`, and `SONAR_PROJECT_KEY` in `.env`.
+- Do **not** add these variables, values, or placeholders to `.env.example`.
+- Do **not** hardcode `sonar.host.url`, `sonar.token`, or `sonar.projectKey` in `sonar-project.properties`.
+- Ensure `.env` is ignored by git before writing scanner credentials.
 
 ## Structure Template
 
@@ -27,18 +44,14 @@ Place `sonar-project.properties` at the **project root** (same level as `package
 # ──────────────────────────────────────────────
 # Project identity
 # ──────────────────────────────────────────────
-sonar.projectKey=<org>_<project-name>
+# sonar.projectKey is supplied from .env as SONAR_PROJECT_KEY.
 sonar.projectName=<Human-Readable Name>
 
 # ──────────────────────────────────────────────
-# Connection (local scanner — OK as env vars or in compose.yml)
+# Connection (local scanner)
 # ──────────────────────────────────────────────
-# sonar.host.url and sonar.token are typically passed via CLI flags
-# or environment variables. They do NOT go to production — the scanner
-# runs locally or in CI only.
-#   npx sonar-scanner \
-#     -Dsonar.host.url=$SONAR_HOST_URL \
-#     -Dsonar.token=$SONAR_TOKEN
+# sonar.host.url, sonar.token, and sonar.projectKey are passed by the
+# Dockerized scanner from .env.
 
 # ──────────────────────────────────────────────
 # Source layout
@@ -71,6 +84,7 @@ sonar.javascript.lcov.reportPaths=coverage/lcov.info
 
 | Property | Purpose |
 |---|---|
+| `sonar.projectKey` | SonarQube project identifier. Default for this skill: pass via `.env` as `SONAR_PROJECT_KEY`, not in `sonar-project.properties` |
 | `sonar.sources` | Directories containing main (non-test) source code |
 | `sonar.tests` | Directories containing test source code |
 | `sonar.test.inclusions` | Glob patterns to **identify** test files within `sonar.tests` |
@@ -207,7 +221,7 @@ sonar.issue.ignore.allfile.e1.fileRegexp=// @generated
 | Generated code (codegen, ORM, API clients) | **Yes** — exclude entirely | `sonar.exclusions` |
 | Test fixtures with fake credentials | **Yes** — not real secrets | `sonar.issue.ignore.multicriteria` |
 | Migration files with raw SQL | **Yes** — often unfixable | `sonar.cpd.exclusions` + rule ignore |
-| "Hardcoded" env vars for local scanner only | **Yes** — scanner is local, not prod | Document the rationale in comment |
+| Local scanner credentials | **Yes** — scanner is local, not prod | `.env` only; never `.env.example` or `sonar-project.properties` |
 | Complex function that genuinely needs complexity | **Maybe** — refactor first | `// NOSONAR` with justification |
 | Actual security vulnerability | **Never** | Fix it |
 
@@ -215,28 +229,67 @@ sonar.issue.ignore.allfile.e1.fileRegexp=// @generated
 
 ## Local Scanner: Environment Variables
 
-The sonar-scanner runs **locally** (dev machine or CI). Connection secrets passed via environment variables or `docker-compose.yml` are acceptable because they never reach production code.
+The sonar-scanner runs **locally** (dev machine or CI). Its invocation arguments are read from `.env` and passed as `-D` flags:
 
-```yaml
-# docker-compose.yml — sonar-scanner service
-services:
-  sonar-scanner:
-    image: sonarsource/sonar-scanner-cli:latest
-    environment:
-      SONAR_HOST_URL: http://sonarqube:9000
-      SONAR_TOKEN: ${SONAR_TOKEN}
-    volumes:
-      - .:/usr/src
-```
+| Environment variable | Scanner flag |
+|---|---|
+| `SONAR_HOST_URL` | `-Dsonar.host.url` |
+| `SONAR_TOKEN` | `-Dsonar.token` |
+| `SONAR_PROJECT_KEY` | `-Dsonar.projectKey` |
+
+Default CLI shape when running without Docker:
 
 ```bash
-# CLI invocation with env vars
-SONAR_HOST_URL=http://localhost:9000 \
-SONAR_TOKEN=sqp_xxxx \
-npx sonar-scanner
+set -a
+. ./.env
+set +a
+
+sonar-scanner \
+  -Dsonar.host.url="$SONAR_HOST_URL" \
+  -Dsonar.token="$SONAR_TOKEN" \
+  -Dsonar.projectKey="$SONAR_PROJECT_KEY"
 ```
 
-In `sonar-project.properties`, **do not hardcode** `sonar.token`. Pass it via `-D` flag or env var.
+For Docker, use the skill resource at `resources/sonar-scanner/`:
+
+```bash
+docker build -f resources/sonar-scanner/Dockerfile -t local/sonar-scanner resources/sonar-scanner
+docker run --rm --env-file .env -v "$PWD:/workspace" -w /workspace local/sonar-scanner
+```
+
+The resource entrypoint validates `SONAR_HOST_URL`, `SONAR_TOKEN`, and `SONAR_PROJECT_KEY`, then invokes `sonar-scanner` inside the container. Extra scanner flags can be appended to `docker run` after the image name.
+
+### Setup Workflow
+
+When asked to set up SonarQube on a project:
+
+1. Inspect the project root for `.env`, `.gitignore`, `.env.example`, `sonar-project.properties`, coverage outputs, and language manifests.
+2. Check `.env` for `SONAR_HOST_URL`, `SONAR_TOKEN`, and `SONAR_PROJECT_KEY`.
+3. If any required variable is missing, proactively ask the user for the missing value(s) before writing or running the scanner. Never invent a token. You may suggest a project key from the repository name, but require user confirmation.
+4. Write the variables to `.env` only. Do **not** write them to `.env.example`; do not even add placeholders there.
+5. Ensure `.env` is covered by `.gitignore` before adding scanner credentials.
+6. Create or update `sonar-project.properties` with analysis scope, exclusions, and coverage paths only. Keep connection and project key values out of the file.
+7. Copy or adapt `resources/sonar-scanner/` into the project when a Dockerized scanner runner is requested or when the project should be shareable without installing the SonarScanner CLI locally.
+
+### Example `.env` Values
+
+Examples based on existing projects, with tokens intentionally redacted:
+
+```dotenv
+# calendar
+SONAR_HOST_URL=https://sonarqube.icare.ddnsgeek.com
+SONAR_TOKEN=sqp_<calendar-token>
+SONAR_PROJECT_KEY=calendar-wc
+```
+
+```dotenv
+# calendar-webcomponent
+SONAR_HOST_URL=https://sonarqube.icare.ddnsgeek.com
+SONAR_TOKEN=sqp_<calendar-webcomponent-token>
+SONAR_PROJECT_KEY=calendar-web-component
+```
+
+In `sonar-project.properties`, **do not hardcode** `sonar.host.url`, `sonar.token`, or `sonar.projectKey`.
 
 ---
 
@@ -245,7 +298,7 @@ In `sonar-project.properties`, **do not hardcode** `sonar.token`. Pass it via `-
 ### TypeScript / NestJS (monorepo)
 
 ```properties
-sonar.projectKey=org_my-nestjs-app
+# sonar.projectKey is supplied from .env as SONAR_PROJECT_KEY.
 sonar.projectName=My NestJS App
 
 sonar.sources=src
@@ -270,7 +323,7 @@ sonar.issue.ignore.multicriteria.e1.resourceKey=**/*.spec.ts
 ### TypeScript / Nuxt (monorepo with multiple apps)
 
 ```properties
-sonar.projectKey=org_my-monorepo
+# sonar.projectKey is supplied from .env as SONAR_PROJECT_KEY.
 sonar.projectName=My Monorepo
 
 sonar.sources=apps,packages
@@ -288,7 +341,7 @@ sonar.javascript.lcov.reportPaths=apps/backend/coverage/lcov.info,apps/frontend/
 ### Java / Spring Boot (Maven)
 
 ```properties
-sonar.projectKey=org_my-spring-app
+# sonar.projectKey is supplied from .env as SONAR_PROJECT_KEY.
 sonar.projectName=My Spring App
 
 sonar.sources=src/main/java
@@ -307,7 +360,7 @@ sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
 ### Python / Django
 
 ```properties
-sonar.projectKey=org_my-django-app
+# sonar.projectKey is supplied from .env as SONAR_PROJECT_KEY.
 sonar.projectName=My Django App
 
 sonar.sources=src
@@ -324,7 +377,7 @@ sonar.python.coverage.reportPaths=coverage.xml
 ### C# / .NET
 
 ```properties
-sonar.projectKey=org_my-dotnet-app
+# sonar.projectKey is supplied from .env as SONAR_PROJECT_KEY.
 sonar.projectName=My .NET App
 
 sonar.sources=src
@@ -364,14 +417,18 @@ Key takeaways from this example:
 
 ## Checklist
 
-Before committing `sonar-project.properties`:
+Before running the scanner:
 
-- [ ] `sonar.projectKey` matches the SonarQube project (check via `search_my_sonarqube_projects` MCP)
+- [ ] `.env` contains `SONAR_HOST_URL`, `SONAR_TOKEN`, and `SONAR_PROJECT_KEY`
+- [ ] `.env` is ignored by git
+- [ ] `.env.example` does **not** contain SonarQube variables or placeholders
+- [ ] `SONAR_PROJECT_KEY` matches the SonarQube project (check via `search_my_sonarqube_projects` MCP when available)
 - [ ] `sonar.sources` and `sonar.tests` point to actual directories
 - [ ] Test files are properly identified via `sonar.test.inclusions` globs
 - [ ] Generated code is excluded via `sonar.exclusions`
 - [ ] Tests/migrations are excluded from CPD via `sonar.cpd.exclusions`
 - [ ] Coverage report paths exist (run coverage before scanning)
-- [ ] `sonar.token` is **not** hardcoded — use env var or CLI `-D` flag
+- [ ] `sonar.host.url`, `sonar.token`, and `sonar.projectKey` are **not** hardcoded in `sonar-project.properties`
+- [ ] Docker runner resources are copied or adapted when the project should avoid local CLI installation
 - [ ] Every exclusion and rule suppression has a comment explaining **why**
 - [ ] Rule suppressions use `sonar.issue.ignore.multicriteria` (not blanket `// NOSONAR`)
