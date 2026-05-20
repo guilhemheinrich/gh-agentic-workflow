@@ -22,12 +22,42 @@ Product and fix work is **documented** in versioned spec folders with **checklis
 - **P3 (traceability)**: `tasks.md` checkboxes reflect actual delivery; completed work is not left unmarked; scope changes update the spec.
 - **P4 (quality gate)**: Implementation respects tests and review steps defined in the spec or team policy; **TDD** applies where [7-testing.mdc](../07-quality-assurance/7-testing.mdc) and project rules require it.
 - **P5 (commands)**: The team uses the agreed slash-commands (for example specify, plan, index, implement) to reduce drift between docs and code.
+- **P6 (rename-audit)**: When a spec **renames** or **redefines** a concept (label, i18n key, domain term, route's purpose, model field semantic, etc.), `tasks.md` MUST include an explicit cross-codebase audit task that reconciles every reference to the **old meaning** before the spec is closed.
+
+## Concept Rename / Semantic Redefinition Audit (P6)
+
+A rename or redefinition is **never** purely declarative — the old meaning leaks across the codebase in places no single spec author thinks of. The audit task neutralises those leaks.
+
+**Trigger**: any of the following appears in `spec.md` —
+- A user-facing label changes (button copy, page title, tooltip).
+- An i18n key is renamed or its value changes meaning.
+- A route, command, or API surface keeps the same name but means something different.
+- A domain term is split (X becomes X-or-Y) or merged (X-and-Y become Z).
+- A model field's semantic shifts (nullable becomes required, or "any" becomes "one of").
+
+**Required `tasks.md` template**:
+
+```markdown
+- [ ] T0XX [rename-audit] Cross-codebase audit of every reference to the OLD meaning of `<concept>`:
+  - i18n / copy: `rg "<old-key-or-string>"` across the user-facing layer
+  - Routes / hyperlinks pointing at the renamed surface for its old purpose
+  - Tests asserting the old behaviour — REWRITE, do not delete in passing
+  - Comments and JSDoc/docstrings echoing the old meaning
+  - Backend controllers / DTO field names if a domain term is renamed
+  - Database column comments / migration descriptions if a field semantic shifts
+  Acceptance: ZERO matches outside historical specs / archived docs.
+```
+
+**Reviewer red flag**: a test that asserts the OLD behaviour is a smoking gun — when found by the audit, treat the test as the bug, not the contract. The fact that it stayed green through the rename means CI cannot catch the regression on its own.
+
+**Failure mode this prevents**: a spec renames concept X → Y. Implementation lands and CI is green because the renamed-away references (i18n, copy, leftover routes, stale tests) don't break the build. Months later a downstream feature reveals the contradiction — usually as a user-facing UX regression. The rename-audit task closes that loop before the spec ships.
 
 ## Anti-patterns
 
 - Implementing from memory without reading the current `spec.md` / `tasks.md`.
 - Creating a new folder with a **duplicate** index.
 - Dropping the spec after merge (unless archived per policy) while knowledge remains tribal.
+- Renaming or redefining a concept in spec X without a rename-audit task — see P6.
 
 ## Skill References
 
