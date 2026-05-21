@@ -23,6 +23,7 @@ Product and fix work is **documented** in versioned spec folders with **checklis
 - **P4 (quality gate)**: Implementation respects tests and review steps defined in the spec or team policy; **TDD** applies where [7-testing.mdc](../07-quality-assurance/7-testing.mdc) and project rules require it.
 - **P5 (commands)**: The team uses the agreed slash-commands (for example specify, plan, index, implement) to reduce drift between docs and code.
 - **P6 (rename-audit)**: When a spec **renames** or **redefines** a concept (label, i18n key, domain term, route's purpose, model field semantic, etc.), `tasks.md` MUST include an explicit cross-codebase audit task that reconciles every reference to the **old meaning** before the spec is closed.
+- **P7 (impact-audit)**: When a spec changes the **signature or observable behaviour** of an exported function, method, or class (parameters added/removed/reordered/retyped, return type changed, or semantics shift under previously-defined inputs), `tasks.md` MUST include an explicit cross-codebase call-site audit task before the spec is closed.
 
 ## Concept Rename / Semantic Redefinition Audit (P6)
 
@@ -52,12 +53,38 @@ A rename or redefinition is **never** purely declarative — the old meaning lea
 
 **Failure mode this prevents**: a spec renames concept X → Y. Implementation lands and CI is green because the renamed-away references (i18n, copy, leftover routes, stale tests) don't break the build. Months later a downstream feature reveals the contradiction — usually as a user-facing UX regression. The rename-audit task closes that loop before the spec ships.
 
+## Exported-symbol Signature / Behaviour Audit (P7)
+
+A signature or behaviour change to an exported symbol is **never** isolated to the definition site — every caller is implicitly affected. The audit task surfaces those callers before they silently break at runtime.
+
+**Trigger**: any of the following appears in `spec.md` —
+- A parameter is added, removed, reordered, or retyped on an exported function, method, or class constructor.
+- A return type changes (including narrowing or widening a union, adding or removing `null`/`undefined`).
+- The observable behaviour changes under previously-defined inputs (same call, different output or side-effect).
+- An overloaded or generic exported symbol loses or gains a variant that alters dispatch rules.
+
+**Required `tasks.md` template**:
+
+```markdown
+- [ ] T0XX [impact-audit] Cross-codebase impact audit of every call site of `<symbol>`:
+  - LSP "Find References" on `<symbol>` — enumerate all call sites in the workspace
+  - `rg <symbol>` fallback across the repo for call sites outside LSP reach (e.g. dynamic requires, string references)
+  - Update each call site to match the new signature / behaviour, OR document explicitly why a given call site requires no change
+  - Tests asserting the OLD signature or OLD behaviour — REWRITE to match the new contract, do not silently pass through
+  Acceptance: ZERO uncovered call sites; every call site either updated or explicitly documented as unaffected.
+```
+
+**Reviewer red flag**: a caller that compiles despite the signature shift is the smoking gun — the root cause is typically lax typing (implicit `any`, overly broad structural duck-typing, or a loose generic constraint) that allows the old call shape to satisfy the new type without an explicit update. When found, treat the absence of a type error as the bug, not as evidence that the caller is safe.
+
+**Failure mode this prevents**: a spec changes the signature or semantics of exported symbol X. Implementation lands and CI is green because TypeScript's structural type system (or `any` propagation) lets existing callers compile unchanged. Months later a downstream feature exercises a code path where the old call shape meets the new behaviour — surfacing as a runtime bug or a data-corruption event that is hard to bisect back to the signature change. The impact-audit task closes that loop before the spec ships.
+
 ## Anti-patterns
 
 - Implementing from memory without reading the current `spec.md` / `tasks.md`.
 - Creating a new folder with a **duplicate** index.
 - Dropping the spec after merge (unless archived per policy) while knowledge remains tribal.
 - Renaming or redefining a concept in spec X without a rename-audit task — see P6.
+- Modifying the signature or observable behaviour of an exported symbol in spec X without an impact-audit task — see P7.
 
 ## Skill References
 
