@@ -1073,6 +1073,17 @@ assets:
       Register users via the Septeo Keycloak Identity API (api-identite). Use when implementing user registration,
       signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint
       with PBKDF2-SHA256 password hashing.
+  - path: skills/sql-migration-guidelines/
+    type: skill
+    tags:
+      - architecture
+      - backend
+      - common
+    description: >-
+      Database-first SQL migration guidelines for relational schema changes with or without an ORM. Use when designing
+      migrations, reviewing ORM-generated SQL, modeling polymorphic relations, enforcing PostgreSQL referential
+      integrity, adding table and column descriptions, timestamps, updated_at triggers, foreign keys, constraints, and
+      indexes.
   - path: skills/sonarqube-config/
     type: skill
     tags:

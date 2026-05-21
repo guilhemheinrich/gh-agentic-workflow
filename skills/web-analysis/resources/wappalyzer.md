@@ -31,14 +31,14 @@ Common detections:
 ## Docker Image
 
 **Options**:
-1. Use `node:20-alpine` + `npm install -g wappalyzer-cli` on-the-fly.
+1. Use `node:22-alpine` + `npm install -g wappalyzer-cli` on-the-fly.
 2. Custom Docker image for repeated use.
 
 ### Quick run
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format json'
 ```
@@ -50,7 +50,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/tech-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format json > /results/tech.json'
 ```
@@ -62,7 +62,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/tech-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com \
       --format json \
@@ -73,7 +73,7 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format csv'
 ```
@@ -191,7 +191,7 @@ Wappalyzer organizes technologies into 80+ categories:
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format json'
 ```
@@ -201,7 +201,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format json > /results/tech.json'
 ```
@@ -210,7 +210,7 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format csv' > tech-stack.csv
 ```
@@ -219,7 +219,7 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://spa-app.example.com \
       --delay=2000 \
@@ -236,7 +236,7 @@ for url in "${URLS[@]}"; do
   echo "Scanning $url..."
   docker run --rm \
     -v "$(pwd)/results:/results" \
-    node:20-alpine \
+    node:22-alpine \
     sh -c "npm install -g wappalyzer-cli && \
       wappalyzer '$url' --format json > /results/$(echo $url | md5sum | cut -d' ' -f1).json"
 done
@@ -246,7 +246,7 @@ done
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://api.example.com \
       --headers="Authorization: Bearer TOKEN" \
@@ -339,7 +339,7 @@ docker run --rm alpine:latest \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com \
       --delay=2000 \
@@ -356,7 +356,7 @@ Or the site may genuinely use custom/unusual tech.
 
 ```bash
 docker run --rm -m 1g \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g wappalyzer-cli && \
     wappalyzer https://example.com --format json'
 ```
@@ -370,7 +370,7 @@ docker run --rm -m 1g \
   run: |
     docker run --rm \
       -v "${{ github.workspace }}/results:/results" \
-      node:20-alpine \
+      node:22-alpine \
       sh -c 'npm install -g wappalyzer-cli && \
         wappalyzer ${{ env.TARGET_URL }} --format json > /results/tech.json'
 

@@ -5,11 +5,10 @@
 - **pa11y Official**: https://pa11y.org/
 - **GitHub**: https://github.com/pa11y/pa11y
 - **WCAG 2.1 Reference**: https://www.w3.org/WAI/WCAG21/quickref/
-- **Section 508**: https://www.access-board.gov/ict/
 
 ## Overview
 
-pa11y is an open-source automated accessibility testing tool that validates against WCAG 2.1 AA/AAA standards and Section 508 compliance. It runs via Chromium and detects:
+pa11y is an open-source automated accessibility testing tool that validates rendered pages against WCAG 2.1 A/AA/AAA rules. It runs via Chromium and can use both the HTML_CodeSniffer runner (`htmlcs`, default) and the axe runner. It detects:
 
 - **Contrast issues** (text on background insufficient luminosity).
 - **Missing ARIA labels** (screen reader accessibility).
@@ -20,8 +19,18 @@ pa11y is an open-source automated accessibility testing tool that validates agai
 
 ## Docker Image
 
-**Official image**: `node:20-alpine` + npm `pa11y` package  
+**Official image**: `node:22-alpine` + npm `pa11y` package  
 **Alternative**: Use the bundled `web-analysis` image (includes pa11y pre-installed).
+
+The bundled image copies `pa11y.json` into `/work/pa11y.json`. This default config adds Docker-safe Chromium flags:
+
+```json
+{
+  "chromeLaunchConfig": {
+    "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+  }
+}
+```
 
 ### Using bundled web-analysis image
 
@@ -45,7 +54,7 @@ docker run --rm -v "$(pwd)/results:/results" web-analysis \
 ```bash
 docker run --rm \
   -v "$(pwd)/pa11y-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y https://example.com'
 ```
@@ -57,9 +66,9 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/pa11y-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
-    pa11y --json https://example.com > /results/report.json'
+    pa11y --reporter json https://example.com > /results/report.json'
 ```
 
 **Output**: `pa11y-results/report.json` — structured violations array.
@@ -69,12 +78,12 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/pa11y-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y \
       --standard=WCAG2AAA \
       --wait=1000 \
-      --json \
+      --reporter json \
       https://example.com > /results/report.json'
 ```
 
@@ -84,13 +93,17 @@ docker run --rm \
 
 - **`--standard=WCAG2AA`** — WCAG 2.1 Level AA (default, most common).
 - **`--standard=WCAG2AAA`** — WCAG 2.1 Level AAA (stricter).
-- **`--standard=Section508`** — US Section 508 compliance.
 
 **Difference**: AAA is more strict than AA (e.g., 7:1 contrast for AAA vs 4.5:1 for AA).
 
+### Runners
+
+- **`--runner htmlcs`** — HTML_CodeSniffer runner (default).
+- **`--runner axe`** — axe-core runner.
+- **`--runner axe --runner htmlcs`** — run both engines in one pass.
+
 ### Reporting & Output
 
-- **`--json`** — JSON output.
 - **`--reporter=json`** — explicitly set JSON reporter.
 - **`--reporter=csv`** — CSV format.
 - **`--reporter=cli`** — CLI output (default, human-readable).
@@ -99,9 +112,9 @@ docker run --rm \
 
 ### Headless Browser
 
-- **`--chromeLaunchConfig='{"headless":"new"}'`** — modern headless mode.
-- **`--chromeLaunchConfig='{"headless":"new","args":["--no-sandbox"]}'`** — headless + no sandbox (Docker-friendly).
-- **`--chromeLaunchConfig='{"headless":"new","args":["--disable-dev-shm-usage"]}'`** — disable `/dev/shm` (low-memory environments).
+- **`--config /work/pa11y.json`** — use the bundled Docker-safe Chromium config explicitly.
+- **`chromeLaunchConfig.args`** — configure Chromium flags from `pa11y.json`; use `--no-sandbox` and `--disable-dev-shm-usage` in Docker.
+- **`--screen-capture /results/page.png`** — save a screenshot for debugging rendered state.
 
 ### Ignoring Rules
 
@@ -164,7 +177,7 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && pa11y https://example.com'
 ```
 
@@ -173,13 +186,27 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y \
       --standard=WCAG2AA \
-      --json \
+      --reporter json \
       --level=error \
       https://example.com > /results/errors.json'
+```
+
+### Run both HTML_CodeSniffer and axe
+
+```bash
+docker run --rm \
+  -v "$(pwd)/results:/results" \
+  web-analysis \
+  pa11y \
+    --runner htmlcs \
+    --runner axe \
+    --standard=WCAG2AA \
+    --reporter json \
+    https://example.com > results/pa11y-both-runners.json
 ```
 
 ### Batch scan (multiple pages)
@@ -192,10 +219,10 @@ for page in "${PAGES[@]}"; do
   echo "Scanning $page..."
   docker run --rm \
     -v "$(pwd)/results:/results" \
-    node:20-alpine \
+    node:22-alpine \
     sh -c "npm install -g pa11y && \
       pa11y \
-        --json \
+        --reporter json \
         --standard=WCAG2AA \
         '$page' > /results/$(echo $page | md5sum | cut -d' ' -f1).json"
 done
@@ -206,11 +233,11 @@ done
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y \
       --standard=WCAG2AAA \
-      --json \
+      --reporter json \
       https://example.com > /results/aaa-report.json'
 ```
 
@@ -218,11 +245,11 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y \
       --headers="{\"Authorization\":\"Bearer TOKEN\"}" \
-      --json \
+      --reporter json \
       https://api.example.com/authenticated-page'
 ```
 
@@ -230,11 +257,11 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y \
       --wait=2000 \
-      --json \
+      --reporter json \
       https://spa-framework.example.com'
 ```
 
@@ -265,10 +292,6 @@ docker run --rm \
 
 **Note**: AAA is aspirational; many sites aim for AA as a practical baseline.
 
-### Section 508 (US Legal Standard)
-
-Subset of WCAG 2.0 AA, US government accessibility requirement.
-
 ## Troubleshooting
 
 ### Error: `Error: Failed to launch browser`
@@ -280,11 +303,12 @@ Subset of WCAG 2.0 AA, US government accessibility requirement.
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
+    printf "%s\n" "{\"chromeLaunchConfig\":{\"args\":[\"--no-sandbox\",\"--disable-dev-shm-usage\"]}}" > /tmp/pa11y.json && \
     pa11y \
-      --chromeLaunchConfig="{\"headless\":\"new\",\"args\":[\"--no-sandbox\",\"--disable-dev-shm-usage\"]}" \
-      --json \
+      --config /tmp/pa11y.json \
+      --reporter json \
       https://example.com > /results/report.json'
 ```
 
@@ -296,7 +320,7 @@ docker run --rm \
 
 ```bash
 docker run --rm --network host \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && pa11y http://localhost:3000'
 ```
 
@@ -317,7 +341,7 @@ docker run --rm --network host \
 **Fix**: Pin pa11y version:
 
 ```bash
-npm install -g pa11y@6.2.3
+npm install -g pa11y@<known-good-version>
 ```
 
 ## Ignoring False Positives
@@ -326,11 +350,11 @@ Some rules generate false positives. To ignore specific rules:
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g pa11y && \
     pa11y \
       --ignore=WCAG2AA.Principle1.Guideline1_1_1_Non_text_Content \
-      --json \
+      --reporter json \
       https://example.com'
 ```
 
@@ -363,9 +387,9 @@ jq '.issues[] | select(.selector == "button.submit")' report.json
   run: |
     docker run --rm \
       -v "${{ github.workspace }}/results:/results" \
-      node:20-alpine \
+      node:22-alpine \
       sh -c 'npm install -g pa11y && \
-        pa11y --json ${{ env.TARGET_URL }} > /results/report.json'
+        pa11y --reporter json ${{ env.TARGET_URL }} > /results/report.json'
 
 - name: Check for errors
   run: |
