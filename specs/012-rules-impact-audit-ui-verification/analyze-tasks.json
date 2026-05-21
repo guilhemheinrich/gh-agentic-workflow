@@ -1,0 +1,134 @@
+{
+  "spec_path": "specs/012-rules-impact-audit-ui-verification/",
+  "stage": "tasks-delta",
+  "agent": "Newton",
+  "date": "2026-05-21",
+  "verdict": "Approved",
+  "counters": {"Critical": 0, "High": 0, "Medium": 0, "Low": 0, "Info": 2},
+  "pre_stage_reference": "specs/012-rules-impact-audit-ui-verification/analyze-pre.json",
+  "pre_stage_verdict": "Approved",
+  "tdd_ordering": {
+    "applies": false,
+    "rationale": "Doc-only spec — zero runtime artifacts, no test runner, no compile step. tasks.md preamble (lines 6-13) makes the N/A explicit and substitutes a 'verifications-first-then-writes' order: T001-T003 read-only loads precede any .mdc edit, and post-edit shape checks (T007, T013, T015) follow each write."
+  },
+  "fr_to_task_coverage": {
+    "FR-001": ["T004"],
+    "FR-002": ["T005"],
+    "FR-003": ["T004", "T005"],
+    "FR-004": ["T005"],
+    "FR-005": ["T006"],
+    "FR-006": ["T008"],
+    "FR-007": ["T008", "T013"],
+    "FR-008": ["T009", "T013"],
+    "FR-009": ["T009"],
+    "FR-010": ["T009", "T010"],
+    "FR-011": ["T011", "T013", "T015"],
+    "FR-012": ["T011", "T015"],
+    "gaps": []
+  },
+  "sc_to_verification_task_coverage": {
+    "SC-001": {
+      "verified_by": ["T007"],
+      "evidence": "T007 runs four rg checks asserting exact P1..P7 continuity, P7 detail-heading presence, [impact-audit] template presence, and ≥3 total P7 occurrences — sufficient for the <60s reviewer-locate criterion. Checkpoint US1 explicitly names SC-001."
+    },
+    "SC-002": {
+      "verified_by": ["T013"],
+      "evidence": "T013 explicitly checks `rg -n '^(description|globs|alwaysApply|tags):' ... → 4 matches in the first 15 lines (SC-002)`."
+    },
+    "SC-003": {
+      "verified_by": ["T013", "T015"],
+      "evidence": "T013 includes 'Manual read for ordered 1. do X, 2. do Y recipe blocks (SC-003) → zero such blocks'; T015 re-asserts the same manual check in the final integrity sweep."
+    },
+    "SC-004": {
+      "verified_by": ["T013", "T015"],
+      "evidence": "T013 runs `test -f rules/07-quality-assurance/7-testing.mdc && test -f rules/05-workflows-and-processes/5-spec-driven-dev.mdc` (both targets exist); T015 then re-confirms both cross-refs are present inside the new file via rg."
+    },
+    "SC-005": {
+      "verified_by": [],
+      "evidence": "Out-of-band — SC-005 measures reviewer behaviour on the NEXT TWO downstream specs; cannot be verified by this tasks file by construction. Not a gap of this tasks.md."
+    }
+  },
+  "pre_stage_issue_resolution": [
+    {
+      "id": "PRE-001",
+      "severity_in_pre": "Low",
+      "status": "Resolved",
+      "resolved_by": "T014",
+      "evidence": "T014 appends the `7-ui-verification.mdc` entry to asset-registry.yml, mirrors the `7-testing.mdc` shape (path, type, tags, description), depends on T008 for file existence, and has the pass criterion `rg -n '7-ui-verification.mdc' asset-registry.yml → exactly 1 match`. T015 re-confirms the same match as part of the final integrity sweep."
+    },
+    {
+      "id": "PRE-002",
+      "severity_in_pre": "Info",
+      "status": "Acknowledged-no-action",
+      "evidence": "Pre-stage already noted 'no action for this spec'. Tasks.md correctly does not introduce Property/Trigger as independent entities."
+    }
+  ],
+  "parallel_task_audit": {
+    "marked_parallel": ["T002", "T003", "T008"],
+    "verified_disjoint": true,
+    "details": [
+      {
+        "tasks": ["T002", "T003"],
+        "files": [
+          "rules/05-workflows-and-processes/5-spec-driven-dev.mdc (read-only)",
+          "rules/07-quality-assurance/7-testing.mdc (read-only)"
+        ],
+        "verdict": "Disjoint — both read-only loads."
+      },
+      {
+        "tasks": ["T008"],
+        "vs": ["T004", "T005", "T006", "T007"],
+        "files_t008": "rules/07-quality-assurance/7-ui-verification.mdc (CREATE)",
+        "files_us1": "rules/05-workflows-and-processes/5-spec-driven-dev.mdc",
+        "verdict": "Disjoint — different category folders, different files. [P] constraint honoured."
+      }
+    ]
+  },
+  "within_story_sequencing": {
+    "US1": {
+      "chain": "T004 → T005 → T006 → T007",
+      "single_file": "rules/05-workflows-and-processes/5-spec-driven-dev.mdc",
+      "rationale": "All four tasks edit the same file; sequential by construction. No [P] markers inside the chain — correct."
+    },
+    "US2": {
+      "chain": "T008 → T009 → T010 → T011 → T012 → T013",
+      "single_file": "rules/07-quality-assurance/7-ui-verification.mdc",
+      "rationale": "All six tasks edit/read the same newly created file; sequential by construction. Only T008 carries [P] (correctly — vs the US1 chain on a different file)."
+    }
+  },
+  "cross_cutting_phase": {
+    "tasks": ["T014", "T015"],
+    "dependencies": {
+      "T014": ["T008"],
+      "T015": ["T007", "T013", "T014"]
+    },
+    "verdict": "Correct — T014 needs the new file to exist before indexing it; T015 needs both deliverables landed AND the registry entry in place before the integrity sweep."
+  },
+  "docker_rule": {
+    "applies": false,
+    "rationale": "No language toolchain is invoked by this spec — verification commands are `rg` and `test` only, which are static review aids, not part of any pipeline. tasks.md preamble explicitly documents this carve-out (lines 11-13)."
+  },
+  "checkpoints": {
+    "US1": "Present after T007 — references SC-001 and the independent-deliverable property.",
+    "US2": "Present after T013 — references frontmatter compliance, two declarative properties, zero procedural prose.",
+    "Final": "Present after T015 — names asset-registry sync, cross-ref resolution, no procedural prose leak."
+  },
+  "informational_notes": [
+    {
+      "id": "INFO-001",
+      "axis": "Tasks ↔ Open Questions",
+      "location": "tasks.md T011 + spec.md Open Questions",
+      "finding": "T011 correctly carries forward the spec's `[NEEDS CLARIFICATION: priority=P2]` for the future skill slug. Per Septeo policy this is deferred to REVIEW and is NOT a tasks-phase blocker.",
+      "action": "None — tasks.md handles it correctly."
+    },
+    {
+      "id": "INFO-002",
+      "axis": "Verification commands",
+      "location": "T007, T013, T015",
+      "finding": "Two `rg` patterns embed double-quoted single quotes inside the pattern body (e.g. `\"globs:.*\\*\\*/\\*'\"`). The intent is clear (catch `**/*` as a YAML single-quoted scalar) and the file is doc-only so this is not load-bearing; reviewer running the command may need to adjust shell quoting.",
+      "action": "Optional polish during execution — not blocking."
+    }
+  ],
+  "ready_for_implement": true,
+  "blocking": false
+}
