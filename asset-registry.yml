@@ -724,6 +724,18 @@ assets:
     description: >-
       Agnostic testing principles: TDD loop, test pyramid, naming, and AAA. No framework syntax — framework rules live
       under 03-* or project skills.
+  - path: rules/07-quality-assurance/7-ui-verification.mdc
+    type: rule
+    tags:
+      - frontend
+      - quality
+      - verification
+      - ui
+    description: >-
+      Dev-time, in-browser visual and interactive verification invariant for any frontend change. Every modified UI
+      surface MUST be observed in a real browser before implementation is complete (P1 visual diff); every newly
+      introduced interactive element MUST be exercised and its observable outcome asserted against the spec
+      (P2 interactive validation). Applies to .tsx, .jsx, .vue, .svelte, .html, .css, and .scss files.
   - path: skills/app-version-surface/
     type: skill
     tags:
