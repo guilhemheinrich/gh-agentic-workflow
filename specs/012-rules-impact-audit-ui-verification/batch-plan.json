@@ -1,0 +1,116 @@
+{
+  "$schema": "../../templates/orchestrator/batch-plan-schema.json",
+  "specPath": "specs/012-rules-impact-audit-ui-verification/",
+  "generatedBy": "Pasteur",
+  "generatedAt": "2026-05-21",
+  "fallbackToSequential": false,
+  "totalBatches": 4,
+  "sanityChecks": {
+    "allTasksCoveredExactlyOnce": true,
+    "withinBatchTouchesFilesDisjoint": true,
+    "dagAcyclic": true,
+    "maxAgentsPerBatch": 2,
+    "pathologicalFallbackTriggered": false
+  },
+  "batches": [
+    {
+      "batchId": "B1",
+      "label": "Phase 1 — Foundations (read-only pre-flight loads)",
+      "dependsOnBatches": [],
+      "agents": [
+        {
+          "agentId": "B1-impl-a",
+          "tasks": ["T001", "T002", "T003"],
+          "touchesFiles": [
+            "rules/00-architecture/0-rules-structure.mdc",
+            "rules/05-workflows-and-processes/5-spec-driven-dev.mdc",
+            "rules/07-quality-assurance/7-testing.mdc"
+          ],
+          "allReadOnly": true,
+          "rationale": "All three foundation tasks are static reads establishing the frontmatter contract and the P6 four-part template. No file writes; single agent sequentialises T001 → T002/T003 naturally. T002 and T003 are [P]-marked but folded here because they produce no side-effects and their outputs are required by both US1 and US2 chains before any write begins."
+        }
+      ]
+    },
+    {
+      "batchId": "B2",
+      "label": "Phase 2+3 — US1 and US2 chains in parallel (disjoint files)",
+      "dependsOnBatches": ["B1"],
+      "agents": [
+        {
+          "agentId": "B2-impl-a",
+          "tasks": ["T004", "T005", "T006", "T007"],
+          "touchesFiles": [
+            "rules/05-workflows-and-processes/5-spec-driven-dev.mdc"
+          ],
+          "allReadOnly": false,
+          "taskOrder": "T004 → T005 → T006 → T007",
+          "rationale": "US1 sequential chain. All four tasks touch the same file; T005 depends on T004 (P7 bullet must exist before the detail section is added), T006 depends on T005 (Anti-patterns bullet added after detail section), T007 is the read-only verification depending on T006. File is disjoint from agent B2-impl-b."
+        },
+        {
+          "agentId": "B2-impl-b",
+          "tasks": ["T008", "T009", "T010", "T011", "T012", "T013"],
+          "touchesFiles": [
+            "rules/07-quality-assurance/7-ui-verification.mdc"
+          ],
+          "allReadOnly": false,
+          "taskOrder": "T008 → T009 → T010 → T011 → T012 → T013",
+          "rationale": "US2 sequential chain. T008 creates the file; T009–T012 progressively extend it; T013 is the read-only verification. All six tasks touch the same file; chain is strictly sequential within the agent. File is disjoint from agent B2-impl-a."
+        }
+      ]
+    },
+    {
+      "batchId": "B3",
+      "label": "Phase 4a — Asset registry refresh",
+      "dependsOnBatches": ["B2"],
+      "agents": [
+        {
+          "agentId": "B3-impl-a",
+          "tasks": ["T014"],
+          "touchesFiles": [
+            "asset-registry.yml"
+          ],
+          "allReadOnly": false,
+          "rationale": "T014 appends the 7-ui-verification.mdc entry to asset-registry.yml. Depends on T008 (file must exist) which completes in B2. Isolated in its own batch to avoid asset-registry writes racing with the US2 chain and to maintain a clean dependency boundary: registry is updated only after the new rule file is fully authored and verified."
+        }
+      ]
+    },
+    {
+      "batchId": "B4",
+      "label": "Phase 4b — Final cross-deliverable integrity sweep (read-only)",
+      "dependsOnBatches": ["B3"],
+      "agents": [
+        {
+          "agentId": "B4-impl-a",
+          "tasks": ["T015"],
+          "touchesFiles": [
+            "rules/05-workflows-and-processes/5-spec-driven-dev.mdc",
+            "rules/07-quality-assurance/7-ui-verification.mdc",
+            "asset-registry.yml"
+          ],
+          "allReadOnly": true,
+          "rationale": "T015 performs a read-only rg/test sweep across all three deliverables. Depends on T007 (US1 complete), T013 (US2 complete), and T014 (registry updated) — all of which have completed by B4. Single agent because the task is a cross-file read and cannot be parallelised internally."
+        }
+      ]
+    }
+  ],
+  "taskIndex": {
+    "T001": {"batch": "B1", "agent": "B1-impl-a"},
+    "T002": {"batch": "B1", "agent": "B1-impl-a"},
+    "T003": {"batch": "B1", "agent": "B1-impl-a"},
+    "T004": {"batch": "B2", "agent": "B2-impl-a"},
+    "T005": {"batch": "B2", "agent": "B2-impl-a"},
+    "T006": {"batch": "B2", "agent": "B2-impl-a"},
+    "T007": {"batch": "B2", "agent": "B2-impl-a"},
+    "T008": {"batch": "B2", "agent": "B2-impl-b"},
+    "T009": {"batch": "B2", "agent": "B2-impl-b"},
+    "T010": {"batch": "B2", "agent": "B2-impl-b"},
+    "T011": {"batch": "B2", "agent": "B2-impl-b"},
+    "T012": {"batch": "B2", "agent": "B2-impl-b"},
+    "T013": {"batch": "B2", "agent": "B2-impl-b"},
+    "T014": {"batch": "B3", "agent": "B3-impl-a"},
+    "T015": {"batch": "B4", "agent": "B4-impl-a"}
+  },
+  "FLOW_STATUS": "SUCCESS",
+  "batchPlan": "specs/012-rules-impact-audit-ui-verification/batch-plan.json",
+  "totalTasksCovered": 15
+}

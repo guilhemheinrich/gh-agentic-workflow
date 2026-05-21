@@ -1,0 +1,39 @@
+{
+  "spec_path": "specs/012-rules-impact-audit-ui-verification/",
+  "stage": "pre-tasks",
+  "agent": "Lovelace",
+  "date": "2026-05-21",
+  "verdict": "Approved",
+  "counters": {"Critical": 0, "High": 0, "Medium": 0, "Low": 1, "Info": 1},
+  "axes": {
+    "spec_to_plan": {"fr_coverage": "12/12", "gaps": []},
+    "spec_to_data_model": {"covered": true, "notes": "Single RuleFile entity covers both deliverables; Property/Trigger folded into RuleFile."},
+    "constitution": {
+      "p1_single_category_folder": "PASS",
+      "p2_narrow_globs": "PASS",
+      "p3_examples_agnostic": "PASS",
+      "content_shape_declarative": "PASS"
+    },
+    "out_of_scope_respected": true
+  },
+  "issues": [
+    {
+      "id": "PRE-001",
+      "severity": "Low",
+      "axis": "Plan to TASKS handoff",
+      "location": "plan.md asset-registry section",
+      "finding": "Plan defers asset-registry refresh decision to TASKS without naming it as a required deliverable.",
+      "recommendation": "TASKS MUST include cross-cutting task that refreshes asset-registry.yml for both deliverables."
+    },
+    {
+      "id": "PRE-002",
+      "severity": "Info",
+      "axis": "Spec to data-model",
+      "location": "data-model.md RuleFile entity",
+      "finding": "Spec lists three entities; data-model models only RuleFile.",
+      "recommendation": "No action for this spec; promote Property/Trigger if a future spec needs independent semantics."
+    }
+  ],
+  "ready_for_tasks": true,
+  "blocking": false
+}

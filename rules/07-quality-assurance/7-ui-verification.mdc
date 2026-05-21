@@ -1,0 +1,44 @@
+---
+description: >-
+  Encodes the dev-time, in-browser visual and interactive verification invariant
+  for any frontend change: every modified UI surface MUST be observed in a real
+  browser before the implementation is considered complete, and every newly
+  introduced interactive element MUST be exercised and its observable outcome
+  asserted against the spec.
+globs: '**/*.tsx,**/*.jsx,**/*.vue,**/*.svelte,**/*.html,**/*.css,**/*.scss'
+alwaysApply: false
+tags:
+  - frontend
+  - quality
+  - verification
+  - ui
+---
+
+# UI dev-time verification
+
+## Desired state
+
+Every frontend change is visually and interactively verified in a real browser at implementation time — before the spec review checkpoint closes — so that regressions in layout, style, or interactive behaviour are caught by the author, not discovered downstream.
+
+## Properties
+
+- **P1 (visual diff)**: Any change to a frontend file MUST be accompanied by a before-state and an after-state browser snapshot of the modified UI surface, captured via Playwright MCP or an equivalent browser tool, at implementation time. This snapshot is an authoring artefact and MUST NOT be substituted by the codified E2E suite.
+- **P2 (interactive validation)**: When a spec introduces a new interactive element (button, form control, link, menu, or equivalent), that element MUST be exercised in a real browser — clicked, focused, submitted, or otherwise activated — and the observable outcome (navigation, state change, error message, etc.) MUST be asserted to match the spec. P2 fires only when a new interactive element is introduced; it is not required for purely visual or layout changes.
+
+## Triggers (when this rule's properties fire)
+
+- **P1 — always**: P1 fires for every frontend file change matched by this rule's globs, without exception. Any modification to a `.tsx`, `.jsx`, `.vue`, `.svelte`, `.html`, `.css`, or `.scss` file requires a before/after browser snapshot.
+- **P2 — conditional**: P2 fires only when the spec explicitly introduces a new interactive element. If the change is a pure visual reflow (spacing adjustment, colour token update, typography change, layout grid edit) and no new interactive element is added, then P1 applies and P2 does not.
+- **Edge case — pure visual reflow**: P1 yes, P2 no. A spec that reflows layout without adding any interactive element satisfies verification requirements with a before/after snapshot alone.
+- **Backend-only specs**: This rule does not load for specs whose changed files are outside the globs above (e.g. pure `.ts` server modules, `.go` packages, SQL migrations). Narrow globs prevent the rule from becoming visible to backend-only workflows.
+
+## Skill References
+
+- **UI-verification skill** (forward reference): A future dedicated skill will operationalise P1 and P2 — specifying which browser MCP to invoke, how to capture snapshots, and how to record interaction traces. `[NEEDS CLARIFICATION: priority=P2]` Slug TBD; candidates: `ui-verification-mcp`, `browser-visual-diff`, `playwright-mcp-verification`.
+- **Codified E2E suite** (complementary, not a substitute): [./7-testing.mdc](./7-testing.mdc) — the testing principles rule covers the codified test pyramid. P1/P2 of this rule address authoring-time in-browser checks that precede and complement, but do not replace, the automated E2E suite.
+- **Spec workflow that consumes this invariant**: [../05-workflows-and-processes/5-spec-driven-dev.mdc](../05-workflows-and-processes/5-spec-driven-dev.mdc) — the spec-driven development rule defines the review checkpoint at which P1 and P2 artefacts are expected.
+
+## Enforcement
+
+- **Detect**: A frontend spec closes its review checkpoint without a P1 visual-diff artefact (before/after browser snapshot) for the modified surface. A spec that introduces a new interactive element closes without a P2 interaction trace demonstrating the element's observable outcome.
+- **Fix**: Reopen the spec's review checkpoint; the author MUST capture the required artefact(s) by running the forthcoming UI-verification skill against the modified surface before the checkpoint is re-closed.

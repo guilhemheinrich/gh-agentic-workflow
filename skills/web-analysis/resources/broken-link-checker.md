@@ -22,7 +22,7 @@ broken-link-checker (blc) is a CLI tool that:
 
 **Options**:
 1. Use the bundled `web-analysis` image (includes blc pre-installed).
-2. Use `node:20-alpine` + `npm install -g broken-link-checker` on-the-fly.
+2. Use `node:22-alpine` + `npm install -g broken-link-checker` on-the-fly.
 
 ### Using bundled web-analysis image
 
@@ -42,7 +42,7 @@ docker run --rm web-analysis blc https://example.com --help
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc https://example.com'
 ```
@@ -54,7 +54,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/link-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://example.com --format json > /results/links.json'
 ```
@@ -66,7 +66,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/link-results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://example.com \
       --exclude=admin,logout,/internal/ \
@@ -165,7 +165,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://example.com \
       --filter-level=1 \
@@ -177,7 +177,7 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://example.com \
       --exclude=/admin,logout \
@@ -189,7 +189,7 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://api.example.com \
       --headers="Authorization: Bearer TOKEN" \
@@ -206,7 +206,7 @@ for domain in "${DOMAINS[@]}"; do
   echo "Scanning $domain..."
   docker run --rm \
     -v "$(pwd)/results:/results" \
-    node:20-alpine \
+    node:22-alpine \
     sh -c "npm install -g broken-link-checker && \
       blc -r '$domain' \
         --filter-level=2 \
@@ -222,7 +222,7 @@ For large sites, limit crawl to prevent excessive requests:
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://large-site.com \
       --max-connections=5 \
@@ -269,7 +269,7 @@ Common exclusion patterns:
 
 ```bash
 docker run --rm --network host \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r http://localhost:3000 --format json'
 ```
@@ -281,7 +281,7 @@ docker run --rm --network host \
 **Fix**: Verify domain is reachable, check DNS:
 
 ```bash
-docker run --rm node:20-alpine \
+docker run --rm node:22-alpine \
   sh -c 'apk add curl && curl -I https://example.com'
 ```
 
@@ -307,7 +307,7 @@ blc -r https://example.com \
 ```bash
 docker run --rm -m 2g \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
+  node:22-alpine \
   sh -c 'npm install -g broken-link-checker && \
     blc -r https://example.com \
       --max-connections=5 \
@@ -366,7 +366,7 @@ jq '{
   run: |
     docker run --rm \
       -v "${{ github.workspace }}/results:/results" \
-      node:20-alpine \
+      node:22-alpine \
       sh -c 'npm install -g broken-link-checker && \
         blc -r ${{ env.TARGET_URL }} \
           --filter-level=2 \

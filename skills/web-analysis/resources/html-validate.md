@@ -4,7 +4,7 @@
 
 - **Official Site**: https://html-validate.org/
 - **GitHub**: https://github.com/html-validate/html-validate
-- **npm Package**: https://www.npmjs.com/package/@html-validate/cli
+- **npm Package**: https://www.npmjs.com/package/html-validate
 - **Rules Reference**: https://html-validate.org/rules/
 
 ## Overview
@@ -32,15 +32,15 @@ Common issues detected:
 ## Docker Image
 
 **Options**:
-1. Use `node:20-alpine` + `npm install -g @html-validate/cli` on-the-fly.
+1. Use `node:22-alpine` + `npm install -g html-validate` on-the-fly.
 2. Use bundled `web-analysis` image (includes html-validate pre-installed).
 
 ### Quick run
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com'
 ```
 
@@ -50,8 +50,8 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com'
 ```
 
@@ -62,8 +62,8 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/html-results:/results" \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com --format json > /results/validation.json'
 ```
 
@@ -73,8 +73,8 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com --format codeframe'
 ```
 
@@ -187,8 +187,8 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com'
 ```
 
@@ -197,8 +197,8 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd)/results:/results" \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com --format json > /results/report.json'
 ```
 
@@ -206,8 +206,8 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com --format codeframe'
 ```
 
@@ -215,8 +215,8 @@ docker run --rm \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate --rules'
 ```
 
@@ -241,8 +241,8 @@ Then run:
 ```bash
 docker run --rm \
   -v "$(pwd):/work" \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate https://example.com \
       --config=/work/.htmlvalidate.json \
       --format json'
@@ -311,8 +311,8 @@ docker run --rm alpine:latest \
 
 ```bash
 docker run --rm \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && html-validate --rules' | grep -i "<rule_name>"
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && html-validate --rules' | grep -i "<rule_name>"
 ```
 
 ### Config file not being read
@@ -324,8 +324,8 @@ docker run --rm \
 ```bash
 docker run --rm \
   -v "$(pwd):/work" \
-  node:20-alpine \
-  sh -c 'npm install -g @html-validate/cli && \
+  node:22-alpine \
+  sh -c 'npm install -g html-validate && \
     html-validate /work/test.html \
       --config=/work/.htmlvalidate.json \
       --no-color'
@@ -372,8 +372,8 @@ jq '{
   run: |
     docker run --rm \
       -v "${{ github.workspace }}/results:/results" \
-      node:20-alpine \
-      sh -c 'npm install -g @html-validate/cli && \
+      node:22-alpine \
+      sh -c 'npm install -g html-validate && \
         html-validate ${{ env.TARGET_URL }} --format json > /results/validation.json'
 
 - name: Check for errors

@@ -724,6 +724,18 @@ assets:
     description: >-
       Agnostic testing principles: TDD loop, test pyramid, naming, and AAA. No framework syntax — framework rules live
       under 03-* or project skills.
+  - path: rules/07-quality-assurance/7-ui-verification.mdc
+    type: rule
+    tags:
+      - frontend
+      - quality
+      - verification
+      - ui
+    description: >-
+      Dev-time, in-browser visual and interactive verification invariant for any frontend change. Every modified UI
+      surface MUST be observed in a real browser before implementation is complete (P1 visual diff); every newly
+      introduced interactive element MUST be exercised and its observable outcome asserted against the spec
+      (P2 interactive validation). Applies to .tsx, .jsx, .vue, .svelte, .html, .css, and .scss files.
   - path: skills/app-version-surface/
     type: skill
     tags:
@@ -1061,6 +1073,17 @@ assets:
       Register users via the Septeo Keycloak Identity API (api-identite). Use when implementing user registration,
       signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint
       with PBKDF2-SHA256 password hashing.
+  - path: skills/sql-migration-guidelines/
+    type: skill
+    tags:
+      - architecture
+      - backend
+      - common
+    description: >-
+      Database-first SQL migration guidelines for relational schema changes with or without an ORM. Use when designing
+      migrations, reviewing ORM-generated SQL, modeling polymorphic relations, enforcing PostgreSQL referential
+      integrity, adding table and column descriptions, timestamps, updated_at triggers, foreign keys, constraints, and
+      indexes.
   - path: skills/sonarqube-config/
     type: skill
     tags:
