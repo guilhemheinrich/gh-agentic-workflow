@@ -1,0 +1,67 @@
+version: 2.0.0
+x-tag-descriptions:
+  astro: Astro framework
+  auth: Authentication
+  css: CSS styling
+  cursor: Cursor IDE
+  debugging: Debugging
+  docker: Docker
+  docker-compose: Docker Compose
+  documentation: Documentation
+  e2e: End-to-end testing
+  eslint: ESLint
+  fp-ts: fp-ts library
+  frontend: Frontend development
+  git: Git
+  github: GitHub
+  hub: Hub
+  keycloak: Keycloak
+  kubernetes: Kubernetes
+  lit: Lit
+  make: Make
+  monorepo: Monorepo
+  nestjs: NestJS
+  npm: npm
+  nuxt: Nuxt
+  playwright: Playwright
+  prisma: Prisma
+  python: Python
+  react: React
+  refactoring: Refactoring
+  security: Security
+  sentry: Sentry
+  shell: Shell
+  sonarqube: SonarQube
+  spec-kit: SpecKit
+  sql: SQL
+  starlight: Starlight
+  testing: Testing
+  tdd: TDD
+  typescript: TypeScript
+  validation: Validation
+  versioning: Versioning
+  vitest: Vitest
+  vue: Vue
+  web-components: Web Components
+  ci-cd: CI/CD
+
+x-bundle-descriptions:
+  common: Stack-agnostic minimum-viable starter set for any project
+x-category-descriptions:
+  architecture: Cross-cutting architectural invariants
+  standards: Project-wide coding/documentation standards
+  programming-languages: Language-level rules and skills
+  frameworks-and-libraries: Framework-scoped rules and skills
+  tools-and-configurations: Tooling and configuration
+  workflows-and-processes: Process and workflow rules
+  templates-and-models: Reusable templates and reference models
+  quality-assurance: Testing and verification
+  domain-specific: Business-domain-bound rules
+  other: Escape hatch
+assets:
+  - path: rules/00-architecture/0-makefile-structure.mdc
+    type: rule
+    category: architecture
+    bundles: [common]
+    tags: [docker, docker]
+    description: Duplicate tag
