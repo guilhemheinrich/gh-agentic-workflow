@@ -1,0 +1,39 @@
+# Makefile.stub — used by Bats tests for hooks/lint-on-edit.sh
+# STUB_LINT_EXIT env var controls what lint targets return (default: 0)
+# STUB_LINT_OUTPUT env var sets the message printed by lint targets
+
+STUB_LINT_EXIT  ?= 0
+STUB_LINT_OUTPUT ?= stub linter: no issues
+
+.PHONY: lint lint-ts lint-js lint-json lint-md lint-yaml lint-sh lint-broken lint-missing-wiring
+
+lint: ## Delegate to scripts/lint-route.sh
+	@./scripts/lint-route.sh "$(FILE)"
+
+lint-ts: ## Stub TypeScript linter
+	@printf '%s\n' "$(STUB_LINT_OUTPUT)"
+	@exit $(STUB_LINT_EXIT)
+
+lint-js: ## Stub JavaScript linter
+	@printf '%s\n' "$(STUB_LINT_OUTPUT)"
+	@exit $(STUB_LINT_EXIT)
+
+lint-json: ## Stub JSON linter
+	@printf '%s\n' "$(STUB_LINT_OUTPUT)"
+	@exit $(STUB_LINT_EXIT)
+
+lint-md: ## Stub Markdown linter
+	@printf '%s\n' "$(STUB_LINT_OUTPUT)"
+	@exit $(STUB_LINT_EXIT)
+
+lint-yaml: ## Stub YAML linter
+	@printf '%s\n' "$(STUB_LINT_OUTPUT)"
+	@exit $(STUB_LINT_EXIT)
+
+lint-sh: ## Stub shell linter
+	@printf '%s\n' "$(STUB_LINT_OUTPUT)"
+	@exit $(STUB_LINT_EXIT)
+
+lint-broken: ## Sub-target with missing wiring — always exits 65
+	@printf 'lint-broken: linter binary not found; wire it up before continuing.\n' >&2
+	@exit 65

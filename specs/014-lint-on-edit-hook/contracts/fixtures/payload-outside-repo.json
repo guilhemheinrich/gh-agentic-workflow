@@ -1,0 +1,9 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000004",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/Users/someone/.zshrc",
+    "old_string": "alias l='ls -la'",
+    "new_string": "alias l='ls -lah'"
+  }
+}

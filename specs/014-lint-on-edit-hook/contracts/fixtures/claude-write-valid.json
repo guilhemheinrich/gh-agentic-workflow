@@ -1,0 +1,14 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000002",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/workspace/sample-project",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/workspace/sample-project/src/bar.ts",
+    "content": "export const bar = () => 42\n"
+  },
+  "tool_response": {
+    "type": "text",
+    "text": "File created"
+  }
+}

@@ -1,0 +1,11 @@
+# Expected hook output when:
+#   - Host:    Claude (LINT_HOOK_HOST=claude)
+#   - Input:   claude-edit-valid.json
+#   - Linter:  passes (exit 0)
+#
+# Format of this fixture: header lines starting with '# ' are comments
+# (ignored by the Bats test runner). The rest is the expected output.
+#
+# ----- BEGIN EXPECTED STDOUT -----
+# ----- END EXPECTED STDOUT -----
+# Expected exit code: 0

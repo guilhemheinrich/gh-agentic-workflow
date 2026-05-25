@@ -1,0 +1,6 @@
+{
+  "event": "afterFileEdit",
+  "file_path": "/workspace/sample-project/src/foo.ts",
+  "operation": "edit",
+  "workspace_folder": "/workspace/sample-project"
+}
