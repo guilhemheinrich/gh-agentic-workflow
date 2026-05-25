@@ -1,0 +1,15 @@
+{
+  "session_id": "00000000-0000-0000-0000-000000000001",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/workspace/sample-project",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/workspace/sample-project/src/foo.ts",
+    "old_string": "const x = 1",
+    "new_string": "const x = 1 // edited"
+  },
+  "tool_response": {
+    "type": "text",
+    "text": "File updated"
+  }
+}

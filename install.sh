@@ -35,6 +35,7 @@ COPY_MAP=(
 	"skills:$CURSOR_TARGET/skills"
 	"rules:$CURSOR_TARGET/rules"
 	"hooks:$CURSOR_TARGET/hooks"
+	"scripts:$CURSOR_TARGET/scripts"
 	"agents:$CURSOR_TARGET/agents"
 	"commands:$CURSOR_TARGET/commands"
 
@@ -52,6 +53,8 @@ COPY_MAP=(
 
 	# ── Shared agents directory (Claude Code / generic) ─────────────────────
 	"skills:$AGENTS_SHARED/skills"
+	"hooks:$AGENTS_SHARED/hooks"
+	"scripts:$AGENTS_SHARED/scripts"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────

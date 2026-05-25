@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Stub make that fails because docker is missing — used by lint_on_edit.bats
+# to test graceful degradation when docker is unavailable.
+printf 'make: docker: command not found\n' >&2
+printf 'lint-sh: docker is not available on this host.\n' >&2
+exit 127

@@ -1,0 +1,5 @@
+{
+  "comment": "Expected hook output when host=cursor and linter passes: empty stdout, exit 0. JSON wrapped here for documentation only — the actual stdout MUST be empty.",
+  "expected_stdout": "",
+  "expected_exit_code": 0
+}

@@ -5,6 +5,7 @@ x-tag-descriptions:
   auth: Authentication, SSO, Keycloak
   ci-cd: CI/CD pipelines, releases
   css: CSS, Tailwind, UX layout
+  claude: Claude Code agent configuration and hooks
   cursor: Cursor IDE skills, hooks, rules
   debugging: Debugging, investigation, troubleshooting
   docker: Docker, Dockerfile, images
@@ -19,6 +20,8 @@ x-tag-descriptions:
   hub: Modelo Hub, app registry, SSO ecosystem
   keycloak: Keycloak identity and access management
   kubernetes: Kubernetes, Helm, orchestration
+  hooks: Editor-agent hooks (PostToolUse, afterFileEdit)
+  lint: Linting, static analysis, code quality
   lit: Lit web components framework
   make: Makefile patterns and conventions
   monorepo: Monorepo, Turborepo, workspaces
@@ -1199,6 +1202,62 @@ assets:
   description: 'Live playground for Web Components in Astro Starlight: iframe srcdoc,
     CodeMirror, bidirectional sync, controlled components, IIFE bundling, Docker pitfalls.'
   category: frameworks-and-libraries
+- path: hooks/lint-on-edit.sh
+  type: hook
+  category: tools-and-configurations
+  bundles:
+  - common
+  tags:
+  - claude
+  - cursor
+  - docker
+  - hooks
+  - lint
+  - make
+  - shell
+  description: Post-edit hook that routes file edits to a Dockerised linter via `make
+    lint FILE=…`. Supports Claude PostToolUse and Cursor afterFileEdit. Silent on pass;
+    surfaces linter diagnostics and policy gaps back to the agent on failure.
+- path: scripts/lint-route.sh
+  type: hook
+  category: tools-and-configurations
+  bundles:
+  - common
+  tags:
+  - docker
+  - hooks
+  - lint
+  - make
+  - shell
+  description: Bash 3.2-compatible lint dispatcher. Routes `make lint FILE=…` to the
+    correct `make lint-<ext>` sub-target by file extension. Exits 64 on policy gap,
+    65 on wiring missing, 0 on silently-ignored files.
+- path: skills/makefile-lint-router/SKILL.md
+  type: skill
+  category: tools-and-configurations
+  bundles:
+  - common
+  tags:
+  - docker
+  - hooks
+  - lint
+  - make
+  description: How to write the Makefile lint-router that powers the lint-on-edit
+    hook. Documents the three-layer architecture, routing table convention, per-language
+    sub-target templates (TS, JS, MD, YAML, JSON, SH, Python, Go), wiring-missing
+    failure mode, and anti-patterns.
+- path: rules/04-tools-and-configurations/4-lint-on-edit.mdc
+  type: rule
+  category: tools-and-configurations
+  bundles:
+  - common
+  tags:
+  - docker
+  - hooks
+  - lint
+  - make
+  description: Install the lint-on-edit hook in any project with Docker and a Makefile.
+    States the three-layer contract, exit codes, env knobs, and when not to install.
 x-bundle-descriptions:
   common: Stack-agnostic minimum-viable starter set for any project
 x-category-descriptions:

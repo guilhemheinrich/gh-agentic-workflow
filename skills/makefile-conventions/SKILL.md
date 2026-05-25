@@ -261,3 +261,16 @@ test:
 ## Ressources complémentaires
 
 - Pour des exemples complets de Makefiles réels, voir [examples.md](examples.md)
+
+---
+
+## See also — Lint-on-Edit
+
+For per-file lint routing (`make lint FILE=…`) driven by an editor-agent hook,
+see the companion skill: [makefile-lint-router](../makefile-lint-router/SKILL.md).
+
+That skill documents:
+- The three-layer hook ↔ router ↔ sub-target architecture.
+- Per-language sub-target templates (TS/Biome, MD/markdownlint, YAML/yamllint, SH/shellcheck, Python/ruff, Go/go-vet).
+- The "wiring missing" failure mode (exit 65) and the "policy gap" exit code (64).
+- Anti-patterns to avoid.
