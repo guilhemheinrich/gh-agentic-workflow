@@ -1,0 +1,4 @@
+interface:
+  display_name: "Speckit Data MCD"
+  short_description: "Specify data changes with focused MCD diagrams"
+  default_prompt: "Use $speckit-data-mcd to turn this database change into a clean Speckit data specification with MCD before/after diagrams."
