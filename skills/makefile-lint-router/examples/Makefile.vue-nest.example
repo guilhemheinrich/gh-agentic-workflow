@@ -1,0 +1,81 @@
+# Makefile.vue-nest.example
+# Full Makefile for a Vue 3 + NestJS monorepo with workspace-aware routing.
+# `apps/frontend/*` → ESLint inside the frontend container, prefix stripped.
+# `apps/backend/*`  → ESLint inside the backend  container, prefix stripped.
+# Other files use standalone Dockerised linters.
+# Single `lint:` target — the recipe IS the routing table (spec 014 v2.0.0).
+
+-include .env
+export
+
+FRONTEND_PORT ?= 5173
+API_PORT      ?= 3000
+
+COMPOSE       = docker compose
+EXEC_FRONTEND = $(COMPOSE) exec -T frontend
+EXEC_BACKEND  = $(COMPOSE) exec -T backend
+
+.PHONY: up down test lint
+
+# ──── Dev ──────────────────────────────────────────────────────────────────────
+
+up: ## Start development environment
+	$(COMPOSE) up -d
+	@printf '  Frontend: http://localhost:$(FRONTEND_PORT)\n'
+	@printf '  API:      http://localhost:$(API_PORT)\n'
+
+down: ## Stop development environment
+	$(COMPOSE) down
+
+test: ## Run all test suites
+	$(EXEC_FRONTEND) pnpm test
+	$(EXEC_BACKEND) pnpm test
+
+# ──── Lint (spec 014 router pattern) ──────────────────────────────────────────
+# Workspace branches come BEFORE generic extension branches so a .ts file under
+# apps/frontend/ goes to the frontend container (not to a generic TS linter).
+# `$${F#apps/frontend/}` strips the workspace prefix so the in-container linter
+# sees the path relative to its own root.
+
+lint: ## Lint a single file by routing it to the right linter (FILE=path/to/file)
+	@F='$(FILE)'; \
+	case "$$F" in \
+	  '') \
+	    printf 'lint: FILE=... is required\n' >&2; \
+	    exit 64 ;; \
+	  node_modules/*|*/node_modules/*|dist/*|*/dist/*|.git/*|*/.git/*|coverage/*) \
+	    exit 0 ;; \
+	  *.png|*.jpg|*.svg|*.ico|*.woff|*.woff2|*.lock|*.lockb|*.env) \
+	    exit 0 ;; \
+	  apps/frontend/*.ts|apps/frontend/*.tsx|apps/frontend/*.js|apps/frontend/*.jsx|apps/frontend/*.vue|apps/frontend/*.json) \
+	    exec $(EXEC_FRONTEND) sh -lc \
+	      'command -v eslint >/dev/null \
+	      || { printf "lint: eslint not installed in service frontend\n" >&2; exit 65; }; \
+	      eslint "$$0"' "$${F#apps/frontend/}" ;; \
+	  apps/backend/*.ts|apps/backend/*.js|apps/backend/*.json) \
+	    exec $(EXEC_BACKEND) sh -lc \
+	      'command -v eslint >/dev/null \
+	      || { printf "lint: eslint not installed in service backend\n" >&2; exit 65; }; \
+	      eslint "$$0"' "$${F#apps/backend/}" ;; \
+	  packages/*/*.ts|packages/*/*.js|packages/*/*.json) \
+	    exec $(EXEC_BACKEND) sh -lc \
+	      'command -v eslint >/dev/null \
+	      || { printf "lint: eslint not installed\n" >&2; exit 65; }; \
+	      eslint "$$0"' "$$F" ;; \
+	  *.md|*.mdc) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      davidanson/markdownlint-cli2:latest "$$F" ;; \
+	  *.yml|*.yaml) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      cytopia/yamllint:latest -s "$$F" ;; \
+	  *.json) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      ghcr.io/jqlang/jq:latest empty "$$F" >/dev/null ;; \
+	  *.sh|*.bash) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      koalaman/shellcheck-alpine:stable shellcheck --severity=warning "$$F" ;; \
+	  *) \
+	    printf 'lint router: no case matches "%s".\n' "$$F" >&2; \
+	    printf 'Add a workspace branch, generic extension branch, or IGNORE entry.\n' >&2; \
+	    exit 64 ;; \
+	esac

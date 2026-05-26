@@ -1,0 +1,21 @@
+{
+  "_comment_template": "Template — copy to .claude/settings.json in the consumer repo. Pairs with hooks/lint-on-edit.sh and the `lint:` recipe in the Makefile (see ../SKILL.md). Adjust the command path if you store the hook elsewhere.",
+  "_comment_coverage_gap": "PostToolUse Edit|Write does NOT cover files written via the Bash tool (e.g. `echo > file.ts`). For full coverage, complement with a pre-commit git hook running `make lint` over `git diff --name-only`.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/lint-on-edit.sh",
+            "timeout": 120,
+            "env": {
+              "LINT_HOOK_HOST": "claude"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,51 @@
+# Minimal Makefile template — pairs with hooks/lint-on-edit.sh.
+#
+# The lint-on-edit hook calls `make lint FILE=<path>` after every agent edit.
+# This recipe is the routing table: each `case` branch maps a glob to the
+# Dockerised linter that should run on matching files.
+#
+# Copy this file to the project root as `Makefile`, then ADAPT:
+#   - Add/remove `case` branches for the file types your project actually has.
+#   - For monorepos, add workspace branches BEFORE generic extension branches.
+#   - Keep the empty-FILE guard and the catch-all `*)` policy gap (exit 64).
+#
+# Exit-code contract (read by hooks/lint-on-edit.sh):
+#   0    pass / silently ignored
+#   1    linter found violations
+#   64   policy gap (no branch matched, or FILE empty) — declare a branch
+#   65   wiring missing (branch matched but the tool is not installed)
+
+.PHONY: lint
+
+lint: ## Lint a single file (FILE=path/to/file). Called by the lint-on-edit hook.
+	@F='$(FILE)'; \
+	case "$$F" in \
+	  '') \
+	    printf 'lint: FILE=... is required\n' >&2; \
+	    exit 64 ;; \
+	  \
+	  node_modules/*|*/node_modules/*|.git/*|*/.git/*|dist/*|*/dist/*|build/*|*/build/*|.next/*|*/.next/*|.cache/*|*/.cache/*|coverage/*|*/coverage/*|vendor/*|*/vendor/*|.venv/*|*/.venv/*) \
+	    exit 0 ;; \
+	  \
+	  *.png|*.jpg|*.jpeg|*.gif|*.webp|*.svg|*.ico|*.woff|*.woff2|*.ttf|*.eot|*.lock|*.lockb|*.pdf|*.zip|*.tar|*.tgz|*.gz|*.env|*.envrc) \
+	    exit 0 ;; \
+	  \
+	  *.md|*.mdc) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      davidanson/markdownlint-cli2:latest "$$F" ;; \
+	  *.yml|*.yaml) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      cytopia/yamllint:latest -s "$$F" ;; \
+	  *.json) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      ghcr.io/jqlang/jq:latest empty "$$F" >/dev/null ;; \
+	  *.sh|*.bash) \
+	    exec docker run --rm -v "$$(pwd):/work" -w /work \
+	      koalaman/shellcheck-alpine:stable shellcheck --severity=warning "$$F" ;; \
+	  \
+	  *) \
+	    printf 'lint router: no case matches "%s".\n' "$$F" >&2; \
+	    printf 'Add a branch to the `lint:` recipe in this Makefile,\n' >&2; \
+	    printf 'or extend the silent-allow lists above.\n' >&2; \
+	    exit 64 ;; \
+	esac
