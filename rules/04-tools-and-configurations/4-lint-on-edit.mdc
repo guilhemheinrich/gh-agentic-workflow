@@ -1,71 +1,81 @@
 ---
 description: >-
-  Install the lint-on-edit hook in any project that has Docker and a Makefile.
-  The hook triggers `make lint FILE=…` on every agent edit and surfaces linter
-  diagnostics back to the model in the same turn.
+  Install the lint-on-edit template pair (hook + Makefile recipe) in any
+  project that has Docker and a Makefile. The hook triggers `make lint FILE=…`
+  on every agent edit and surfaces linter diagnostics back to the model in the
+  same turn.
 globs:
   - Makefile
-  - hooks/*.sh
-  - scripts/lint-route.sh
+  - hooks/lint-on-edit.sh
   - .claude/settings.json
   - .cursor/hooks.json
 alwaysApply: false
 ---
 
-# Rule: Lint-on-Edit Hook
+# Rule: Lint-on-Edit Template Pair
 
-If your project has **Docker** and a **Makefile**, install the lint-on-edit hook.
+If your project has **Docker** and a **Makefile**, install the lint-on-edit
+template pair via the `makefile-lint-router` skill.
 
 ## What it provides
 
-1. `hooks/lint-on-edit.sh` — single hook for Claude (`PostToolUse`) and Cursor (`afterFileEdit`).
-2. `scripts/lint-route.sh` — dispatches `make lint FILE=…` to `make lint-<ext>` by extension.
-3. Per-extension sub-targets (`lint-md`, `lint-ts`, `lint-sh`, …) — Dockerised linters.
+A **two-file template pair** plus editor registration:
+
+1. `hooks/lint-on-edit.sh` — generic hook for Claude (`PostToolUse`) and
+   Cursor (`afterFileEdit`). **Drop-in, no edits.**
+2. `Makefile` `lint:` recipe — inline `case` routing table mapping each glob
+   to its Dockerised linter. **Adapt to your project's file types.**
+3. `.claude/settings.json` + `.cursor/hooks.json` — register the hook with
+   each agent host. **Path adjustments only.**
 
 ## When to install
 
-- Any project on the `makefile-conventions` baseline (Docker-first, `make up`/`test`/`down`).
-- Projects where an AI agent performs repeated file edits (the feedback loop eliminates silent violations).
+- Any project with Docker and a root Makefile.
+- Projects where an AI agent performs repeated file edits (the feedback loop
+  eliminates silent violations).
 
 ## When NOT to install
 
-- Projects without Docker (the sub-targets assume container execution).
-- Ephemeral CI-only environments where linting runs as a separate job.
-- Projects where lint latency > 5 s P95 warm would break the editing loop (set `LINT_ON_EDIT=0`).
+- Projects without Docker (the recipe assumes container execution).
+- Ephemeral CI-only environments where lint runs as a separate job.
+- Projects where lint latency > 5 s P95 warm would break the editing loop
+  (set `LINT_ON_EDIT=0`).
 
-## Three layers — each independently testable
+## Two-layer separation
 
 ```
-hooks/lint-on-edit.sh          ← Layer 1: trigger (no linting logic)
+hooks/lint-on-edit.sh          ← Layer 1: trigger (host-aware, no lint logic)
         │ make lint FILE=…
         ▼
-scripts/lint-route.sh           ← Layer 2: router (extension → sub-target)
-        │ exec make lint-<ext>
-        ▼
-Makefile lint-<ext> targets     ← Layer 3: per-language Dockerised linter
+Makefile `lint:` recipe        ← Layer 2: router (inline case → docker linter)
 ```
+
+The hook stays oblivious to file types. The recipe stays oblivious to the
+agent host. Both layers are independently testable.
 
 ## Exit-code contract (Makefile → hook)
 
-| Code | Meaning |
-|------|---------|
-| `0`  | Lint passed — hook is silent |
-| `1`  | Lint violations — hook sends diagnostic to agent |
-| `64` | Policy gap — extension declared in neither LINT_ROUTES nor LINT_IGNORED |
-| `65` | Wiring missing — linter binary absent or service down |
-| `124`| Timeout — hook kills make and sends timeout message |
+| Code | Meaning                                                                    |
+|------|----------------------------------------------------------------------------|
+| `0`  | Lint passed (or path silently ignored) — hook stays silent.                |
+| `1`  | Lint violations — hook surfaces diagnostic to the agent.                   |
+| `64` | Policy gap — empty `FILE` or no `case` branch matched the path.            |
+| `65` | Wiring missing — branch matched but the linter binary/service is absent.   |
+| `124`| Timeout — hook killed `make`; reports elapsed seconds.                     |
 
 ## Key env knobs
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `LINT_ON_EDIT` | `1` | Set to `0` to disable globally |
-| `LINT_TIMEOUT` | `120` | Seconds before killing make |
-| `LINT_HOOK_HOST` | (sniffed) | `claude` or `cursor` |
-| `LINT_DEBUG` | `0` | Set to `1` for verbose logging |
+| Variable          | Default      | Purpose                                |
+|-------------------|--------------|----------------------------------------|
+| `LINT_ON_EDIT`    | `1`          | Set to `0` to disable globally.        |
+| `LINT_TIMEOUT`    | `120`        | Seconds before killing `make`.         |
+| `LINT_HOOK_HOST`  | (sniffed)    | Force `claude` or `cursor`.            |
+| `LINT_DEBUG`      | `0`          | Verbose logging to `/tmp/lint-on-edit.log`. |
 
 ## Further reading
 
-- Skill: `skills/makefile-lint-router/SKILL.md` — full templates, anti-patterns, examples.
+- Skill: `skills/makefile-lint-router/SKILL.md` — template pair, install steps, anti-patterns, examples.
+- Templates: `skills/makefile-lint-router/templates/` — copy-ready files.
+- Examples: `skills/makefile-lint-router/examples/` — full Makefiles (TS monorepo, Python/uv, Vue + Nest).
 - Spec: `specs/014-lint-on-edit-hook/` — contracts, quickstart, Bats tests.
-- Makefile conventions: `skills/makefile-conventions/SKILL.md`.
+- Baseline: `skills/makefile-conventions/SKILL.md`.

@@ -1185,6 +1185,17 @@ assets:
   category: workflows-and-processes
   bundles:
   - common
+- path: skills/speckit-data-mcd/
+  type: skill
+  tags:
+  - documentation
+  - docker
+  - spec-kit
+  - sql
+  description: Guide human/AI communication for Speckit data specifications and database
+    change reports using focused conceptual data models (MCD), with Mocodo and Mermaid
+    notation for clarification, before/after diagrams, and implementation summaries.
+  category: workflows-and-processes
 - path: skills/systematic-debugging/
   type: skill
   description: 'Multi-layer investigation methodology: Static, Network, Code and Logs.
@@ -1218,21 +1229,7 @@ assets:
   description: Post-edit hook that routes file edits to a Dockerised linter via `make
     lint FILE=…`. Supports Claude PostToolUse and Cursor afterFileEdit. Silent on pass;
     surfaces linter diagnostics and policy gaps back to the agent on failure.
-- path: scripts/lint-route.sh
-  type: hook
-  category: tools-and-configurations
-  bundles:
-  - common
-  tags:
-  - docker
-  - hooks
-  - lint
-  - make
-  - shell
-  description: Bash 3.2-compatible lint dispatcher. Routes `make lint FILE=…` to the
-    correct `make lint-<ext>` sub-target by file extension. Exits 64 on policy gap,
-    65 on wiring missing, 0 on silently-ignored files.
-- path: skills/makefile-lint-router/SKILL.md
+- path: skills/makefile-lint-router/
   type: skill
   category: tools-and-configurations
   bundles:
@@ -1242,10 +1239,12 @@ assets:
   - hooks
   - lint
   - make
-  description: How to write the Makefile lint-router that powers the lint-on-edit
-    hook. Documents the three-layer architecture, routing table convention, per-language
-    sub-target templates (TS, JS, MD, YAML, JSON, SH, Python, Go), wiring-missing
-    failure mode, and anti-patterns.
+  description: Template pair (hook + Makefile recipe) for lint-on-edit. Bundles
+    the drop-in `hooks/lint-on-edit.sh`, copy-ready `templates/` (minimal
+    Makefile, Claude/Cursor hook configs) and full `examples/` (TS monorepo,
+    Python/uv, Vue + Nest). Documents the `make lint FILE=…` contract, exit
+    codes (64 policy gap, 65 wiring missing), branch ordering rules and
+    anti-patterns.
 - path: rules/04-tools-and-configurations/4-lint-on-edit.mdc
   type: rule
   category: tools-and-configurations

@@ -1,6 +1,6 @@
 # Contract — Makefile router (`make lint`)
 
-**Owner**: root `Makefile` + `scripts/lint-route.sh`.
+**Owner**: root `Makefile` (single `lint:` target).
 **Consumer**: `hooks/lint-on-edit.sh`.
 
 ---
@@ -18,42 +18,45 @@ make -C "$PROJECT_ROOT" lint FILE="<repo-relative-path>"
 
 ## Behaviour
 
-The `lint` target MUST:
+The `lint` target is a **single recipe** whose body is the routing table. There is **no external dispatcher script** and there are **no per-extension sub-targets**. Every glob → linter mapping is declared inline as a `case` branch in the `lint:` recipe of the root `Makefile`.
 
-1. Delegate to `scripts/lint-route.sh "$(FILE)"`.
-2. NOT run any linter directly. Routing logic lives in the dispatcher; linter invocation lives in `lint-<ext>` sub-targets.
-3. Propagate the dispatcher's exit code verbatim.
-
-The dispatcher (`scripts/lint-route.sh`) MUST:
+The recipe MUST:
 
 1. Reject empty `FILE` with a usage message + exit `64`.
-2. Check the path against `LINT_EXCLUDED_PATHS`. If matched → exit `0`.
-3. Extract the file extension.
-4. Look up the extension in `LINT_IGNORED`. If matched → exit `0`.
-5. Look up the extension in `LINT_ROUTES`. If found → `exec make lint-<sub-target> FILE="$FILE"`.
-6. Otherwise → emit a policy-gap message and exit `64`.
+2. Match `FILE` against an ordered list of `case` patterns covering, in order:
+   1. **Excluded paths** (`node_modules/*`, `dist/*`, `.git/*`, `vendor/*`, …) → `exit 0` (silent).
+   2. **Ignored extensions** (`*.png`, `*.lock`, `*.env`, …) → `exit 0` (silent).
+   3. **Workspace-specific routes** (e.g. `apps/frontend/*` → `docker compose exec -T frontend …` with the `apps/frontend/` prefix stripped from the path passed to the container).
+   4. **Generic extension routes** (`*.md`, `*.yml`, `*.json`, `*.sh`, …) → `exec docker run …` against the file.
+   5. **Catch-all** → policy-gap message on stderr + exit `64`.
+3. Use `exec docker …` (not just `docker …`) so the shell process is replaced — preserves child semantics and avoids an extra wrapper PID.
+4. NEVER call host-installed linters. Every branch MUST go through Docker (per `makefile-conventions`).
+
+When the project is a monorepo, a branch matching a workspace prefix MUST strip that prefix when handing the path to the in-container linter (POSIX shell `${F#apps/frontend/}` form).
 
 ---
 
 ## Exit-code contract
 
-| Code  | Emitter           | Meaning                                                                                   |
-| ----- | ----------------- | ----------------------------------------------------------------------------------------- |
-| `0`   | Dispatcher        | Path or extension is ignored / excluded by design.                                         |
-| `0`   | Sub-target        | Lint passed.                                                                               |
-| `1`   | Sub-target        | Lint ran AND found violations.                                                             |
-| `64`  | Dispatcher        | Policy gap: extension is in neither `LINT_ROUTES` nor `LINT_IGNORED`.                      |
-| `64`  | Dispatcher        | Usage error: empty `FILE`.                                                                 |
-| `65`  | Sub-target        | Wiring missing: linter binary absent, service not running, broken `package.json` script.   |
-| `124` | Hook (not Make)   | The hook killed `make` after `LINT_TIMEOUT`.                                               |
-| other | Sub-target / Make | Unexpected error (Docker down, container crash, etc.). Hook treats as a generic failure.   |
+| Code  | Source                    | Meaning                                                                                       |
+| ----- | ------------------------- | --------------------------------------------------------------------------------------------- |
+| `0`   | Recipe (excluded/ignored) | Path matched an excluded-prefix or ignored-extension branch.                                  |
+| `0`   | Linter inside docker      | Lint passed.                                                                                  |
+| `1`   | Linter inside docker      | Lint ran AND found violations.                                                                |
+| `64`  | Recipe                    | Policy gap: no branch matched. Edit the `lint:` recipe to declare the new glob.               |
+| `64`  | Recipe                    | Usage error: empty `FILE`.                                                                    |
+| `65`  | Recipe (project-defined)  | Wiring missing: a branch needed a tool that is not installed in its container. Convention.    |
+| `124` | Hook (not Make)           | The hook killed `make` after `LINT_TIMEOUT`.                                                  |
+| other | Linter / docker           | Unexpected error (docker daemon down, image pull failure, etc.).                              |
 
-Codes `64` and `65` are this repo's **convention**, modelled on `sysexits.h`:
+Codes `64` and `65` follow `sysexits.h` convention:
 
 - `64` = `EX_USAGE` (we use it for "policy gap").
 - `65` = `EX_DATAERR` (we use it for "linter wiring is broken").
 
-The hook does NOT parse the message body to distinguish these — the exit code is the contract.
+### Make wrapping
+
+GNU make wraps any non-zero recipe exit to its own status `2` and prints `make: *** [Makefile:N: lint] Error <code>` on stderr. The hook recovers `<code>` from that line so the structured response keeps the precise signal (`64` ≠ `65` ≠ `1`). The body of the agent message contains both the recipe's own stderr AND make's wrapper line — both useful context for the agent.
 
 ---
 
@@ -62,8 +65,7 @@ The hook does NOT parse the message body to distinguish these — the exit code 
 | Variable        | Effect                                                                          |
 | --------------- | ------------------------------------------------------------------------------- |
 | `FILE`          | The repo-relative path. **Required**.                                            |
-| `LINT_VERBOSE`  | If `1`, sub-targets MAY print extra context to stdout.                          |
-| `LINT_FORMAT`   | Reserved. v1 ships `text` only. `json` is documented but not required.          |
+| `LINT_VERBOSE`  | If `1`, branches MAY print extra context to stdout (project-defined).           |
 
 Anything else passed through `$ENV` is allowed but not contractual.
 
@@ -71,69 +73,57 @@ Anything else passed through `$ENV` is allowed but not contractual.
 
 ## Routing table (single source of truth)
 
-Lives in `scripts/lint-route.sh`, as constants near the top of the file:
+The routing table lives inline in the `lint:` recipe of the root `Makefile`. There is **no** companion config file, **no** dispatcher script, **no** per-extension sub-target. Reading the recipe IS reading the policy. Example shape (extension-only project):
 
-```bash
-LINT_ROUTES=(
-  ".ts:lint-ts"  ".tsx:lint-ts"
-  ".js:lint-js"  ".jsx:lint-js"
-  ".json:lint-json"
-  ".yml:lint-yaml" ".yaml:lint-yaml"
-  ".md:lint-md"    ".mdc:lint-md"
-  ".sh:lint-sh"    ".bash:lint-sh"
-  ".py:lint-py"
-  ".go:lint-go"
-  ".rs:lint-rs"
-)
-
-LINT_IGNORED=(
-  ".png" ".jpg" ".jpeg" ".gif" ".webp" ".svg" ".ico"
-  ".woff" ".woff2" ".ttf" ".eot"
-  ".lock" ".lockb"
-  ".pdf" ".zip" ".tar" ".tgz" ".gz"
-  ".env" ".envrc"
-)
-
-LINT_EXCLUDED_PATHS=(
-  "node_modules/" "dist/" "build/" ".next/" ".nuxt/"
-  ".git/" ".cache/" "coverage/" "vendor/" ".venv/"
-)
+```make
+lint:
+	@F='$(FILE)'; \
+	case "$$F" in \
+	  '') printf 'lint: FILE=... is required\n' >&2; exit 64 ;; \
+	  node_modules/*|dist/*|.git/*|vendor/*) exit 0 ;; \
+	  *.png|*.lock|*.env) exit 0 ;; \
+	  *.md|*.mdc) exec docker run --rm -v "$$(pwd):/work" -w /work davidanson/markdownlint-cli2:latest "$$F" ;; \
+	  *.yml|*.yaml) exec docker run --rm -v "$$(pwd):/work" -w /work cytopia/yamllint:latest -s "$$F" ;; \
+	  *.json) exec docker run --rm -v "$$(pwd):/work" -w /work ghcr.io/jqlang/jq:latest empty "$$F" >/dev/null ;; \
+	  *.sh|*.bash) exec docker run --rm -v "$$(pwd):/work" -w /work koalaman/shellcheck-alpine:stable shellcheck --severity=warning "$$F" ;; \
+	  *) printf 'lint router: no case matches "%s".\n' "$$F" >&2; exit 64 ;; \
+	esac
 ```
 
-(Bash 3.2-compatible array of `extension:target` pairs — NOT a `declare -A` associative array, which is Bash 4+.)
+For monorepo projects, add workspace branches BEFORE the generic extension branches and strip the workspace prefix:
+
+```make
+	  apps/frontend/*) exec docker compose exec -T frontend npm run lint -- "$${F#apps/frontend/}" ;; \
+	  apps/api/*) exec docker compose exec -T api ruff check "$${F#apps/api/}" ;; \
+```
+
+POSIX `case` globbing applies — `*` matches any sequence of characters including `/`, so `*.md` matches `docs/a/b/c.md`.
 
 ---
 
-## Sub-target convention
+## Adding a new file type
 
-Every `lint-<ext>` target MUST:
+1. Edit the `lint:` recipe of the root `Makefile`.
+2. Add a new `case` branch BEFORE the catch-all.
+3. Choose: `IGNORE` (→ `exit 0`), workspace branch (`docker compose exec -T <svc>` with prefix strip), or generic branch (`exec docker run …`).
+4. Commit.
 
-1. Be `.PHONY`.
-2. Take `FILE=…` as its only contractual input.
-3. Run inside Docker. **No** host-installed linter assumption.
-4. Detect missing wiring at startup and exit `65` BEFORE invoking the linter. Example checks:
-   - Required service is `Up` (`docker compose ps <svc> | grep ' Up '`).
-   - Required binary is present in the container (`command -v <linter>`).
-5. Invoke the linter against `$(FILE)`.
-6. Propagate exit `0` (pass) or `1` (violations). Never swallow violations.
-7. Print ONLY the linter output. No decorative banner.
-
-Reference templates for TS, JS, JSON, MD, YAML, SH, PY, GO live in `skills/makefile-lint-router/examples/` (created in Phase 5 of the plan).
+There is no other file to touch. The hook is path-agnostic and stack-agnostic; the recipe is the policy.
 
 ---
 
 ## Concurrency
 
-The `make lint` target MUST be **safe to invoke concurrently** against different files. If the implementation needs a per-target lock (e.g. shared Biome daemon), the lock MUST be:
-
-- Scoped to that single sub-target.
-- Free of stale-lock corruption (PID-checked or `flock(1)`-based).
-- Documented in the sub-target's body comments.
-
-The dispatcher itself is stateless and concurrent-safe by construction.
+The `make lint` target MUST be **safe to invoke concurrently** against different files. Because each invocation `exec`'s into its own docker container, isolation is by-construction. Projects that share a long-lived linter daemon (e.g. Biome) MUST scope the daemon's lock to its own container — never the host.
 
 ---
 
 ## Versioning
 
-This contract is at **v1.0.0**. Breaking changes (renamed `FILE` env, new mandatory env, removed `64`/`65` exit codes) MUST bump the major. Adding a new exit code or a new sub-target template is a minor bump.
+This contract is at **v2.0.0** (post-refactor). Breaking changes vs. v1.x:
+
+- Removed `scripts/lint-route.sh` (no external dispatcher).
+- Removed per-extension `lint-<ext>` sub-targets (no shell helpers).
+- Routing table is now the body of the `lint:` recipe itself.
+
+Adding new branches is a minor bump. Renaming `FILE` or changing the `64`/`65` semantics is a major.

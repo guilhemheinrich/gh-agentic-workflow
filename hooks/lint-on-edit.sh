@@ -351,21 +351,32 @@ log_debug "make_exit: $make_exit, output (first 200): ${make_output:0:200}"
 # Lint passed — silent
 [[ "$make_exit" == "0" ]] && silent_allow "lint passed"
 
-# Lint timed out
-if [[ "$make_exit" == "124" ]]; then
-  emit_feedback "$host" "[lint-on-edit] file=$rel_path ext=$ext target=lint code=124
+# Lint timed out. GNU `timeout` exits 124; BusyBox `timeout` SIGTERMs the
+# child and yields exit 143 (128+15); a SIGKILL fallback yields 137 (128+9).
+if [[ "$make_exit" == "124" || "$make_exit" == "137" || "$make_exit" == "143" ]]; then
+  emit_feedback "$host" "[lint-on-edit] file=$rel_path ext=$ext target=lint code=$make_exit
 
 Lint timed out after ${LINT_TIMEOUT}s. The container may be cold or hung.
 Consider raising LINT_TIMEOUT or running: make up"
 fi
 
-# Map exit code to a meaningful target label for the header
-case "$make_exit" in
-  64) target_label="none" ;;
-  *)  target_label="lint-${ext#.}" ;;
+# Map exit code to a meaningful target label for the header.
+# GNU make wraps a recipe's non-zero exit to its own status 2 and prints
+# `make: *** [Makefile:N: lint] Error <code>` on stderr. We recover <code> so
+# the structured header keeps informational value (64 = policy gap,
+# 65 = wiring missing, anything else = lint violation / runtime error).
+recipe_exit="$make_exit"
+if [[ "$make_exit" != "0" ]]; then
+  parsed="$(printf '%s\n' "$make_output" | grep -oE 'Error [0-9]+' | tail -n1 | awk '{print $2}')"
+  [[ -n "$parsed" ]] && recipe_exit="$parsed"
+fi
+case "$recipe_exit" in
+  64) target_label="lint (policy gap)" ;;
+  65) target_label="lint (wiring missing)" ;;
+  *)  target_label="lint" ;;
 esac
 
-msg="[lint-on-edit] file=$rel_path ext=$ext target=$target_label code=$make_exit
+msg="[lint-on-edit] file=$rel_path ext=$ext target=$target_label code=$recipe_exit
 
 $make_output"
 

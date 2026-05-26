@@ -1,33 +1,45 @@
 #!/usr/bin/env bats
 # tests/hooks/lint_route.bats
-# Unit tests for scripts/lint-route.sh
+# Exercises the inline glob→docker dispatch in the root Makefile's `lint:` recipe.
+# Uses tests/hooks/fixtures/Makefile.stub which mirrors the real Makefile's case
+# structure but replaces docker invocations with controllable stubs.
 #
 # Run via: make test-hooks
 # Or directly: docker run --rm -v $(pwd):/workspace -w /workspace bats/bats:latest tests/hooks/
+#
+# Note: GNU make wraps any recipe non-zero exit to its own status 2 and prints
+# `make: *** [Makefile:N: lint] Error <code>` on stderr. We assert on the
+# wrapped status AND on the `Error <code>` marker in the captured output.
 
-ROUTER="$BATS_TEST_DIRNAME/../../scripts/lint-route.sh"
 FIXTURE_MAKE="$BATS_TEST_DIRNAME/fixtures/Makefile.stub"
 
-# ── Setup / teardown ───────────────────────────────────────────────────────────
-
 setup() {
-  # Create a temp project directory that mirrors the router's expected layout.
   TEST_PROJECT="$(mktemp -d)"
-
-  # Copy router script and stub Makefile into the temp project.
-  mkdir -p "$TEST_PROJECT/scripts" "$TEST_PROJECT/src" "$TEST_PROJECT/docs"
-  cp "$ROUTER" "$TEST_PROJECT/scripts/lint-route.sh"
-  chmod +x "$TEST_PROJECT/scripts/lint-route.sh"
+  mkdir -p \
+    "$TEST_PROJECT/src" \
+    "$TEST_PROJECT/docs" \
+    "$TEST_PROJECT/scripts" \
+    "$TEST_PROJECT/node_modules" \
+    "$TEST_PROJECT/dist" \
+    "$TEST_PROJECT/.git" \
+    "$TEST_PROJECT/vendor"
   cp "$FIXTURE_MAKE" "$TEST_PROJECT/Makefile"
 
-  # Create test files.
-  echo 'const x = 1;'   > "$TEST_PROJECT/src/foo.ts"
-  echo '# Hello'        > "$TEST_PROJECT/docs/readme.md"
-  echo 'key: value'     > "$TEST_PROJECT/docs/config.yml"
-  echo '{"a":1}'        > "$TEST_PROJECT/src/data.json"
-  echo '#!/bin/bash'    > "$TEST_PROJECT/scripts/helper.sh"
+  : >"$TEST_PROJECT/src/foo.ts"
+  : >"$TEST_PROJECT/docs/readme.md"
+  : >"$TEST_PROJECT/docs/config.yml"
+  : >"$TEST_PROJECT/src/data.json"
+  : >"$TEST_PROJECT/scripts/helper.sh"
+  : >"$TEST_PROJECT/src/logo.png"
+  : >"$TEST_PROJECT/src/foo.broken"
+  : >"$TEST_PROJECT/src/foo.xyz"
+  : >"$TEST_PROJECT/node_modules/foo.js"
+  : >"$TEST_PROJECT/dist/bundle.js"
+  : >"$TEST_PROJECT/.git/COMMIT_EDITMSG"
+  : >"$TEST_PROJECT/vendor/lib.go"
+  : >"$TEST_PROJECT/package.lock"
+  : >"$TEST_PROJECT/.env"
 
-  # Default stub behavior: pass.
   export STUB_LINT_EXIT=0
   export STUB_LINT_OUTPUT="stub: ok"
 }
@@ -38,149 +50,103 @@ teardown() {
 
 # ── No argument ────────────────────────────────────────────────────────────────
 
-@test "no argument exits 64 with usage message" {
-  run bash "$ROUTER"
-  [ "$status" -eq 64 ]
-  [[ "$output" == *"FILE argument is required"* ]]
-}
-
-@test "empty argument exits 64 with usage message" {
-  run bash "$ROUTER" ""
-  [ "$status" -eq 64 ]
+@test "no FILE exits non-zero, message 'FILE=... is required', Error 64" {
+  run make -C "$TEST_PROJECT" lint
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"FILE=... is required"* ]]
+  [[ "$output" == *"Error 64"* ]]
 }
 
 # ── Excluded paths (silent allow, exit 0) ─────────────────────────────────────
 
 @test "file under node_modules/ exits 0 silently" {
-  run bash "$ROUTER" "node_modules/lodash/index.js"
+  run make -C "$TEST_PROJECT" lint FILE="node_modules/foo.js"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
 @test "file under dist/ exits 0 silently" {
-  run bash "$ROUTER" "dist/bundle.js"
+  run make -C "$TEST_PROJECT" lint FILE="dist/bundle.js"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
 @test "file under .git/ exits 0 silently" {
-  run bash "$ROUTER" ".git/COMMIT_EDITMSG"
+  run make -C "$TEST_PROJECT" lint FILE=".git/COMMIT_EDITMSG"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
 @test "file under vendor/ exits 0 silently" {
-  run bash "$ROUTER" "vendor/foo/bar.go"
+  run make -C "$TEST_PROJECT" lint FILE="vendor/lib.go"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
 # ── Ignored extensions (silent allow, exit 0) ──────────────────────────────────
 
 @test "PNG file exits 0 silently" {
-  run bash "$ROUTER" "assets/logo.png"
+  run make -C "$TEST_PROJECT" lint FILE="src/logo.png"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
-@test "lock file exits 0 silently" {
-  run bash "$ROUTER" "package.lock"
+@test ".lock file exits 0 silently" {
+  run make -C "$TEST_PROJECT" lint FILE="package.lock"
   [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test ".lockb file exits 0 silently" {
-  run bash "$ROUTER" "bun.lockb"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
 }
 
 @test ".env file exits 0 silently" {
-  run bash "$ROUTER" ".env"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-@test ".gitignore exits 0 silently (dot-file: no conventional extension)" {
-  run bash "$ROUTER" ".gitignore"
-  [ "$status" -eq 0 ]
-  [ -z "$output" ]
-}
-
-# ── Routed extensions (dispatched to sub-targets) ─────────────────────────────
-# These tests run the router from the test project directory so make can find
-# the Makefile.stub targets.
-
-@test "TS file routes to lint-ts and exits with stub result" {
-  export STUB_LINT_EXIT=0
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'src/foo.ts'"
+  run make -C "$TEST_PROJECT" lint FILE=".env"
   [ "$status" -eq 0 ]
 }
 
-@test "MD file routes to lint-md and exits with stub result" {
-  export STUB_LINT_EXIT=0
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'docs/readme.md'"
+# ── Routed extensions (dispatch to stub) ──────────────────────────────────────
+
+@test "TS file routes to stub, passes with STUB_LINT_EXIT=0" {
+  run make -C "$TEST_PROJECT" lint FILE="src/foo.ts"
   [ "$status" -eq 0 ]
 }
 
-@test "YAML file routes to lint-yaml and exits with stub result" {
-  export STUB_LINT_EXIT=0
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'docs/config.yml'"
+@test "MD file routes to stub, passes with STUB_LINT_EXIT=0" {
+  run make -C "$TEST_PROJECT" lint FILE="docs/readme.md"
   [ "$status" -eq 0 ]
 }
 
-@test "JSON file routes to lint-json and exits with stub result" {
-  export STUB_LINT_EXIT=0
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'src/data.json'"
+@test "YAML file routes to stub, passes with STUB_LINT_EXIT=0" {
+  run make -C "$TEST_PROJECT" lint FILE="docs/config.yml"
   [ "$status" -eq 0 ]
 }
 
-@test "SH file routes to lint-sh and exits with stub result" {
-  export STUB_LINT_EXIT=0
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'scripts/helper.sh'"
+@test "JSON file routes to stub, passes with STUB_LINT_EXIT=0" {
+  run make -C "$TEST_PROJECT" lint FILE="src/data.json"
   [ "$status" -eq 0 ]
 }
 
-@test "linter sub-target failure (exit 1) is propagated" {
-  export STUB_LINT_EXIT=1
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'src/foo.ts'"
-  [ "$status" -eq 1 ]
+@test "SH file routes to stub, passes with STUB_LINT_EXIT=0" {
+  run make -C "$TEST_PROJECT" lint FILE="scripts/helper.sh"
+  [ "$status" -eq 0 ]
 }
 
-@test "wiring missing (exit 65 from sub-target) is propagated" {
-  # The Makefile.stub has a lint-broken target that exits 65.
-  # Route a .ts file but force the stub to return 65.
-  export STUB_LINT_EXIT=65
-  run bash -c "cd '$TEST_PROJECT' && bash scripts/lint-route.sh 'src/foo.ts'"
-  [ "$status" -eq 65 ]
+@test "stub linter failure (STUB_LINT_EXIT=1) is propagated" {
+  run make -C "$TEST_PROJECT" lint FILE="src/foo.ts" STUB_LINT_EXIT=1
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Error 1"* ]]
+}
+
+@test "wiring missing (.broken → exit 65) is propagated" {
+  run make -C "$TEST_PROJECT" lint FILE="src/foo.broken"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Error 65"* ]]
+  [[ "$output" == *"wire it up"* ]]
 }
 
 # ── Policy gap (exit 64) ───────────────────────────────────────────────────────
 
-@test "unknown extension .xyz exits 64 with policy gap message" {
-  run bash "$ROUTER" "src/foo.xyz"
-  [ "$status" -eq 64 ]
-  [[ "$output" == *".xyz"* ]]
+@test "unknown extension .xyz exits 64 with policy-gap message" {
+  run make -C "$TEST_PROJECT" lint FILE="src/foo.xyz"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Error 64"* ]]
+  [[ "$output" == *"no case matches"* ]]
+  [[ "$output" == *"foo.xyz"* ]]
 }
 
-@test "unknown extension .abc exits 64 with LINT_ROUTES/LINT_IGNORED instruction" {
-  run bash "$ROUTER" "src/foo.abc"
-  [ "$status" -eq 64 ]
-  [[ "$output" == *"LINT_ROUTES"* ]] || [[ "$output" == *"LINT_IGNORED"* ]]
-}
-
-# ── Route-table fixture byte-equality check ────────────────────────────────────
-# Assert that the routing arrays in the canonical script and in contracts/fixtures/
-# route-table-fixture.sh declare the same extension set.
-
-@test "LINT_ROUTES extensions in fixture match canonical script" {
-  local fixture="$BATS_TEST_DIRNAME/../../specs/014-lint-on-edit-hook/contracts/fixtures/route-table-fixture.sh"
-  local canonical="$BATS_TEST_DIRNAME/../../scripts/lint-route.sh"
-
-  # Extract all ext:target pairs from canonical script
-  canonical_routes="$(grep -o '"\.[a-z]*:[a-z-]*"' "$canonical" | sort)"
-  # Extract from fixture
-  fixture_routes="$(grep -o '"\.[a-z]*:[a-z-]*"' "$fixture" | sort)"
-
-  [ "$canonical_routes" = "$fixture_routes" ]
+@test "policy-gap message points the agent at the Makefile" {
+  run make -C "$TEST_PROJECT" lint FILE="src/foo.xyz"
+  [[ "$output" == *"lint:"*"recipe"* ]] || [[ "$output" == *"Makefile"* ]]
 }

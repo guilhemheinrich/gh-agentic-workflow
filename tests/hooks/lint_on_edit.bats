@@ -16,6 +16,10 @@ setup() {
   mkdir -p "$TEST_PROJECT/src"
   echo 'const x = 1;' > "$TEST_PROJECT/src/foo.ts"
   echo 'Hello world' > "$TEST_PROJECT/README.md"
+  # An empty Makefile is enough — the hook only checks for its existence to
+  # locate the project root; the real `make` invocation goes through the
+  # stub-make binary placed first on PATH below.
+  : >"$TEST_PROJECT/Makefile"
 
   # Put stub-make first on PATH so the hook calls our stub make, not the real one.
   export PATH="$STUB_MAKE_DIR:$PATH"
@@ -139,7 +143,10 @@ line two"
   [ "$status" -eq 0 ]
   # Output must be a single line (no raw newlines in JSON string)
   [ "$(echo "$output" | wc -l)" -eq 1 ]
-  [[ "$output" == *'\\n'* ]]
+  # Real newlines must have been escaped to literal "\n" sequences inside the
+  # JSON string. Use double-quoted pattern (Alpine bash differs from macOS
+  # bash on how it handles single-quoted backslashes inside [[ patterns).
+  [[ "$output" == *"\\n"* ]]
 }
 
 # ── Policy gap (exit 64) ───────────────────────────────────────────────────────

@@ -67,16 +67,46 @@
 **Goal**: Exit codes `64`/`65` are produced where they should be, hook surfaces them as actionable agent messages.
 **Independent Test**: Bats `@test "policy gap on unknown extension"` and `@test "wiring missing surfaces stderr"` turn green.
 
-- [X] T030 [US2] Create `scripts/lint-route.sh` with the `LINT_ROUTES`, `LINT_IGNORED`, `LINT_EXCLUDED_PATHS` constants from data-model.md §4 (Bash 3.2-compatible `name:value` array form).
-- [X] T031 [US2] Implement the dispatcher logic in `scripts/lint-route.sh`: usage check → path-prefix check → ignored extension → routed extension `exec make lint-<target>` → fallback exit 64.
-- [X] T032 [US2] Add `lint:` target to the repo's root `Makefile` delegating to `scripts/lint-route.sh`.
-- [X] T033 [US2] Run `shellcheck` on `scripts/lint-route.sh`. Fix every finding.
-- [X] T034 [US2] Turn green the Bats tests under `lint_route.bats` covering: ignored ext, ignored path, routed ext (with stub Makefile), unknown ext (exit 64).
-- [X] T035 [US2] [P] Synchronise `specs/014-lint-on-edit-hook/contracts/fixtures/route-table-fixture.sh` with `scripts/lint-route.sh` and add a Bats test asserting byte-equality of the routing arrays.
-- [X] T036 [US2] Turn green the integration Bats test asserting that an unknown extension produces a hook agent message containing the phrase `policy gap` AND the offending extension.
-- [X] T037 [US2] Add a sub-target template that intentionally fails at startup (e.g. `lint-broken-ts: ; exit 65`) under `tests/hooks/fixtures/`. Turn green the integration test asserting the hook surfaces this with the phrase `wire up` and the target name.
+> **Redesign (2026-05-25)** — Cursor's initial implementation split the router across a separate `scripts/lint-route.sh` dispatcher AND a fan of `lint-md` / `lint-yaml` / `lint-json` / `lint-sh` sub-targets. The maintainer rejected this shape: the routing table must live **inline** in the single `lint:` recipe, mapping glob → docker command (with per-workspace path stripping for monorepos). Tasks T030–T037 are kept for traceability but reflect the now-removed v1 design. The active design is captured in Phase 4b below.
+>
+> **Net file changes from v1 → v2**:
+> - `scripts/lint-route.sh` — **DELETED**
+> - `Makefile` `lint-md` / `lint-yaml` / `lint-json` / `lint-sh` — **DELETED** (folded into the `lint:` recipe)
+> - `Makefile` `lint:` — **REWRITTEN** as a single inline-case recipe
+> - `specs/.../contracts/fixtures/route-table-fixture.sh` — **DELETED**
+> - `tests/hooks/lint_route.bats` — rewritten to exercise the recipe via `make -C <stub-project> lint`
+> - `tests/hooks/fixtures/Makefile.stub` — rewritten to mirror the recipe shape
+> - `hooks/lint-on-edit.sh` — teaches the header to recover the underlying exit code from make's `Error <N>` wrapper
+
+- [X] T030 [US2] ~~Create `scripts/lint-route.sh` with the `LINT_ROUTES`, `LINT_IGNORED`, `LINT_EXCLUDED_PATHS` constants from data-model.md §4 (Bash 3.2-compatible `name:value` array form).~~ Superseded by T030b.
+- [X] T031 [US2] ~~Implement the dispatcher logic in `scripts/lint-route.sh`~~. Superseded by T030b.
+- [X] T032 [US2] ~~Add `lint:` target to the repo's root `Makefile` delegating to `scripts/lint-route.sh`~~. Superseded by T030b.
+- [X] T033 [US2] ~~Run `shellcheck` on `scripts/lint-route.sh`~~. N/A — script removed.
+- [X] T034 [US2] Turn green the Bats tests under `lint_route.bats` covering: ignored ext, ignored path, routed ext (with stub Makefile), unknown ext (exit 64). _Reworked under the new design — see T034b._
+- [X] T035 [US2] [P] ~~Synchronise `specs/.../contracts/fixtures/route-table-fixture.sh` with `scripts/lint-route.sh`~~. N/A — fixture removed; recipe IS the table.
+- [X] T036 [US2] Turn green the integration Bats test asserting that an unknown extension produces a hook agent message containing `policy gap` AND the offending extension.
+- [X] T037 [US2] Add a `*.broken` branch in the test stub Makefile that intentionally exits 65. Turn green the integration test asserting the hook surfaces this with the phrase `wire it up`.
 
 **Checkpoint**: User Story 2 — broken wiring is loudly visible.
+
+---
+
+## Phase 4b: Redesign — Inline routing in the `lint:` recipe (2026-05-25)
+
+**Goal**: Replace the script + sub-targets shape with a single Makefile recipe whose body IS the routing table (glob → docker command), with workspace-aware path stripping for monorepos.
+
+- [X] T030b Delete `scripts/lint-route.sh`.
+- [X] T031b Rewrite the root `Makefile` `lint:` recipe inline: usage guard (exit 64) → excluded-paths branch (exit 0) → ignored-extensions branch (exit 0) → generic extension branches (`exec docker run …`) → catch-all policy gap (exit 64).
+- [X] T032b Drop the `lint-md` / `lint-mdc` / `lint-yaml` / `lint-json` / `lint-sh` Makefile sub-targets.
+- [X] T033b Teach `hooks/lint-on-edit.sh` to recover the underlying recipe exit code from make's `Error <N>` wrapper; relabel the header (`lint (policy gap)` for 64, `lint (wiring missing)` for 65, `lint` otherwise).
+- [X] T034b Rewrite `tests/hooks/lint_route.bats` to drive the recipe via `make -C <stub> lint FILE=…` and assert on the wrapped status + `Error <N>` marker in `$output`.
+- [X] T035b Rewrite `tests/hooks/fixtures/Makefile.stub` to mirror the recipe shape (excluded paths + ignored extensions + `*.broken` exit-65 branch + STUB_LINT_EXIT/STUB_LINT_OUTPUT-driven routed branches + catch-all exit 64).
+- [X] T036b Delete `specs/014-lint-on-edit-hook/contracts/fixtures/route-table-fixture.sh`.
+- [X] T037b Rewrite `specs/014-lint-on-edit-hook/contracts/makefile-interface.md` for the new design (bumped to v2.0.0); strip the route-table-fixture row from `contracts/README.md`.
+- [X] T038b Rewrite `skills/makefile-lint-router/SKILL.md` and the three Makefile examples (`Makefile.ts-monorepo.example`, `Makefile.python-uv.example`, `Makefile.vue-nest.example`) for the inline-case shape with workspace-aware branches. Delete `lint-route.sh.example`.
+- [X] T039b Remove the `scripts/lint-route.sh` entry from `asset-registry.yml`; update the `makefile-lint-router` skill description in the registry to reflect the inline-table doctrine.
+
+**Checkpoint**: One file holds the policy. No external dispatcher. Tests turn green against the new shape.
 
 ---
 

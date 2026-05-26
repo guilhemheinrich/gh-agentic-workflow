@@ -12,6 +12,9 @@ setup() {
   TEST_PROJECT="$(mktemp -d)"
   mkdir -p "$TEST_PROJECT/src"
   echo 'const x = 1;' > "$TEST_PROJECT/src/foo.ts"
+  # Empty Makefile so the hook's find_project_root succeeds; the real make
+  # invocation is intercepted by stub-make first on PATH below.
+  : >"$TEST_PROJECT/Makefile"
 
   export PATH="$STUB_MAKE_DIR:$PATH"
   export LINT_ON_EDIT=1

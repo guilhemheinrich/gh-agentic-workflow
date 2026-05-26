@@ -10,6 +10,9 @@ setup() {
   TEST_PROJECT="$(mktemp -d)"
   mkdir -p "$TEST_PROJECT/src"
   echo 'const x = 1;' > "$TEST_PROJECT/src/foo.ts"
+  # Empty Makefile so find_project_root succeeds; tests that need NO Makefile
+  # (e.g. the "no Makefile in ancestor dirs" test) create their own dir.
+  : >"$TEST_PROJECT/Makefile"
 
   export LINT_ON_EDIT=1
   export LINT_TIMEOUT=10
