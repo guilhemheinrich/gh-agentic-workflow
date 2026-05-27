@@ -3,6 +3,42 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$ExportMcp = $false
+
+function Show-Usage {
+    Write-Host "Usage: .\install.ps1 [--export-mcp]"
+    Write-Host ''
+    Write-Host 'Copies resources to supported agent directories.'
+    Write-Host ''
+    Write-Host 'Options:'
+    Write-Host '  --export-mcp  Export Cursor MCP config to supported tools'
+    Write-Host '  -ExportMcp    PowerShell-style alias for --export-mcp'
+    Write-Host '  -h, --help    Show this help'
+}
+
+foreach ($arg in $args) {
+    switch ($arg) {
+        '--export-mcp' {
+            $ExportMcp = $true
+        }
+        '-ExportMcp' {
+            $ExportMcp = $true
+        }
+        '-h' {
+            Show-Usage
+            exit 0
+        }
+        '--help' {
+            Show-Usage
+            exit 0
+        }
+        default {
+            [Console]::Error.WriteLine("Error: unknown option: $arg")
+            Show-Usage
+            exit 2
+        }
+    }
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IDE / Tool target directories
@@ -92,7 +128,10 @@ Write-Host ''
 $CursorMcp = Join-Path $CursorTarget 'mcp.json'
 $NodeAvailable = $null -ne (Get-Command 'node' -ErrorAction SilentlyContinue)
 
-if (-not $NodeAvailable) {
+if (-not $ExportMcp) {
+    Write-Host "Skipping MCP config export (pass --export-mcp to enable)."
+}
+elseif (-not $NodeAvailable) {
     Write-Host "Warning: Node.js is required for MCP config transformations but not found"
     Write-Host "MCP configurations will not be updated"
 }
@@ -122,11 +161,11 @@ else {
             $McpDefaults[$format] | Set-Content -Path $config -Encoding UTF8
         }
 
-        & node "$RepoDir\scripts\mcptools\transform-mcp.js" `
+        & node "$RepoDir\scripts\mcptools\transform-mcp.cjs" `
             --from cursor --to $format `
             --input $CursorMcp --output $tmp
 
-        & node "$RepoDir\scripts\mcptools\merge-mcp.js" `
+        & node "$RepoDir\scripts\mcptools\merge-mcp.cjs" `
             --source $tmp --target $config --format $format
 
         Remove-Item -Path $tmp -Force

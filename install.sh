@@ -2,6 +2,38 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+EXPORT_MCP=0
+
+usage() {
+	cat <<EOF
+Usage: $(basename "$0") [--export-mcp]
+
+Copies resources to supported agent directories.
+
+Options:
+  --export-mcp  Export Cursor MCP config to supported tools
+  -h, --help    Show this help
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+	case "$1" in
+		--export-mcp)
+			EXPORT_MCP=1
+			;;
+		-h | --help)
+			usage
+			exit 0
+			;;
+		*)
+			echo "Error: unknown option: $1" >&2
+			echo "" >&2
+			usage >&2
+			exit 2
+			;;
+	esac
+	shift
+done
 
 # ─────────────────────────────────────────────────────────────────────────────
 # IDE / Tool target directories
@@ -106,7 +138,9 @@ echo ""
 # ─────────────────────────────────────────────────────────────────────────────
 CURSOR_MCP="$CURSOR_TARGET/mcp.json"
 
-if ! command -v node &>/dev/null; then
+if [ "$EXPORT_MCP" -eq 0 ]; then
+	echo "Skipping MCP config export (pass --export-mcp to enable)."
+elif ! command -v node &>/dev/null; then
 	echo "Warning: Node.js is required for MCP config transformations but not found"
 	echo "MCP configurations will not be updated"
 elif [ ! -f "$CURSOR_MCP" ]; then
