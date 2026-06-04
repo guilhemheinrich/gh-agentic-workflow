@@ -47,8 +47,9 @@ $CursorTarget       = Join-Path $env:USERPROFILE '.cursor'
 $PiTarget           = Join-Path $env:USERPROFILE '.pi' 'agent'
 $OpenCodeTarget     = Join-Path $env:USERPROFILE '.config' 'opencode'
 $AgentsShared       = Join-Path $env:USERPROFILE '.agents'
+$ClaudeCodeTarget   = Join-Path $env:USERPROFILE '.claude'
 
-# Claude configs (MCP-only, no file copy)
+# Claude configs
 $ClaudeCodeConfig   = Join-Path $env:USERPROFILE '.claude.json'
 $ClaudeDesktopDir   = Join-Path $env:APPDATA 'Claude'
 $ClaudeDesktopConfig = Join-Path $ClaudeDesktopDir 'claude_desktop_config.json'
@@ -81,7 +82,12 @@ $CopyMap = @(
     @{ Src = 'commands'; Dst = "$OpenCodeTarget\commands" }
     @{ Src = 'agents';   Dst = "$OpenCodeTarget\agents" }
 
-    # ── Shared agents directory (Claude Code / generic) ─────────────────────
+    # ── Claude Code (user-level) ─────────────────────────────────────────────
+    @{ Src = 'skills';   Dst = "$ClaudeCodeTarget\skills" }
+    @{ Src = 'commands'; Dst = "$ClaudeCodeTarget\commands" }
+    @{ Src = 'agents';   Dst = "$ClaudeCodeTarget\agents" }
+
+    # ── Shared agents directory (generic) ────────────────────────────────────
     @{ Src = 'skills';   Dst = "$AgentsShared\skills" }
 )
 

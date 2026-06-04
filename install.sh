@@ -42,8 +42,9 @@ CURSOR_TARGET="$HOME/.cursor"
 PI_TARGET="$HOME/.pi/agent"
 OPENCODE_TARGET="$HOME/.config/opencode"
 AGENTS_SHARED="$HOME/.agents"
+CLAUDE_CODE_TARGET="$HOME/.claude"
 
-# Claude configs (MCP-only, no file copy)
+# Claude configs
 CLAUDE_CODE_CONFIG="$HOME/.claude.json"
 if [[ "$OSTYPE" == "darwin"* ]]; then
 	CLAUDE_DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
@@ -83,7 +84,12 @@ COPY_MAP=(
 	"commands:$OPENCODE_TARGET/commands"
 	"agents:$OPENCODE_TARGET/agents"
 
-	# ── Shared agents directory (Claude Code / generic) ─────────────────────
+	# ── Claude Code (user-level) ─────────────────────────────────────────────
+	"skills:$CLAUDE_CODE_TARGET/skills"
+	"commands:$CLAUDE_CODE_TARGET/commands"
+	"agents:$CLAUDE_CODE_TARGET/agents"
+
+	# ── Shared agents directory (generic) ────────────────────────────────────
 	"skills:$AGENTS_SHARED/skills"
 	"hooks:$AGENTS_SHARED/hooks"
 	"scripts:$AGENTS_SHARED/scripts"
