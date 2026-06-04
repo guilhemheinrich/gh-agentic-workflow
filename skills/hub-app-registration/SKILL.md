@@ -792,6 +792,76 @@ MEET_BASE_URL=http://modelo-meet-backend-1:3001  # Docker-internal, NOT https://
 
 ---
 
+## Dev shortcut — register an app via direct DB (no admin session needed)
+
+Use this when you don't have a browser admin session handy or you need to script the bootstrap (CI, local re-setup). **Dev only** — bypasses admin-UI validation. For production, use the API path in Step 2.
+
+### One-shell sequence
+
+```bash
+# Inputs
+SLUG=myapp                              # MUST match the subdomain prefix below
+APIKEY=$(uuidgen | tr 'A-Z' 'a-z')      # any token >= 32 chars works (UUID is fine)
+PORT=3001                               # frontend host port from your compose.yml
+SUBDOMAIN="${SLUG}.modelo.dev"
+
+# 1) Register in App Registry (modelo_registry.apps).
+echo "INSERT INTO apps (id, slug, name, description, category, \"originDomain\", \"subdomainUrl\", \"ssoMode\", \"integrationType\", capabilities, status, \"killSwitch\", \"apiKey\", \"createdAt\", \"updatedAt\", \"trustedOidcClients\", \"allowedIframeOrigins\")
+VALUES ('${SLUG}-' || gen_random_uuid(), '${SLUG}', '${SLUG}', 'Local dev', 'tools',
+        'host.docker.internal:${PORT}', '${SUBDOMAIN}', 'oidc', 'native',
+        '{}'::jsonb, 'active', false, '${APIKEY}', now(), now(), '[]'::jsonb, '[]'::jsonb)
+ON CONFLICT (slug) DO UPDATE SET \"subdomainUrl\"=EXCLUDED.\"subdomainUrl\",
+  \"originDomain\"=EXCLUDED.\"originDomain\", \"apiKey\"=EXCLUDED.\"apiKey\", \"updatedAt\"=now();" \
+| docker exec -i modelo-hub-postgres-1 psql -U registry_user -d modelo_registry
+
+# 2) Grant catalog access on every plan (modelo_entitlements.entitlement_plan_apps).
+echo "INSERT INTO entitlement_plan_apps (id, \"planId\", \"appSlug\", enabled, \"createdAt\", \"updatedAt\")
+SELECT 'pa-' || gen_random_uuid(), p.id, '${SLUG}', true, now(), now()
+FROM entitlement_plans p ON CONFLICT (\"planId\", \"appSlug\") DO NOTHING;" \
+| docker exec -i modelo-hub-postgres-1 psql -U entitlements_user -d modelo_entitlements
+
+# 3) (Optional, S2S only) trust edge: caller ${SLUG} -> target ${TARGET}.
+TARGET=other-app
+echo "INSERT INTO app_trusts (id, \"trustingAppId\", \"trustedAppId\", \"createdAt\")
+SELECT 'trust-' || gen_random_uuid(),
+       (SELECT id FROM apps WHERE slug='${TARGET}'),
+       (SELECT id FROM apps WHERE slug='${SLUG}'),
+       now() ON CONFLICT DO NOTHING;" \
+| docker exec -i modelo-hub-postgres-1 psql -U registry_user -d modelo_registry
+
+# 4) Local DNS.
+sudo sh -c "echo '127.0.0.1  ${SUBDOMAIN}' >> /etc/hosts"
+
+# 5) Wait for Traefik's HTTP-provider poll (every 30 s) to pick up the new router.
+until docker exec modelo-hub-traefik-1 wget -qO- http://app-registry:3002/api/registry/traefik \
+        | grep -q "${SUBDOMAIN}"; do sleep 2; done
+
+# 6) Smoke.
+curl -sk "https://auth.modelo.dev/api/auth/authorize?target_slug=${SLUG}&redirect_url=https%3A%2F%2F${SUBDOMAIN}%2F" \
+     -o /dev/null -w "authorize: %{http_code}\n"            # expect 302
+curl -sk "https://${SUBDOMAIN}/api/hub/health" -w "\nHTTP %{http_code}\n"
+echo "APP_API_KEY = ${APIKEY}     # paste this into the app's .env"
+```
+
+### The one gotcha you must respect
+
+`subdomainUrl` MUST be literally `${slug}.<base-host>`. The auth-api computes the expected redirect host as `${appSlug}.${baseHost}` (see `resolveRedirectTarget` in `apps/auth-api/dist/infrastructure/http/resolve-redirect-target.js`) and rejects mismatched `redirect_url`s with `INVALID_REDIRECT_TARGET`. A slug `modelo-onboarder` cannot be served at `onboarder.modelo.dev` — it must be `modelo-onboarder.modelo.dev`.
+
+### Companion wiring (often the blocker right after registration)
+
+- **Vite `/api` proxy** — `apps/frontend/vite.config.ts` → `server.proxy: { '/api': { target: 'http://backend:3000', changeOrigin: false, secure: false } }`. Without it, the Vite dev server returns the SPA HTML for `/api/hub/me` and the bootstrap composable bounces back to the Hub.
+- **Both frontend + backend on `modelo-network`** in `compose.yml` (declared `external: true`) so the backend can reach `modelo-hub-auth-api-1:3000`.
+- **`.env`**: `APP_SLUG`, `APP_API_KEY` (= the UUID above), `HUB_AUTH_URL=http://modelo-hub-auth-api-1:3000`, `HUB_PUBLIC_URL=https://hub.modelo.dev`.
+- **Global NestJS interceptors scoped to their owning prefix** — never bind contract / rate-limit interceptors via `APP_INTERCEPTOR` blanket, otherwise `/api/hub/*` inherits constraints meant for the business surface.
+
+### What this shortcut skips vs. the canonical path
+
+- Admin-UI validation (Zod schemas for `category`, `integrationType`, `capabilities`) — mistypes surface as runtime 500s, not nice 400s. Re-read your row before blaming the Hub.
+- CSRF + audit log entry for the registration. Anything tailing the Hub audit log won't see your dev row.
+- The `apiKey` field returned by `POST /api/registry/apps` is **also** the Traefik routing key. If you skip the API, you must put your UUID into `APP_API_KEY` of the downstream app's `.env` yourself.
+
+---
+
 ## Inter-App Integration Guide — Calendar→Meet Lessons Learned
 
 This guide documents the **complete** S2S integration procedure between two Hub apps, based on the real Calendar → Meet experience. Encountered issues are documented to avoid reproducing them.

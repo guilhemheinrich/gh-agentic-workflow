@@ -84,12 +84,16 @@ COPY_MAP=(
 	"commands:$OPENCODE_TARGET/commands"
 	"agents:$OPENCODE_TARGET/agents"
 
-	# ── Claude Code (user-level) ─────────────────────────────────────────────
+	# ── Claude Code (user scope) ────────────────────────────────────────────
+	# Official user-level paths per https://code.claude.com/docs/en/skills
+	#   skills   → ~/.claude/skills/<name>/SKILL.md
+	#   commands → ~/.claude/commands/<name>.md   (slash commands)
+	#   agents   → ~/.claude/agents/<name>.md     (subagents)
 	"skills:$CLAUDE_CODE_TARGET/skills"
 	"commands:$CLAUDE_CODE_TARGET/commands"
 	"agents:$CLAUDE_CODE_TARGET/agents"
 
-	# ── Shared agents directory (generic) ────────────────────────────────────
+	# ── Shared agents directory (generic fallback) ──────────────────────────
 	"skills:$AGENTS_SHARED/skills"
 	"hooks:$AGENTS_SHARED/hooks"
 	"scripts:$AGENTS_SHARED/scripts"
