@@ -1,0 +1,4 @@
+interface:
+  display_name: "JavaScript Resizable Panel"
+  short_description: "Build pointer-driven resizable panels"
+  default_prompt: "Use $javascript-resizable-panel to add a draggable, pointer-friendly resizable sidebar to this frontend."
