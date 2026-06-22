@@ -1,0 +1,4 @@
+interface:
+  display_name: "S3 Backend Proxy"
+  short_description: "Serve S3 resources through a backend proxy"
+  default_prompt: "Use $s3-backend-proxy to design a backend route that proxies S3 resources with caching."

@@ -1011,6 +1011,16 @@ assets:
     and creates type-safe documentation. Use when users request "JSDoc", "code documentation",
     "API docs", "TypeDoc", or "inline documentation".
   category: programming-languages
+- path: skills/javascript-resizable-panel/
+  type: skill
+  tags:
+  - css
+  - frontend
+  - typescript
+  description: Build controlled drag-to-resize sidebars, split panes, and panels in
+    frontend applications using CSS variables, Pointer Events, accessible resize handles,
+    cleanup-safe listeners, and CSS clamp limits.
+  category: frameworks-and-libraries
 - path: skills/k8s-troubleshoot/
   type: skill
   tags:
@@ -1152,6 +1162,18 @@ assets:
     hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint with PBKDF2-SHA256
     password hashing.
   category: domain-specific
+- path: skills/s3-backend-proxy/
+  type: skill
+  tags:
+  - frontend
+  - python
+  - security
+  - typescript
+  description: Design and implement backend proxy routes for serving S3 objects without
+    exposing S3 directly to browsers. Covers application route to S3 key mapping,
+    trusted presigned URL proxying, Python and TypeScript examples, HTTP browser-backend-S3
+    flows, streaming, headers, conditional requests, and preferred cache layers.
+  category: architecture
 - path: skills/sql-migration-guidelines/
   type: skill
   description: Database-first SQL migration guidelines for relational schema changes

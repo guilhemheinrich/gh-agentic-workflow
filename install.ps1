@@ -82,12 +82,16 @@ $CopyMap = @(
     @{ Src = 'commands'; Dst = "$OpenCodeTarget\commands" }
     @{ Src = 'agents';   Dst = "$OpenCodeTarget\agents" }
 
-    # ── Claude Code (user-level) ─────────────────────────────────────────────
+    # ── Claude Code (user scope) ────────────────────────────────────────────
+    # Official user-level paths per https://code.claude.com/docs/en/skills
+    #   skills   → ~/.claude/skills/<name>/SKILL.md
+    #   commands → ~/.claude/commands/<name>.md   (slash commands)
+    #   agents   → ~/.claude/agents/<name>.md     (subagents)
     @{ Src = 'skills';   Dst = "$ClaudeCodeTarget\skills" }
     @{ Src = 'commands'; Dst = "$ClaudeCodeTarget\commands" }
     @{ Src = 'agents';   Dst = "$ClaudeCodeTarget\agents" }
 
-    # ── Shared agents directory (generic) ────────────────────────────────────
+    # ── Shared agents directory (generic fallback) ──────────────────────────
     @{ Src = 'skills';   Dst = "$AgentsShared\skills" }
 )
 

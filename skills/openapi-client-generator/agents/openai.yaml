@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenAPI Client Generator"
+  short_description: "Generate typed clients from OpenAPI specs"
+  default_prompt: "Use $openapi-client-generator to generate a client from my openapi.yaml file."
