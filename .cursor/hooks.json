@@ -1,0 +1,13 @@
+{
+  "_comment": "Project-level Cursor hooks for this repo. registry-sync-on-skill reminds the agent to register new skills in asset-registry.yml (see AGENTS.md). Disable with REGISTRY_SYNC=0. Requires bash on PATH (Git Bash on Windows). 'afterFileEdit' is pinned from Cursor docs; update if Cursor renames the event.",
+  "hooks": [
+    {
+      "event": "afterFileEdit",
+      "command": "${workspaceFolder}/hooks/registry-sync-on-skill.sh",
+      "timeout": 30,
+      "env": {
+        "REGISTRY_HOOK_HOST": "cursor"
+      }
+    }
+  ]
+}

@@ -23,7 +23,9 @@ x-tag-descriptions:
   hooks: Editor-agent hooks (PostToolUse, afterFileEdit)
   lint: Linting, static analysis, code quality
   lit: Lit web components framework
+  lsp: Language Server Protocol, code intelligence
   make: Makefile patterns and conventions
+  mcp: Model Context Protocol servers and clients
   monorepo: Monorepo, Turborepo, workspaces
   nestjs: NestJS framework
   npm: npm, private registry, packages
@@ -47,6 +49,7 @@ x-tag-descriptions:
   validation: Validation (Zod, Effect Schema, io-ts)
   versioning: Versioning, semantic-release
   vitest: Vitest unit test framework
+  vscode: VS Code extensions, settings, and editor configuration
   vue: Vue.js ecosystem
   web-components: Web Components, Lit
 assets:
@@ -1039,6 +1042,20 @@ assets:
     events, overlay patterns, and anti-patterns. Use when building or debugging Lit
     WCs.'
   category: frameworks-and-libraries
+- path: skills/lsp-mcp/
+  type: skill
+  tags:
+  - mcp
+  - lsp
+  - vscode
+  description: Install, configure, and use the CJL.lsp-mcp VS Code extension — an MCP
+    server that bridges VS Code's already-running Language Servers (LSP) to AI agents.
+    Covers MCP client setup for Claude Code, Cursor, and OpenCode at both project and
+    global scope, installing the right LSP-providing VS Code extension per language
+    (Python, JS/TS, HTML, CSS, Vue, Nuxt, PHP, Symfony, Go), registering extensions
+    in the project .vscode/settings.json, and driving the execute_lsp tool (hover,
+    definition, references, rename, call hierarchy, symbols).
+  category: tools-and-configurations
 - path: skills/makefile-conventions/
   type: skill
   tags:
@@ -1251,6 +1268,19 @@ assets:
   description: Post-edit hook that routes file edits to a Dockerised linter via `make
     lint FILE=…`. Supports Claude PostToolUse and Cursor afterFileEdit. Silent on pass;
     surfaces linter diagnostics and policy gaps back to the agent on failure.
+- path: hooks/registry-sync-on-skill.sh
+  type: hook
+  category: tools-and-configurations
+  tags:
+  - claude
+  - cursor
+  - hooks
+  - shell
+  description: Post-edit hook that fires when a SKILL.md is created or edited and checks
+    whether the skill's directory is already referenced in asset-registry.yml. If not,
+    it reminds the agent (per AGENTS.md) to register the skill in the same change;
+    silent when already registered. Supports Claude PostToolUse and Cursor afterFileEdit.
+    Reminder-only — never rewrites the registry. Disable with REGISTRY_SYNC=0.
 - path: skills/makefile-lint-router/
   type: skill
   category: tools-and-configurations

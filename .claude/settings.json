@@ -1,0 +1,20 @@
+{
+  "_comment": "Project-level Claude Code hooks for this repo. registry-sync-on-skill reminds the agent to register new skills in asset-registry.yml (see AGENTS.md). Disable with REGISTRY_SYNC=0. Requires bash on PATH (Git Bash on Windows).",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "hooks/registry-sync-on-skill.sh",
+            "timeout": 30,
+            "env": {
+              "REGISTRY_HOOK_HOST": "claude"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
