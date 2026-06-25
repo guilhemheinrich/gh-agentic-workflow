@@ -1,0 +1,4 @@
+interface:
+  display_name: "Authorization Models"
+  short_description: "Choose and implement authorization models"
+  default_prompt: "Use $authorization-models to choose between RBAC, ABAC, ReBAC, OPA, and Casbin for an authorization design."

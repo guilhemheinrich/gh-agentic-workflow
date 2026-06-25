@@ -795,6 +795,18 @@ assets:
     injection, creating version endpoints, or implementing version aggregation for
     multi-component applications.
   category: quality-assurance
+- path: skills/authorization-models/
+  type: skill
+  tags:
+  - auth
+  - documentation
+  - security
+  description: Centralize authorization model concepts and implementation guidance
+    for RBAC, ABAC, ReBAC, ACL, PBAC/policy-as-code, OPA, and Apache Casbin. Use
+    when designing access-control specs, choosing an authorization model, writing
+    authorization architecture decisions, or implementing/configuring OPA Rego policies
+    or Casbin models, policies, adapters, and enforcers.
+  category: architecture
 - path: skills/docker-compose-orchestration/
   type: skill
   tags:
