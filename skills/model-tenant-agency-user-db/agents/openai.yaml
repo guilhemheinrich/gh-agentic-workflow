@@ -1,0 +1,4 @@
+interface:
+  display_name: "Tenant/Agency/User DB Model"
+  short_description: "Model tenant, agency, and user ownership in SQL"
+  default_prompt: "Use $model-tenant-agency-user-db to model tenant, agency, and user relationships with PostgreSQL RLS."

@@ -1096,6 +1096,18 @@ assets:
     MCP transport endpoints, JSON-RPC lifecycle, tools/resources/prompts, authorization,
     security, observability, and MCP client/server roles.
   category: frameworks-and-libraries
+- path: skills/model-tenant-agency-user-db/
+  type: skill
+  tags:
+  - auth
+  - security
+  - sql
+  description: Model tenant, agency, and user database structures for real-estate
+    SaaS products such as Septeo applications. Use when designing MCD/ERD, SQL schemas,
+    PostgreSQL RLS, role rules, tenant isolation, agency scoping, or delete/retention
+    semantics for tenant/agency/user domains with tenant admins, agency admins, and
+    simple users.
+  category: domain-specific
 - path: skills/multi-stage-dockerfile/
   type: skill
   tags:
