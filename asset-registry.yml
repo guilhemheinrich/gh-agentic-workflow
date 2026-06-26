@@ -872,6 +872,19 @@ assets:
   category: tools-and-configurations
   bundles:
   - common
+- path: skills/devops-pipeline-design/
+  type: skill
+  tags:
+  - ci-cd
+  - docker
+  - github
+  - kubernetes
+  - security
+  description: Design cloud deployment CI/CD pipelines from first principles. Use
+    when creating or reviewing GitHub Actions, Bitbucket Pipelines, Azure DevOps,
+    Kubernetes GitOps, AWS ECS/S3/ECR, Docker build, environment promotion, runtime
+    configuration, build-time variables, or secrets handling workflows.
+  category: workflows-and-processes
 - path: skills/documentation-writer/
   type: skill
   tags:
