@@ -517,6 +517,15 @@ assets:
     vs runtime config, services topology, and generates ASCII architecture diagrams
     for pprod and prod environments.
   category: tools-and-configurations
+- path: commands/pr-history.md
+  type: command
+  tags:
+  - git
+  - github
+  - shell
+  description: Show the latest merged pull request descriptions in the terminal, newest
+    merge first, so the project state and recent work are easy to scan.
+  category: tools-and-configurations
 - path: commands/push.md
   type: command
   tags:
