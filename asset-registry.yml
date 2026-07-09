@@ -1022,6 +1022,20 @@ assets:
   category: tools-and-configurations
   bundles:
   - common
+- path: skills/git-activity-report/
+  type: skill
+  tags:
+  - git
+  - github
+  - shell
+  - documentation
+  description: Generate sourced Markdown activity reports from Git branch history.
+    Use when Codex needs to scan commits and pull requests or merge requests for
+    a target branch over a configurable lookback period using git, Docker, optional
+    provider CLIs such as gh, glab, or Bitbucket tools, and optional MCP provider
+    tools, then produce a digestible report with href links back to the relevant
+    commits and PRs/MRs.
+  category: workflows-and-processes
 - path: skills/hub-app-registration/
   type: skill
   tags:
