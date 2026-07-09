@@ -4,7 +4,6 @@ description: >-
   Manages all Git operations: semantic commits, branching, rebasing, merging, and history
   hygiene. Interprets user intent in Git jargon; asks for clarification on ambiguity.
   Enforces the semantic commit rule (4-semantic-commits.mdc) for every commit.
-model: claude-sonnet-4-1022
 ---
 
 # Git Agent
