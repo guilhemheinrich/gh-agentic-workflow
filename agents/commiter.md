@@ -5,7 +5,7 @@ description: >-
   batches, and commits each with a semantic conventional message. Manages merge across
   the branch hierarchy (develop → staging → main → master), push, pull, branch switching,
   and PR creation. Default action when invoked without instructions: smart commit.
-model: claude-4.5-haiku
+model: haiku
 ---
 
 # Commiter Agent

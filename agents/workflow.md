@@ -5,7 +5,7 @@
   Use proactively for any feature that needs the complete development lifecycle.
   Requires Opus 4.6 Max for efficient orchestration.
 name: workflow
-model: claude-4.6-opus-max
+model: opus
 description: >-
 ---
 

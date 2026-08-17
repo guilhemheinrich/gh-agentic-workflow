@@ -5,7 +5,7 @@ description: >-
   to learn conventions, identifies E2E gaps, and directly produces complete
   specs (spec.md, plan.md, tasks.md) aligned with project quality and patterns.
   Unlike qa-tester (analysis only), this command produces deliverables.
-model: claude-4.6-opus-max-thinking
+model: opus
 tags:
   - e2e
   - spec-kit

@@ -7,7 +7,7 @@
   Runs the /fix command. Use proactively after a debug investigation is complete.
   Requires Opus 4.6 Max for efficient, targeted fix implementation.
 name: fixer
-model: claude-4.5-haiku
+model: haiku
 description: Bug fixing agent that implements proper, architecturally sound fixes. Delegates to this
 ---
 

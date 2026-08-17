@@ -1,6 +1,6 @@
 ---
 name: cartographer
-model: claude-4.6-opus-max-thinking
+model: opus
 description: >-
   Roadmap and feature planning agent. Delegates to this agent when the user needs to
   plan a roadmap, break down a project into features, prioritize work, or scope a phase

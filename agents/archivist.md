@@ -5,7 +5,7 @@ description: >-
   tactical/strategic constraints at phase start) and learn (extract insights
   after merge). ALWAYS uses /speckit.memory command for the structured digest.
   Deduplicates rules; updates operational/tactical/strategic scopes.
-model: claude-opus-4-6-max-thinking
+model: opus
 tags:
   - documentation
   - spec-kit

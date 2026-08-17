@@ -5,7 +5,7 @@ description: >-
   against registries, classifies updates by SemVer tier, and produces a
   structured migration report with ordered upgrade plan, impact analysis, and
   links to changelogs and migration guides.
-model: claude-opus-4-6-max-thinking
+model: opus
 tags:
   - common
   - npm

@@ -8,7 +8,7 @@ description: >-
   proactively when you need to audit E2E coverage or plan E2E test
   specifications across the project. Requires Opus 4.6 Max Thinking for thorough
   spec analysis and reasoning.
-model: claude-4.6-opus-max-thinking
+model: opus
 tags:
   - e2e
   - spec-kit
