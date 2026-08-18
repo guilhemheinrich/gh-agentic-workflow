@@ -55,6 +55,13 @@ endef
 .DEFAULT_GOAL := help
 ```
 
+> **Champs awk notés `$$(N)` et non `$$N`** dans la recette ci-dessus : les deux
+> formes sont équivalentes (awk accepte une expression parenthésée comme numéro de
+> champ), mais un `$` suivi directement d'un chiffre dans un SKILL.md est remplacé
+> par le Nième argument lorsque le skill est invoqué en slash command. La forme sans
+> parenthèses se rendait avec un mot de l'utilisateur à la place du numéro de champ,
+> cassant silencieusement la recette copiée.
+
 > **`-include .env`** (avec le tiret) empêche une erreur si `.env` n'existe pas encore.
 
 ---
@@ -66,7 +73,7 @@ endef
 ```makefile
 help: ## Affiche les targets disponibles
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$(1), $$(2)}'
 ```
 
 ### `up` — démarrage de la stack
