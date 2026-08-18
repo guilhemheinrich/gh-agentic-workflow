@@ -1,0 +1,9 @@
+interface:
+  display_name: "Notion Spec Sync"
+  short_description: "Sync SpecKit specs into Notion"
+  default_prompt: "Use $notion-spec-sync to synchronize this repository's specs into Notion."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "notion"
+      description: "Notion MCP server used to search, create, and update pages and databases."
