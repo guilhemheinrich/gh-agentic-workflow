@@ -1,0 +1,22 @@
+{
+  "_comment": "Merge the `hooks` block into the consumer repo's .claude/settings.json. Pairs with .agents/hooks/validate-on-edit.sh (see ../SKILL.md).",
+  "_comment_timeout": "The hook enforces its own per-command budget (VALIDATE_BUDGET_S, default 3s). The 15s harness timeout here is only a backstop for a wedged docker daemon.",
+  "_comment_coverage": "PostToolUse Edit|Write does NOT cover files written through the Bash tool (`cat > f.ts`, `sed -i`, code generators). This hook reduces the verify stage; it does not replace it.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".agents/hooks/validate-on-edit.sh",
+            "timeout": 15,
+            "env": {
+              "VALIDATE_HOST": "claude"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

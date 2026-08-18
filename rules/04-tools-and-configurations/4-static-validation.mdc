@@ -1,0 +1,71 @@
+---
+description: >-
+  Install a bespoke static-validation hook in any project that has Docker and a
+  running dev stack. The hook fires on every agent file edit, routes the file to
+  a fast file-local linter inside the already-running container, and stays
+  silent unless there is a violation. Generated from the
+  static-validation-hooks skill.
+globs:
+  - .agents/hooks/validate-on-edit.sh
+  - .claude/settings.json
+  - .cursor/hooks.json
+alwaysApply: false
+---
+
+# Rule: Static Validation on Edit
+
+Static validation is the harness's job, not the agent's. A project that relies
+on an agent *remembering* to lint has turned a deterministic check into a prompt
+instruction — the first thing dropped when context fills up.
+
+Install the hook via the `static-validation-hooks` skill.
+
+## What it provides
+
+One file, `.agents/hooks/validate-on-edit.sh`, holding two layers:
+
+1. **Runner** — generic, copied as-is. Agent protocol (Claude `PostToolUse`,
+   Cursor `afterFileEdit`), per-edit time budget, cached container resolution,
+   retry brake, warn-once degradation.
+2. **Routing table** — project-specific, between the `BEGIN/END ROUTING TABLE`
+   markers. Written in five verbs: `svc`, `strip`, `fix`, `check`, `skip`.
+
+Plus a thin registration file per agent host (`.claude/settings.json`,
+`.cursor/hooks.json`). There is no cross-agent hook standard: the logic lives
+once under `.agents/`, each host gets a pointer.
+
+## When to install
+
+- Any project with Docker and a dev stack the team already runs (`make up`).
+- Any project where agents perform repeated edits.
+
+## When NOT to install
+
+- Projects with no container running during development — the hook resolves a
+  live container and silently degrades without one.
+- Languages whose only checker is whole-project (see below); there is nothing
+  fast enough to put in the table.
+
+## Non-negotiables
+
+| Rule                                                    | Why                                                        |
+| ------------------------------------------------------- | ---------------------------------------------------------- |
+| File-local linters only (eslint, biome, ruff, gofmt)    | The hook is synchronous on every write.                    |
+| No `tsc --noEmit`, `phpstan`, `mypy`, no test runners   | Whole-project, 10-40s. They belong in CI and verify.       |
+| Workspace branches before generic extension branches    | Otherwise the wrong workspace config lints the file.       |
+| Empty `*)` catch-all, never `skip`                      | An unroutable type must warn once, not rot silently.       |
+| Violations block (`exit 2`); everything else warns once | Unactionable noise trains agents to ignore hook output.    |
+
+## Coverage limits — the verify phase stays mandatory
+
+- Files written through the Bash tool (`cat >`, `sed -i`, code generators)
+  never trigger the hook.
+- In a linked git worktree the hook validates only if that worktree has its own
+  stack; when `COMPOSE_PROJECT_NAME` pins it to the main checkout's stack it
+  skips, because linting the main checkout's stale copy is a false pass.
+
+## See also
+
+- `skills/static-validation-hooks/SKILL.md` — runner, routing tables for
+  python / typescript / nestjs, registration adapters, anti-patterns.
+- `.agents/hooks/validate-on-edit.sh --doctor` — installation diagnostics.

@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy to .cursor/hooks.json in the consumer repo. Pairs with .agents/hooks/validate-on-edit.sh (see ../SKILL.md).",
+  "_comment_event": "Event name `afterFileEdit` is pinned from Cursor's hook docs. If Cursor renames it, change this field only — the script is unaffected.",
+  "_comment_protocol": "Cursor reads a JSON envelope on exit 0, not stderr on exit 2. VALIDATE_HOST forces that shape instead of relying on payload sniffing.",
+  "hooks": [
+    {
+      "event": "afterFileEdit",
+      "command": "${workspaceFolder}/.agents/hooks/validate-on-edit.sh",
+      "timeout": 15,
+      "env": {
+        "VALIDATE_HOST": "cursor"
+      }
+    }
+  ]
+}

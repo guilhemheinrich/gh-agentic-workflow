@@ -264,13 +264,15 @@ test:
 
 ---
 
-## See also — Lint-on-Edit
+## See also — Static validation on edit
 
-For per-file lint routing (`make lint FILE=…`) driven by an editor-agent hook,
-see the companion skill: [makefile-lint-router](../makefile-lint-router/SKILL.md).
+Per-file linting driven by an editor-agent hook does **not** go through the
+Makefile. See [static-validation-hooks](../static-validation-hooks/SKILL.md):
+the routing table lives in the hook itself, so there is no `make lint FILE=…`
+target to write and no second file to keep in sync.
 
 That skill documents:
-- The three-layer hook ↔ router ↔ sub-target architecture.
-- Per-language sub-target templates (TS/Biome, MD/markdownlint, YAML/yamllint, SH/shellcheck, Python/ruff, Go/go-vet).
-- The "wiring missing" failure mode (exit 65) and the "policy gap" exit code (64).
-- Anti-patterns to avoid.
+- The runner ↔ routing-table split inside `.agents/hooks/validate-on-edit.sh`.
+- Routing tables for python (ruff), typescript (eslint/biome) and nestjs.
+- Why whole-project checkers (`tsc --noEmit`, `phpstan`, `mypy`) must stay in CI.
+- Degraded behaviour, the retry brake, and the Bash-tool coverage gap.

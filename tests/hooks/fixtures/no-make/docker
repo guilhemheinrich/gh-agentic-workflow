@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-# Stub docker binary for graceful degradation tests.
-# This stub simulates docker being present but make being absent.
-# (Place this in a PATH that includes docker but NOT make.)
-printf 'Docker version 24.0.0 (stub)\n'
-exit 0
