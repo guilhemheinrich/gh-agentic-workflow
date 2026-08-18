@@ -28,61 +28,219 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "accessibility",
+        "animation",
+        "architecture",
         "astro",
         "auth",
+        "backend",
+        "background",
+        "canvas",
+        "ci-cd",
         "claude",
+        "clip-path",
+        "code-intelligence",
+        "common",
         "css",
         "cursor",
+        "ddd",
         "debugging",
+        "devops",
         "docker",
         "docker-compose",
         "documentation",
+        "domain",
         "e2e",
         "eslint",
         "fp-ts",
         "frontend",
         "git",
         "github",
+        "hexagonal",
         "hooks",
         "hub",
+        "indexing",
+        "infrastructure",
+        "interaction",
         "keycloak",
         "kubernetes",
         "lint",
         "lit",
+        "llm",
         "lsp",
         "make",
         "mcp",
+        "meta",
         "monorepo",
         "nestjs",
         "npm",
         "nuxt",
+        "performance",
         "playwright",
         "prisma",
+        "process",
+        "purity",
         "python",
+        "quality",
         "react",
         "refactoring",
+        "rules",
         "scraping",
         "security",
         "sentry",
+        "seo",
         "shell",
         "sonarqube",
         "spec-kit",
         "sql",
         "starlight",
-        "testing",
+        "svg",
         "tdd",
+        "testing",
+        "tooling",
         "typescript",
+        "typography",
+        "ui",
         "validation",
+        "verification",
         "versioning",
+        "vertical-slices",
         "vitest",
         "vscode",
         "vue",
+        "web-analysis",
         "web-components",
-        "ci-cd"
+        "workflow"
       ],
       "patternProperties": {
         ".*": {
           "type": "string"
+        }
+      },
+      "properties": {
+        "accessibility": {
+          "type": "string",
+          "const": "[NEW] accessibility"
+        },
+        "performance": {
+          "type": "string",
+          "const": "[NEW] performance"
+        },
+        "seo": {
+          "type": "string",
+          "const": "[NEW] seo"
+        },
+        "web-analysis": {
+          "type": "string",
+          "const": "[NEW] web-analysis"
+        },
+        "animation": {
+          "type": "string",
+          "const": "[NEW] animation"
+        },
+        "clip-path": {
+          "type": "string",
+          "const": "[NEW] clip-path"
+        },
+        "svg": {
+          "type": "string",
+          "const": "[NEW] svg"
+        },
+        "typography": {
+          "type": "string",
+          "const": "[NEW] typography"
+        },
+        "common": {
+          "type": "string",
+          "const": "[NEW] common"
+        },
+        "code-intelligence": {
+          "type": "string",
+          "const": "[NEW] code-intelligence"
+        },
+        "tooling": {
+          "type": "string",
+          "const": "[NEW] tooling"
+        },
+        "devops": {
+          "type": "string",
+          "const": "[NEW] devops"
+        },
+        "infrastructure": {
+          "type": "string",
+          "const": "[NEW] infrastructure"
+        },
+        "architecture": {
+          "type": "string",
+          "const": "[NEW] architecture"
+        },
+        "process": {
+          "type": "string",
+          "const": "[NEW] process"
+        },
+        "backend": {
+          "type": "string",
+          "const": "[NEW] backend"
+        },
+        "background": {
+          "type": "string",
+          "const": "[NEW] background"
+        },
+        "canvas": {
+          "type": "string",
+          "const": "[NEW] canvas"
+        },
+        "interaction": {
+          "type": "string",
+          "const": "[NEW] interaction"
+        },
+        "quality": {
+          "type": "string",
+          "const": "[NEW] quality"
+        },
+        "ui": {
+          "type": "string",
+          "const": "[NEW] ui"
+        },
+        "verification": {
+          "type": "string",
+          "const": "[NEW] verification"
+        },
+        "workflow": {
+          "type": "string",
+          "const": "[NEW] workflow"
+        },
+        "meta": {
+          "type": "string",
+          "const": "[NEW] meta"
+        },
+        "domain": {
+          "type": "string",
+          "const": "[NEW] domain"
+        },
+        "purity": {
+          "type": "string",
+          "const": "[NEW] purity"
+        },
+        "indexing": {
+          "type": "string",
+          "const": "[NEW] indexing"
+        },
+        "vertical-slices": {
+          "type": "string",
+          "const": "[NEW] vertical-slices"
+        },
+        "rules": {
+          "type": "string",
+          "const": "[NEW] rules"
+        },
+        "ddd": {
+          "type": "string",
+          "const": "[NEW] ddd"
+        },
+        "hexagonal": {
+          "type": "string",
+          "const": "[NEW] hexagonal"
         }
       }
     },
@@ -145,57 +303,89 @@
     "tag": {
       "type": "string",
       "enum": [
+        "accessibility",
+        "animation",
+        "architecture",
         "astro",
         "auth",
+        "backend",
+        "background",
+        "canvas",
+        "ci-cd",
         "claude",
+        "clip-path",
+        "code-intelligence",
+        "common",
         "css",
         "cursor",
+        "ddd",
         "debugging",
+        "devops",
         "docker",
         "docker-compose",
         "documentation",
+        "domain",
         "e2e",
         "eslint",
         "fp-ts",
         "frontend",
         "git",
         "github",
+        "hexagonal",
         "hooks",
         "hub",
+        "indexing",
+        "infrastructure",
+        "interaction",
         "keycloak",
         "kubernetes",
         "lint",
         "lit",
+        "llm",
         "lsp",
         "make",
         "mcp",
+        "meta",
         "monorepo",
         "nestjs",
         "npm",
         "nuxt",
+        "performance",
         "playwright",
         "prisma",
+        "process",
+        "purity",
         "python",
+        "quality",
         "react",
         "refactoring",
+        "rules",
         "scraping",
         "security",
         "sentry",
+        "seo",
         "shell",
         "sonarqube",
         "spec-kit",
         "sql",
         "starlight",
-        "testing",
+        "svg",
         "tdd",
+        "testing",
+        "tooling",
         "typescript",
+        "typography",
+        "ui",
         "validation",
+        "verification",
         "versioning",
+        "vertical-slices",
         "vitest",
         "vscode",
         "vue",
+        "web-analysis",
         "web-components",
-        "ci-cd"
+        "workflow"
       ]
     },
     "assetType": {
@@ -252,120 +442,160 @@
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/00-" }
+              "path": {
+                "pattern": "^rules/00-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "architecture" }
+              "category": {
+                "const": "architecture"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/01-" }
+              "path": {
+                "pattern": "^rules/01-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "standards" }
+              "category": {
+                "const": "standards"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/02-" }
+              "path": {
+                "pattern": "^rules/02-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "programming-languages" }
+              "category": {
+                "const": "programming-languages"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/03-" }
+              "path": {
+                "pattern": "^rules/03-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "frameworks-and-libraries" }
+              "category": {
+                "const": "frameworks-and-libraries"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/04-" }
+              "path": {
+                "pattern": "^rules/04-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "tools-and-configurations" }
+              "category": {
+                "const": "tools-and-configurations"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/05-" }
+              "path": {
+                "pattern": "^rules/05-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "workflows-and-processes" }
+              "category": {
+                "const": "workflows-and-processes"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/06-" }
+              "path": {
+                "pattern": "^rules/06-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "templates-and-models" }
+              "category": {
+                "const": "templates-and-models"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/07-" }
+              "path": {
+                "pattern": "^rules/07-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "quality-assurance" }
+              "category": {
+                "const": "quality-assurance"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/08-" }
+              "path": {
+                "pattern": "^rules/08-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "domain-specific" }
+              "category": {
+                "const": "domain-specific"
+              }
             }
           }
         },
         {
           "if": {
             "properties": {
-              "path": { "pattern": "^rules/09-" }
+              "path": {
+                "pattern": "^rules/09-"
+              }
             }
           },
           "then": {
             "properties": {
-              "category": { "const": "other" }
+              "category": {
+                "const": "other"
+              }
             }
           }
         }

@@ -1,1391 +1,1569 @@
 # yaml-language-server: $schema=./asset-registry.schema.json
 version: 2.0.0
 x-tag-descriptions:
+  accessibility: "[NEW] accessibility"
+  animation: "[NEW] animation"
+  architecture: "[NEW] architecture"
   astro: Astro framework, static site generation
   auth: Authentication, SSO, Keycloak
+  backend: "[NEW] backend"
+  background: "[NEW] background"
+  canvas: "[NEW] canvas"
   ci-cd: CI/CD pipelines, releases
-  css: CSS, Tailwind, UX layout
   claude: Claude Code agent configuration and hooks
+  clip-path: "[NEW] clip-path"
+  code-intelligence: "[NEW] code-intelligence"
+  common: "[NEW] common"
+  css: CSS, Tailwind, UX layout
   cursor: Cursor IDE skills, hooks, rules
+  ddd: "[NEW] ddd"
   debugging: Debugging, investigation, troubleshooting
+  devops: "[NEW] devops"
   docker: Docker, Dockerfile, images
   docker-compose: Docker Compose orchestration
   documentation: Documentation, Diátaxis, JSDoc
+  domain: "[NEW] domain"
   e2e: End-to-end testing (Playwright, Cypress)
   eslint: Linting, static analysis
   fp-ts: fp-ts / Effect functional programming
   frontend: Frontend development, UI frameworks
   git: Git, branching, commits
   github: GitHub CLI, Actions, PRs
+  hexagonal: "[NEW] hexagonal"
+  hooks: Editor-agent hooks (PostToolUse, afterFileEdit)
   hub: Modelo Hub, app registry, SSO ecosystem
+  indexing: "[NEW] indexing"
+  infrastructure: "[NEW] infrastructure"
+  interaction: "[NEW] interaction"
   keycloak: Keycloak identity and access management
   kubernetes: Kubernetes, Helm, orchestration
-  hooks: Editor-agent hooks (PostToolUse, afterFileEdit)
   lint: Linting, static analysis, code quality
   lit: Lit web components framework
+  llm: LLM provider APIs, prompts, cross-model review
   lsp: Language Server Protocol, code intelligence
   make: Makefile patterns and conventions
   mcp: Model Context Protocol servers and clients
+  meta: "[NEW] meta"
   monorepo: Monorepo, Turborepo, workspaces
   nestjs: NestJS framework
   npm: npm, private registry, packages
   nuxt: Nuxt framework
+  performance: "[NEW] performance"
   playwright: Playwright browser automation, E2E testing
   prisma: Prisma ORM
+  process: "[NEW] process"
+  purity: "[NEW] purity"
   python: Python
+  quality: "[NEW] quality"
   react: React ecosystem
   refactoring: Refactoring, code improvement
+  rules: "[NEW] rules"
   scraping: Web scraping and content extraction
   security: Security, hardening, encryption
   sentry: Sentry observability, error tracking
+  seo: "[NEW] seo"
   shell: Shell scripts, CLI tools, bash
   sonarqube: SonarQube code quality
   spec-kit: SpecKit workflow, specification tools
   sql: SQL databases, migrations, schemas
   starlight: Starlight documentation framework
-  testing: Testing, unit and integration tests
+  svg: "[NEW] svg"
   tdd: Test-Driven Development methodology
+  testing: Testing, unit and integration tests
+  tooling: "[NEW] tooling"
   typescript: TypeScript / JavaScript
+  typography: "[NEW] typography"
+  ui: "[NEW] ui"
   validation: Validation (Zod, Effect Schema, io-ts)
+  verification: "[NEW] verification"
   versioning: Versioning, semantic-release
+  vertical-slices: "[NEW] vertical-slices"
   vitest: Vitest unit test framework
   vscode: VS Code extensions, settings, and editor configuration
   vue: Vue.js ecosystem
+  web-analysis: "[NEW] web-analysis"
   web-components: Web Components, Lit
+  workflow: "[NEW] workflow"
 assets:
-- path: .agents/skills/documentation-writer/
-  type: skill
-  tags:
-  - documentation
-  description: Diátaxis Documentation Expert. An expert technical writer specializing
-    in creating high-quality software documentation, guided by the principles and
-    structure of the Diátaxis technical documentation authoring framework.
-  category: standards
-- path: .agents/skills/gh-cli/
-  type: skill
-  tags:
-  - github
-  - shell
-  description: GitHub CLI (gh) comprehensive reference for repositories, issues, pull
-    requests, Actions, projects, releases, gists, codespaces, organizations, extensions,
-    and all GitHub operations from the command line.
-  category: tools-and-configurations
-- path: .agents/skills/git-commit/
-  type: skill
-  tags:
-  - git
-  category: tools-and-configurations
-- path: .agents/skills/k8s-troubleshoot/
-  type: skill
-  tags:
-  - docker
-  - kubernetes
-  description: Diagnose and resolve Kubernetes infrastructure issues using kubectl
-    via Docker. Covers pod diagnostics, ConfigMap modifications, rollout management,
-    and DevOps report generation for out-of-scope actions.
-  category: tools-and-configurations
-- path: .agents/skills/speckit-git-commit/
-  type: skill
-  tags:
-  - git
-  - spec-kit
-  description: Auto-commit changes after a Spec Kit command completes
-  category: workflows-and-processes
-- path: .agents/skills/speckit-git-feature/
-  type: skill
-  tags:
-  - git
-  - spec-kit
-  description: Create a feature branch with sequential or timestamp numbering
-  category: workflows-and-processes
-- path: .agents/skills/speckit-git-initialize/
-  type: skill
-  tags:
-  - git
-  - spec-kit
-  description: Initialize a Git repository with an initial commit
-  category: workflows-and-processes
-- path: .agents/skills/speckit-git-remote/
-  type: skill
-  tags:
-  - git
-  - github
-  description: Detect Git remote URL for GitHub integration
-  category: workflows-and-processes
-- path: .agents/skills/speckit-git-validate/
-  type: skill
-  tags:
-  - git
-  - spec-kit
-  description: Validate current branch follows feature branch naming conventions
-  category: workflows-and-processes
-- path: .cursor/commands/k8s-troubleshoot.md
-  type: command
-  tags:
-  - kubernetes
-  description: Diagnose and resolve Kubernetes infrastructure issues. Identifies pod
-    errors, applies in-scope fixes (ConfigMap, rollout), and generates DevOps reports
-    for out-of-scope problems. All kubectl commands run inside Docker.
-  category: other
-- path: .cursor/commands/speckit.analyze.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Perform a non-destructive cross-artifact consistency and quality analysis
-    across spec.md, plan.md, and tasks.md after task generation.
-  category: other
-- path: .cursor/commands/speckit.checklist.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Generate a custom checklist for the current feature based on user requirements.
-  category: other
-- path: .cursor/commands/speckit.clarify.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Identify underspecified areas in the current feature spec by asking
-    up to 5 highly targeted clarification questions and encoding answers back into
-    the spec.
-  category: other
-- path: .cursor/commands/speckit.constitution.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Create or update the project constitution from interactive or provided
-    principle inputs, ensuring all dependent templates stay in sync.
-  category: other
-- path: .cursor/commands/speckit.fleet.review.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Cross-model evaluation of plan.md and tasks.md before implementation.
-    Reviews feasibility, completeness, dependency ordering, risk, and parallelization
-    correctness using a different model than was used to generate the artifacts.
-  category: other
-- path: .cursor/commands/speckit.fleet.run.md
-  type: command
-  tags:
-  - ci-cd
-  - cursor
-  - spec-kit
-  description: 'Orchestrate a full feature lifecycle through all SpecKit phases with
-    human-in-the-loop checkpoints: specify -> clarify -> plan -> checklist -> tasks
-    -> analyze -> cross-model review -> implement -> verify -> CI. Detects partially
-    complete features and resumes from the right phase.'
-  category: other
-- path: .cursor/commands/speckit.implement.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Execute the implementation plan by processing and executing all tasks
-    defined in tasks.md
-  category: other
-- path: .cursor/commands/speckit.plan.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Execute the implementation planning workflow using the plan template
-    to generate design artifacts.
-  category: other
-- path: .cursor/commands/speckit.specify.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Create or update the feature specification from a natural language
-    feature description.
-  category: other
-- path: .cursor/commands/speckit.tasks.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Generate an actionable, dependency-ordered tasks.md for the feature
-    based on available design artifacts.
-  category: other
-- path: .cursor/commands/speckit.taskstoissues.md
-  type: command
-  tags:
-  - cursor
-  - github
-  - spec-kit
-  description: Convert existing tasks into actionable, dependency-ordered GitHub issues
-    for the feature based on available design artifacts.
-  category: other
-- path: .cursor/commands/speckit.verify.run.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  - testing
-  description: Perform a non-destructive post-implementation verification gate validating
-    the implementation against spec.md, plan.md, tasks.md, and constitution.md.
-  category: other
-- path: .cursor/commands/spt.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if
-    any step requires user input.
-  category: other
-- path: .cursor/rules/0-rules-structure.mdc
-  type: rule
-  tags:
-  - cursor
-  description: 'Conventions for the rules/ tree: category folders, .mdc naming, required
-    frontmatter, and how globs scope each rule. Apply when creating or moving rules.'
-  category: architecture
-- path: .cursor/rules/4-specify-rules.mdc
-  type: rule
-  tags:
-  - cursor
-  - spec-kit
-  description: 'Meta pointer: canonical rules live under rules/ by category; use specify-rules
-    with the architecture and standards entries for this repo.'
-  category: workflows-and-processes
-- path: .cursor/rules/specify-rules.mdc
-  type: rule
-  tags:
-  - cursor
-  - spec-kit
-  description: 'Meta pointer: canonical project rules are under rules/; use this file
-    to find architecture, NestJS, and spec-kit context without duplicating long rules.'
-  category: workflows-and-processes
-- path: .specify/extensions/fleet/commands/fleet.md
-  type: command
-  tags:
-  - spec-kit
-  description: 'Orchestrate a full feature lifecycle through all SpecKit phases with
-    human-in-the-loop checkpoints: specify -> clarify -> plan -> checklist -> tasks
-    -> analyze -> cross-model review -> implement -> verify -> CI. Detects partially
-    complete features and resumes from the right phase.'
-  category: workflows-and-processes
-- path: .specify/extensions/fleet/commands/review.md
-  type: command
-  tags:
-  - spec-kit
-  description: Cross-model evaluation of plan.md and tasks.md before implementation.
-    Reviews feasibility, completeness, dependency ordering, risk, and parallelization
-    correctness using a different model than was used to generate the artifacts.
-  category: workflows-and-processes
-- path: .specify/extensions/git/commands/speckit.git.commit.md
-  type: command
-  tags:
-  - git
-  - spec-kit
-  description: Auto-commit changes after a Spec Kit command completes
-  category: workflows-and-processes
-- path: .specify/extensions/git/commands/speckit.git.feature.md
-  type: command
-  tags:
-  - git
-  - spec-kit
-  description: Create a feature branch with sequential or timestamp numbering
-  category: workflows-and-processes
-- path: .specify/extensions/git/commands/speckit.git.initialize.md
-  type: command
-  tags:
-  - git
-  - spec-kit
-  description: Initialize a Git repository with an initial commit
-  category: workflows-and-processes
-- path: .specify/extensions/git/commands/speckit.git.remote.md
-  type: command
-  tags:
-  - git
-  - github
-  description: Detect Git remote URL for GitHub integration
-  category: workflows-and-processes
-- path: .specify/extensions/git/commands/speckit.git.validate.md
-  type: command
-  tags:
-  - git
-  - spec-kit
-  description: Validate current branch follows feature branch naming conventions
-  category: workflows-and-processes
-- path: .specify/extensions/verify/commands/verify.md
-  type: command
-  tags:
-  - spec-kit
-  - testing
-  description: Perform a non-destructive post-implementation verification gate validating
-    the implementation against spec.md, plan.md, tasks.md, and constitution.md.
-  category: workflows-and-processes
-- path: agents/archivist.md
-  type: agent
-  tags:
-  - documentation
-  - spec-kit
-  description: 'Manages the project knowledge graph at memory/ (repo root): recall
-    (inject tactical/strategic constraints at phase start) and learn (extract insights
-    after merge). ALWAYS uses /speckit.memory command for the structured digest. Deduplicates
-    rules; updates operational/tactical/strategic scopes.'
-  category: workflows-and-processes
-- path: agents/cartographer.md
-  type: agent
-  tags:
-  - spec-kit
-  description: Roadmap and feature planning agent. Delegates to this agent when the
-    user needs to plan a roadmap, break down a project into features, prioritize work,
-    or scope a phase of development. Runs /specify with a phase-level perspective.
-    Use proactively when a project needs strategic planning before individual feature
-    specification. Requires Opus 4.6 Max Thinking for deep strategic reasoning and
-    critical analysis.
-  category: workflows-and-processes
-- path: agents/debugger.md
-  type: agent
-  tags:
-  - debugging
-  - spec-kit
-  description: Fixes failing tests or defects in the same isolated worktree where
-    the Tester reported failure; signals Orchestrator to re-run Tester. Reads memory
-    from memory/ at the repo root.
-  category: quality-assurance
-- path: agents/dependency-updater.md
-  type: agent
-  tags:
-  - npm
-  description: 'Dependency & Migration Strategist: scans package manifests, audits
-    versions against registries, classifies updates by SemVer tier, and produces a
-    structured migration report with ordered upgrade plan, impact analysis, and links
-    to changelogs and migration guides.'
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: agents/gitter.md
-  type: agent
-  tags:
-  - git
-  - github
-  description: 'Handles everyday Git workflows: analyzes all pending changes, groups
-    them into logical batches, and commits each with a semantic conventional message.
-    Manages merge across the branch hierarchy (develop → staging → main → master),
-    push, pull, branch switching, and PR creation. Default action when invoked without
-    instructions: smart commit.'
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: agents/implementer.md
-  type: agent
-  tags:
-  - spec-kit
-  description: Implements code only inside the Orchestrator-assigned Git worktree.
-    No cross-worktree reads; follows project standards for later Sonar/review on the
-    phase branch. Reads specs from specs/ at the repo root; uses Speckit commands
-    when applicable.
-  category: workflows-and-processes
-- path: agents/orchestrator.md
-  type: agent
-  tags:
-  - git
-  - spec-kit
-  description: 'Orchestrates the agentic lifecycle using a parallel Git worktree strategy:
-    phase branch, isolated spec worktrees, mandatory tester gate before merge, reconciliation
-    on phase, then reviewer. Invokes Archivist at phase start (recall) and after quality
-    closure (learn). All agents use Speckit commands exclusively; specs/ and memory/
-    live at the repo root.'
-  category: workflows-and-processes
-- path: agents/qa-tester.md
-  type: agent
-  tags:
-  - e2e
-  - spec-kit
-  - testing
-  description: E2E test gap analysis agent. Deeply studies ALL project specifications
-    to understand conventions, depth, and patterns, then extracts UI-facing user stories,
-    identifies which ones lack E2E test coverage, and produces rich, context-aware
-    /specify prompts for writing full user-journey test specs. Use proactively when
-    you need to audit E2E coverage or plan E2E test specifications across the project.
-    Requires Opus 4.6 Max Thinking for thorough spec analysis and reasoning.
-  category: quality-assurance
-- path: agents/reviewer.md
-  type: agent
-  tags:
-  - spec-kit
-  description: 'Final quality audit on phase branch after parallel spec merges: logical
-    conflicts, Sonar. ALWAYS uses /speckit.analyze command. Authorizes merge to main
-    only after quality gate passes.'
-  category: quality-assurance
-- path: agents/scraper.md
-  type: agent
-  tags:
-  - playwright
-  - scraping
-  description: Pure web navigator powered by Playwright MCP. Crawls pages (same-domain
-    BFS), extracts raw DOM data (tables, structured data, metadata), captures screenshots
-    and accessibility snapshots. Produces artifacts in SCRAP/{domain}/. Never analyzes
-    or interprets — only navigates and reports raw observations.
-  category: other
-- path: agents/specifier.md
-  type: agent
-  tags:
-  - spec-kit
-  description: 'Technical blueprint for one spec: clear boundaries, shared-file warnings.
-    ALWAYS uses /speckit.specify command; specs live under specs/ at the repo root.'
-  category: workflows-and-processes
-- path: agents/tester.md
-  type: agent
-  tags:
-  - spec-kit
-  - testing
-  description: Runs the test suite in the isolated worktree; gates merge until success.
-    On failure, produces logs for the Debugger in the same worktree context. Reads
-    specs from specs/ and memory from memory/ at the repo root.
-  category: quality-assurance
-- path: commands/commit.md
-  type: command
-  tags:
-  - git
-  description: Smart commit using the gitter agent. Analyzes all pending changes,
-    groups them into logical semantic batches, and commits each with a conventional
-    message.
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: commands/env-setup.md
-  type: command
-  tags:
-  - docker
-  - hub
-  description: Manage dual-mode environment files (Hub vs hubless/standalone). Generates
-    .env.example, .env.hub.example (committed templates) and .env.hub, .env.hubless
-    (local ready-to-use presets). Audits .gitignore and detects the current .env mode.
-  category: tools-and-configurations
-- path: commands/improve.md
-  type: command
-  tags:
-  - refactoring
-  description: 'Continuous code improvement agent. Iterates on project quality by
-    leveraging SonarQube (MCP + CLI scanner) and dedicated Git branches. Loop: Scan
-    → Analyze → Plan → Fix → Review → Re-scan until Quality Gate is green.'
-  category: quality-assurance
-- path: commands/k8s-troubleshoot.md
-  type: command
-  tags:
-  - kubernetes
-  description: Diagnose and resolve Kubernetes infrastructure issues. Identifies pod
-    errors, applies in-scope fixes (ConfigMap, rollout), and generates DevOps reports
-    for out-of-scope problems. All kubectl commands run inside Docker.
-  category: tools-and-configurations
-- path: commands/specify-mcp-backend.md
-  type: command
-  tags:
-  - documentation
-  - security
-  - spec-kit
-  description: Generic prompt for /speckit.specify to create a backend MCP server
-    specification. Covers transport choice, endpoint contract, JSON-RPC lifecycle,
-    capability modeling, security, observability, testing, and rollout.
-  category: templates-and-models
-- path: commands/specify-mcp-chatbot.md
-  type: command
-  tags:
-  - react
-  - security
-  - spec-kit
-  - typescript
-  description: Generic prompt for /speckit.specify to create an MCP-powered chatbot
-    or frontend client specification. Covers chat UI, product chat endpoints, streaming
-    events, MCP client lifecycle, backend orchestration boundaries, security, testing,
-    and rollout.
-  category: templates-and-models
-- path: commands/merge.md
-  type: command
-  tags:
-  - git
-  description: Merge current branch into the target using the gitter agent. Cautious
-    about regressions. If the merge strategy is ambiguous or not specified, asks the
-    user for clarification before proceeding.
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: commands/pre-kubify.md
-  type: command
-  tags:
-  - kubernetes
-  description: Scans a project to produce a concise infrastructure readiness report
-    for the DevOps team before running /kubify. Detects env vars, secrets, build-time
-    vs runtime config, services topology, and generates ASCII architecture diagrams
-    for pprod and prod environments.
-  category: tools-and-configurations
-- path: commands/pr-history.md
-  type: command
-  tags:
-  - git
-  - github
-  - shell
-  description: Show the latest merged pull request descriptions in the terminal, newest
-    merge first, so the project state and recent work are easy to scan.
-  category: tools-and-configurations
-- path: commands/push.md
-  type: command
-  tags:
-  - git
-  description: Push current branch to the remote using the gitter agent. If the current
-    branch is a feature branch, returns a link to create a Pull Request with a suggested
-    description.
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: commands/specify-qa.md
-  type: command
-  tags:
-  - e2e
-  - spec-kit
-  - testing
-  description: E2E specification command driven by project analysis. Scans all existing
-    specs to learn conventions, identifies E2E gaps, and directly produces complete
-    specs (spec.md, plan.md, tasks.md) aligned with project quality and patterns.
-    Unlike qa-tester (analysis only), this command produces deliverables.
-  category: quality-assurance
-- path: commands/scrape-site.md
-  type: command
-  tags:
-  - playwright
-  - scraping
-  description: Intent-driven scraping orchestrator. Detects scraping goal (data extraction,
-    user flow, site structure), builds a scoped brief, delegates to the scraper agent,
-    and verifies deliverables. Never navigates or extracts data itself.
-  category: other
-- path: .agents/skills/web-analysis/SKILL.md
-  type: skill
-  tags:
-  - docker
-  - security
-  description: Deterministic web analysis tools executable via Docker. Covers Lighthouse
-    (performance), pa11y (accessibility), sitespeed.io (metrics), broken-link-checker,
-    security headers, Wappalyzer (tech detection), and html-validate. All tools produce
-    machine-readable output without host dependencies.
-  category: quality-assurance
-- path: commands/spec-release-and-versioning.md
-  type: command
-  tags:
-  - ci-cd
-  - versioning
-  description: Transform a versioning or release-related need into a full Speckit
-    specification. Covers application version metadata contracts, UI display rules,
-    semantic-release CI/CD governance, and migration planning. References the app-version-surface
-    and semantic-release-js-ts-pipeline skills.
-  category: tools-and-configurations
-- path: commands/spt.md
-  type: command
-  tags:
-  - cursor
-  - spec-kit
-  description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if
-    any step requires user input.
-  category: workflows-and-processes
-- path: rules/00-architecture/0-hexagonal-ddd.mdc
-  type: rule
-  description: 'Hexagonal (ports/adapters) layering: pure domain, application use
-    cases, infrastructure adapters. Dependency rule and mandatory design properties.'
-  category: architecture
-- path: rules/00-architecture/0-makefile-structure.mdc
-  type: rule
-  tags:
-  - docker
-  - make
-  description: 'Root Makefile invariants: mandatory targets, env-driven configuration,
-    PHONY targets, and Docker-first execution. Templates live in a skill.'
-  category: architecture
-  bundles:
-  - common
-- path: rules/00-architecture/0-monorepo.mdc
-  type: rule
-  tags:
-  - monorepo
-  description: 'Monorepo workspace invariants: package boundaries, acyclic package
-    graph, shared contracts, and no upward imports from shared libraries to apps.'
-  category: architecture
-- path: rules/00-architecture/0-rules-structure.mdc
-  type: rule
-  tags:
-  - cursor
-  description: 'Conventions for the rules/ tree: category folders, .mdc naming, required
-    frontmatter, and how globs scope each rule. Apply when creating or moving rules.'
-  category: architecture
-- path: rules/00-architecture/0-vertical-slices.mdc
-  type: rule
-  description: 'Vertical-slice and functional-core / imperative-shell properties:
-    where pure logic lives, how slices integrate, and a decision policy for where
-    edits go.'
-  category: architecture
-- path: rules/01-standards/1-code-documentation-for-indexing.mdc
-  type: rule
-  tags:
-  - documentation
-  description: Rich inline documentation so embeddings and static analysis can resolve
-    intent, relationships, and usage without reading the whole file.
-  category: standards
-  bundles:
-  - common
-- path: rules/01-standards/1-pure-domain.mdc
-  type: rule
-  description: 'Language-agnostic pure domain: no side effects in core logic, errors
-    as values, no I/O in domain types. Complements language-specific 2-pure-domain.'
-  category: standards
-- path: rules/02-programming-languages/2-anti-currying.mdc
-  type: rule
-  tags:
-  - fp-ts
-  - typescript
-  description: Rule 3 — Avoid deep currying and excessive point-free style; prefer
-    named parameters and readable steps.
-  category: programming-languages
-- path: rules/02-programming-languages/2-explicit-typing.mdc
-  type: rule
-  tags:
-  - typescript
-  description: Rule 1 — Explicit typing in domain code (no any, explicit function
-    signatures) for LSP and RAG-friendly contracts.
-  category: programming-languages
-- path: rules/02-programming-languages/2-pure-domain.mdc
-  type: rule
-  tags:
-  - fp-ts
-  - nestjs
-  - typescript
-  description: 'Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed
-    errors; optional single-file domain for small modules.'
-  category: programming-languages
-- path: rules/02-programming-languages/2-semantic-jsdoc.mdc
-  type: rule
-  tags:
-  - documentation
-  - typescript
-  description: Rule 2 — File-level and per-function JSDoc with @description for embedding-friendly
-    domain documentation.
-  category: programming-languages
-- path: rules/03-frameworks-and-libraries/3-flat-orchestration.mdc
-  type: rule
-  tags:
-  - nestjs
-  - typescript
-  description: 'Rule 5 — NestJS use cases as thin injectable services: sequential
-    pipe from validation to domain to persistence.'
-  category: frameworks-and-libraries
-- path: rules/03-frameworks-and-libraries/3-lit.mdc
-  type: rule
-  tags:
-  - lit
-  - web-components
-  description: 'Invariants for Lit-based Web Components: reactivity, lifecycle, shadow
-    DOM, and event contract. Cheatsheet and detailed patterns are in a skill.'
-  category: frameworks-and-libraries
-- path: rules/03-frameworks-and-libraries/3-module-isolation.mdc
-  type: rule
-  tags:
-  - nestjs
-  description: Rule 7 — No deep imports across vertical slices; use shared kernel
-    or public facades (services/events).
-  category: frameworks-and-libraries
-- path: rules/03-frameworks-and-libraries/3-nestjs-architecture.mdc
-  type: rule
-  tags:
-  - fp-ts
-  - nestjs
-  - typescript
-  description: NestJS stack and canonical folder layout for vertical-slice modules;
-    index of rules R1–R7 and links to fp-ts skills. Use with 0-vertical-slices and
-    slice rules.
-  category: frameworks-and-libraries
-- path: rules/03-frameworks-and-libraries/3-typed-boundaries.mdc
-  type: rule
-  tags:
-  - nestjs
-  - typescript
-  - validation
-  description: Rule 6 — Validate all external I/O with Zod or Effect Schema; technology-prefixed
-    infrastructure filenames.
-  category: frameworks-and-libraries
-- path: rules/03-frameworks-and-libraries/3-vitest-conventions.mdc
-  type: rule
-  tags:
-  - testing
-  - typescript
-  - vitest
-  description: 'Vitest usage for this stack: run via Docker, configs per app, mocks,
-    and file layout for Hono/hexagonal services.'
-  category: frameworks-and-libraries
-- path: rules/03-frameworks-and-libraries/3-wc-live-demos-in-starlight.mdc
-  type: rule
-  tags:
-  - astro
-  - documentation
-  - starlight
-  - web-components
-  description: 'Invariants for live Web Component docs in Starlight: iframe isolation,
-    bidirectional code↔preview sync, vanilla playground host, controlled component
-    contract.'
-  category: frameworks-and-libraries
-- path: rules/04-tools-and-configurations/4-npm-private-registry.mdc
-  type: rule
-  tags:
-  - docker
-  - monorepo
-  - npm
-  - security
-  description: 'Declarative invariants for private npm scopes: single root .npmrc,
-    token via env, Docker build hygiene, no token in runtime images. Procedures in
-    a skill.'
-  category: tools-and-configurations
-- path: rules/04-tools-and-configurations/4-semantic-commits.mdc
-  type: rule
-  tags:
-  - git
-  description: Commit hygiene — semantic, feature-scoped commits with clean file grouping
-    for human and agent readability.
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: rules/04-tools-and-configurations/4-specify-rules.mdc
-  type: rule
-  tags:
-  - cursor
-  - spec-kit
-  description: 'Meta pointer: canonical rules live under rules/ by category; use specify-rules
-    with the architecture and standards entries for this repo.'
-  category: tools-and-configurations
-- path: rules/05-workflows-and-processes/5-spec-driven-dev.mdc
-  type: rule
-  tags:
-  - spec-kit
-  description: 'Spec-driven workflow: spec folder layout, indexation, and implementation
-    handoff using SpecKit-style commands.'
-  category: workflows-and-processes
-  bundles:
-  - common
-- path: rules/05-workflows-and-processes/5-spec-indexing.mdc
-  type: rule
-  tags:
-  - spec-kit
-  description: Spec and fix indexing rules. Defines the format, sequence, index conflict
-    resolution, and archive handling. Referenced by /specify, /specify-qa, and /index.
-  category: workflows-and-processes
-  bundles:
-  - common
-- path: rules/07-quality-assurance/7-testing.mdc
-  type: rule
-  tags:
-  - tdd
-  - testing
-  description: 'Agnostic testing principles: TDD loop, test pyramid, naming, and AAA.
-    No framework syntax — framework rules live under 03-* or project skills.'
-  category: quality-assurance
-  bundles:
-  - common
-- path: rules/07-quality-assurance/7-ui-verification.mdc
-  type: rule
-  tags:
-  - frontend
-  description: Dev-time, in-browser visual and interactive verification invariant
-    for any frontend change. Every modified UI surface MUST be observed in a real
-    browser before implementation is complete (P1 visual diff); every newly introduced
-    interactive element MUST be exercised and its observable outcome asserted against
-    the spec (P2 interactive validation). Applies to .tsx, .jsx, .vue, .svelte, .html,
-    .css, and .scss files.
-  category: quality-assurance
-- path: skills/app-version-surface/
-  type: skill
-  tags:
-  - versioning
-  description: Standardize how application components expose, transport, and display
-    version metadata across the organization. Covers frontend, backend, worker, gateway,
-    and embedded packages. Use when adding version display, configuring build metadata
-    injection, creating version endpoints, or implementing version aggregation for
-    multi-component applications.
-  category: quality-assurance
-- path: skills/authorization-models/
-  type: skill
-  tags:
-  - auth
-  - documentation
-  - security
-  description: Centralize authorization model concepts and implementation guidance
-    for RBAC, ABAC, ReBAC, ACL, PBAC/policy-as-code, OPA, and Apache Casbin. Use
-    when designing access-control specs, choosing an authorization model, writing
-    authorization architecture decisions, or implementing/configuring OPA Rego policies
-    or Casbin models, policies, adapters, and enforcers.
-  category: architecture
-- path: skills/docker-compose-orchestration/
-  type: skill
-  tags:
-  - docker
-  - docker-compose
-  description: Container orchestration with Docker Compose for multi-container applications,
-    networking, volumes, and production deployment
-  category: tools-and-configurations
-- path: skills/compose-env-ports/
-  type: skill
-  tags:
-  - docker
-  - docker-compose
-  - shell
-  description: Detect and resolve local Docker Compose host-port collisions by reading
-    compose files, extracting .env-backed published-port variables, checking Docker
-    Engine and local listener ports, and generating deterministic free port assignments.
-  category: tools-and-configurations
-- path: skills/docker-containerization/
-  type: skill
-  tags:
-  - ci-cd
-  - docker
-  - security
-  description: Create optimized Docker containers with multi-stage builds, security
-    best practices, and minimal image sizes. Use when containerizing applications,
-    creating Dockerfiles, optimizing container images, or setting up Docker Compose
-    services.
-  category: tools-and-configurations
-- path: skills/docker-expert/
-  type: skill
-  tags:
-  - docker
-  description: You are an advanced Docker containerization expert with comprehensive,
-    practical knowledge of container optimization, security hardening, multi-stage
-    builds, orchestration patterns, and production deployment strategies based on
-    current industry best practices.
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: skills/docker-hotreload-volume/
-  type: skill
-  tags:
-  - docker
-  - typescript
-  description: A universal Docker volume pattern to reconcile hot-reload with container-isolated
-    node_modules
-  category: tools-and-configurations
-- path: skills/dockerfile-dev-prod/
-  type: skill
-  tags:
-  - ci-cd
-  - docker
-  description: Write Dockerfiles with multi-stage builds for development and production.
-    Use when creating a Dockerfile, configuring dev vs production builds, handling
-    lockfile generation via make lock, or debugging dependency install issues in Docker.
-  category: tools-and-configurations
-- path: skills/dockerfile-multi-stage/
-  type: skill
-  tags:
-  - docker
-  description: Create optimized multi-stage Dockerfiles for any language or framework
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: skills/devops-pipeline-design/
-  type: skill
-  tags:
-  - ci-cd
-  - docker
-  - github
-  - kubernetes
-  - security
-  description: Design cloud deployment CI/CD pipelines from first principles. Use
-    when creating or reviewing GitHub Actions, Bitbucket Pipelines, Azure DevOps,
-    Kubernetes GitOps, AWS ECS/S3/ECR, Docker build, environment promotion, runtime
-    configuration, build-time variables, or secrets handling workflows.
-  category: workflows-and-processes
-- path: skills/documentation-writer/
-  type: skill
-  tags:
-  - documentation
-  description: Diátaxis Documentation Expert. An expert technical writer specializing
-    in creating high-quality software documentation, guided by the principles and
-    structure of the Diátaxis technical documentation authoring framework.
-  category: standards
-  bundles:
-  - common
-- path: skills/e2e-playwright/
-  type: skill
-  tags:
-  - docker
-  - e2e
-  - testing
-  description: End-to-end testing with Playwright using a dedicated Docker Compose
-    environment. Use when setting up E2E tests, writing Playwright specs, configuring
-    test infrastructure, or debugging E2E CI pipelines.
-  category: quality-assurance
-- path: skills/e2e-spec-writing/
-  type: skill
-  tags:
-  - documentation
-  - e2e
-  - spec-kit
-  - testing
-  description: Write complete E2E test specifications (spec.md, plan.md, tasks.md)
-    following project conventions. Use when producing E2E specs, writing end-to-end
-    test scenarios, specifying Playwright/Cypress tests, or when a specify/speckit
-    command needs to output E2E deliverables.
-  category: quality-assurance
-- path: skills/eslint-solid-nestjs/
-  type: skill
-  tags:
-  - eslint
-  - monorepo
-  - nestjs
-  - typescript
-  description: ESLint Flat Config standard for TypeScript/NestJS monorepos — enforces
-    SOLID principles, Clean Architecture layer boundaries, and best practices via
-    static analysis.
-  category: frameworks-and-libraries
-- path: skills/find-skills/
-  type: skill
-  tags:
-  - cursor
-  description: Helps users discover and install agent skills when they ask questions
-    like "how do I do X", "find a skill for X", "is there a skill that can...", or
-    express interest in extending capabilities. This skill should be used when the
-    user is looking for functionality that might exist as an installable skill.
-  category: other
-  bundles:
-  - common
-- path: skills/fluid-architecture-scroll-mastery/
-  type: skill
-  tags:
-  - css
-  - vue
-  - web-components
-  description: Eliminate double scrollbars and ensure seamless component dynamic expansion
-  category: frameworks-and-libraries
-- path: skills/fp-ts-async-practical/
-  type: skill
-  tags:
-  - fp-ts
-  - typescript
-  description: Practical async patterns using TaskEither - clean pipelines instead
-    of try/catch hell, with real API examples
-  category: programming-languages
-- path: skills/fp-ts-backend/
-  type: skill
-  tags:
-  - fp-ts
-  - typescript
-  description: Functional programming patterns for Node.js/Deno backend development
-    using fp-ts, ReaderTaskEither, and functional dependency injection
-  category: programming-languages
-- path: skills/fp-ts-errors/
-  type: skill
-  tags:
-  - fp-ts
-  - typescript
-  description: Handle errors as values using fp-ts Either and TaskEither for cleaner,
-    more predictable TypeScript code. Use when implementing error handling patterns
-    with fp-ts.
-  category: programming-languages
-- path: skills/fp-ts-pragmatic/
-  type: skill
-  tags:
-  - fp-ts
-  - typescript
-  description: A practical, jargon-free guide to fp-ts functional programming - the
-    80/20 approach that gets results without the academic overhead. Use when writing
-    TypeScript with fp-ts library.
-  category: programming-languages
-- path: skills/fp-ts-validation/
-  type: skill
-  tags:
-  - fp-ts
-  - typescript
-  - validation
-  description: Validation patterns using fp-ts with error accumulation, form validation,
-    and API input validation
-  category: programming-languages
-- path: skills/gh-cli/
-  type: skill
-  tags:
-  - git
-  - github
-  - shell
-  description: GitHub CLI (gh) comprehensive reference for repositories, issues, pull
-    requests, Actions, projects, releases, gists, codespaces, organizations, extensions,
-    and all GitHub operations from the command line.
-  category: tools-and-configurations
-- path: skills/git-commit/
-  type: skill
-  tags:
-  - git
-  description: 'Execute git commit with conventional commit message analysis, intelligent
-    staging, and message generation. Use when user asks to commit changes, create
-    a git commit, or mentions "/commit". Supports: (1) Auto-detecting type and scope
-    from changes, (2) Generating conventional commit messages from diff, (3) Interactive
-    commit with optional type/scope/description overrides, (4) Intelligent file staging
-    for logical grouping'
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: skills/git-activity-report/
-  type: skill
-  tags:
-  - git
-  - github
-  - shell
-  - documentation
-  description: Generate sourced Markdown activity reports from Git branch history.
-    Use when Codex needs to scan commits and pull requests or merge requests for
-    a target branch over a configurable lookback period using git, Docker, optional
-    provider CLIs such as gh, glab, or Bitbucket tools, and optional MCP provider
-    tools, then produce a digestible report with href links back to the relevant
-    commits and PRs/MRs.
-  category: workflows-and-processes
-- path: skills/hub-app-registration/
-  type: skill
-  tags:
-  - auth
-  - docker
-  - hub
-  description: Register a downstream application in the Modelo Hub ecosystem. Use
-    when onboarding a new app, configuring Hub authentication, debugging registration/auth
-    issues, or understanding the Hub SSO flow.
-  category: domain-specific
-- path: skills/hub-documentation/
-  type: skill
-  tags:
-  - documentation
-  - hub
-  description: Modelo Hub documentation map
-  category: domain-specific
-- path: skills/jsdoc-typescript-docs/
-  type: skill
-  tags:
-  - documentation
-  - typescript
-  description: Documents TypeScript code with JSDoc comments, generates API documentation,
-    and creates type-safe documentation. Use when users request "JSDoc", "code documentation",
-    "API docs", "TypeDoc", or "inline documentation".
-  category: programming-languages
-- path: skills/javascript-resizable-panel/
-  type: skill
-  tags:
-  - css
-  - frontend
-  - typescript
-  description: Build controlled drag-to-resize sidebars, split panes, and panels in
-    frontend applications using CSS variables, Pointer Events, accessible resize handles,
-    cleanup-safe listeners, and CSS clamp limits.
-  category: frameworks-and-libraries
-- path: skills/k8s-troubleshoot/
-  type: skill
-  tags:
-  - docker
-  - kubernetes
-  description: Diagnose and resolve Kubernetes infrastructure issues using kubectl
-    via Docker. Covers pod diagnostics, ConfigMap modifications, rollout management,
-    and DevOps report generation for out-of-scope actions.
-  category: tools-and-configurations
-- path: skills/lit-web-components/
-  type: skill
-  tags:
-  - lit
-  - web-components
-  description: 'Lit 3 web components: base class, reactivity, lifecycle, templates,
-    events, overlay patterns, and anti-patterns. Use when building or debugging Lit
-    WCs.'
-  category: frameworks-and-libraries
-- path: skills/lsp-mcp/
-  type: skill
-  tags:
-  - mcp
-  - lsp
-  - vscode
-  description: Install, configure, and use the CJL.lsp-mcp VS Code extension — an MCP
-    server that bridges VS Code's already-running Language Servers (LSP) to AI agents.
-    Covers MCP client setup for Claude Code, Cursor, and OpenCode at both project and
-    global scope, installing the right LSP-providing VS Code extension per language
-    (Python, JS/TS, HTML, CSS, Vue, Nuxt, PHP, Symfony, Go), registering extensions
-    in the project .vscode/settings.json, and driving the execute_lsp tool (hover,
-    definition, references, rename, call hierarchy, symbols).
-  category: tools-and-configurations
-- path: skills/makefile-conventions/
-  type: skill
-  tags:
-  - docker
-  - make
-  - monorepo
-  description: 'Templates and procedures for a project-root Makefile: env vars, targets
-    up, down, test, setup, db-*, coverage. Use when authoring or debugging Makefiles.'
-  category: architecture
-  bundles:
-  - common
-- path: skills/mcp-chatbot-client/
-  type: skill
-  tags:
-  - documentation
-  - nestjs
-  - python
-  - react
-  - security
-  - spec-kit
-  - typescript
-  description: Create technology-agnostic specifications for adding an MCP-powered
-    chatbot or MCP client to an application. Covers frontend chat UI, backend orchestration,
-    MCP client lifecycle, Streamable HTTP or stdio transport, conversation/message
-    endpoints, streaming updates, tool discovery, and chatbot/MCP participant roles.
-  category: frameworks-and-libraries
-- path: skills/mcp-server-backend/
-  type: skill
-  tags:
-  - documentation
-  - nestjs
-  - python
-  - spec-kit
-  - typescript
-  description: Create technology-agnostic specifications for adding a Model Context
-    Protocol (MCP) server to an existing backend application. Use when planning backend
-    MCP server integration, choosing stdio vs Streamable HTTP transport, documenting
-    MCP transport endpoints, JSON-RPC lifecycle, tools/resources/prompts, authorization,
-    security, observability, and MCP client/server roles.
-  category: frameworks-and-libraries
-- path: skills/model-tenant-agency-user-db/
-  type: skill
-  tags:
-  - auth
-  - security
-  - sql
-  description: Model tenant, agency, and user database structures for real-estate
-    SaaS products such as Septeo applications. Use when designing MCD/ERD, SQL schemas,
-    PostgreSQL RLS, role rules, tenant isolation, agency scoping, or delete/retention
-    semantics for tenant/agency/user domains with tenant admins, agency admins, and
-    simple users.
-  category: domain-specific
-- path: skills/multi-stage-dockerfile/
-  type: skill
-  tags:
-  - ci-cd
-  - docker
-  description: Create optimized multi-stage Dockerfiles for any language or framework,
-    with dev/prod lockfile strategy. Use when creating a Dockerfile, configuring dev
-    vs production builds, handling lockfile generation via make lock, or debugging
-    dependency install issues in Docker (especially in monorepos with turbo prune).
-  category: tools-and-configurations
-  bundles:
-  - common
-- path: skills/npm-private-registry/
-  type: skill
-  tags:
-  - ci-cd
-  - docker
-  - monorepo
-  - npm
-  description: Integrate private npm packages in a Turborepo + bun + Docker monorepo.
-    Use when adding a scoped private package (@org/pkg), configuring registry auth
-    in Docker builds, or debugging NPM_TOKEN issues. Covers .npmrc, Dockerfile multi-stage,
-    compose build args, and security cleanup.
-  category: tools-and-configurations
-- path: skills/nuxt-ui/
-  type: skill
-  tags:
-  - css
-  - nuxt
-  - vue
-  description: Build UIs with @nuxt/ui v4 — 125+ accessible Vue components with Tailwind
-    CSS theming. Use when creating interfaces, customizing themes to match a brand,
-    building forms, or composing layouts like dashboards, docs sites, and chat interfaces.
-  category: frameworks-and-libraries
-- path: skills/nuxt/
-  type: skill
-  tags:
-  - nuxt
-  - vue
-  description: Nuxt full-stack Vue framework with SSR, auto-imports, and file-based
-    routing. Use when working with Nuxt apps, server routes, useFetch, middleware,
-    or hybrid rendering.
-  category: frameworks-and-libraries
-- path: skills/scroll-mastery/
-  type: skill
-  tags:
-  - css
-  - web-components
-  description: Scroll and UX mastery
-  category: frameworks-and-libraries
-- path: skills/semantic-release-js-ts-pipeline/
-  type: skill
-  tags:
-  - ci-cd
-  - git
-  - npm
-  - versioning
-  description: Standardize release automation for JavaScript/TypeScript projects using
-    semantic-release. Covers version calculation, Git tags, release notes, npm publishing
-    policy, and CI/CD governance. Use when setting up automated releases, configuring
-    semantic-release plugins, defining branch strategies, or integrating release versions
-    with application metadata.
-  category: tools-and-configurations
-- path: skills/sentry-fix-issues/
-  type: skill
-  tags:
-  - debugging
-  - sentry
-  description: Find and fix issues from Sentry using MCP. Use when asked to fix Sentry
-    errors, debug production issues, investigate exceptions, or resolve bugs reported
-    in Sentry. Methodically analyzes stack traces, breadcrumbs, traces, and context
-    to identify root causes.
-  category: quality-assurance
-- path: skills/septeo-keycloak-user-register/
-  type: skill
-  tags:
-  - auth
-  - security
-  description: Register users via the Septeo Keycloak Identity API (api-identite).
-    Use when implementing user registration, signup forms, user provisioning, or password
-    hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint with PBKDF2-SHA256
-    password hashing.
-  category: domain-specific
-- path: skills/s3-backend-proxy/
-  type: skill
-  tags:
-  - frontend
-  - python
-  - security
-  - typescript
-  description: Design and implement backend proxy routes for serving S3 objects without
-    exposing S3 directly to browsers. Covers application route to S3 key mapping,
-    trusted presigned URL proxying, Python and TypeScript examples, HTTP browser-backend-S3
-    flows, streaming, headers, conditional requests, and preferred cache layers.
-  category: architecture
-- path: skills/sql-migration-guidelines/
-  type: skill
-  description: Database-first SQL migration guidelines for relational schema changes
-    with or without an ORM. Use when designing migrations, reviewing ORM-generated
-    SQL, modeling polymorphic relations, enforcing PostgreSQL referential integrity,
-    adding table and column descriptions, timestamps, updated_at triggers, foreign
-    keys, constraints, and indexes.
-  category: tools-and-configurations
-- path: skills/sonarqube-config/
-  type: skill
-  tags:
-  - ci-cd
-  - sonarqube
-  - testing
-  description: Write and maintain sonar-project.properties files for local SonarScanner
-    CLI analysis. Covers analysis scope (exclusions, test detection), copy-paste detection
-    exclusions, coverage report paths, rule suppression strategies, and language-specific
-    examples. Use when creating or editing sonar-project.properties, configuring SonarQube
-    analysis scope, excluding files from scan, ignoring SonarQube rules, or setting
-    up local sonar-scanner.
-  category: quality-assurance
-- path: skills/spec-reindex/
-  type: skill
-  tags:
-  - spec-kit
-  description: Verify and fix spec/fix folder indexation. Maintains two independent
-    index sequences (specs and fixes), detects conflicts (duplicates, gaps) per sequence,
-    and re-indexes each into its own continuous sequence. Use when running /index,
-    reindexing specs, fixing spec numbering, or resolving index conflicts after branch
-    merges.
-  category: workflows-and-processes
-  bundles:
-  - common
-- path: skills/speckit-data-mcd/
-  type: skill
-  tags:
-  - documentation
-  - docker
-  - spec-kit
-  - sql
-  description: Guide human/AI communication for Speckit data specifications and database
-    change reports using focused conceptual data models (MCD), with Mocodo and Mermaid
-    notation for clarification, before/after diagrams, and implementation summaries.
-  category: workflows-and-processes
-- path: skills/systematic-debugging/
-  type: skill
-  description: 'Multi-layer investigation methodology: Static, Network, Code and Logs.
-    See RESOURCES.md for complete Docker command reference.'
-  category: quality-assurance
-  bundles:
-  - common
-- path: skills/wc-live-demos-starlight/
-  type: skill
-  tags:
-  - astro
-  - documentation
-  - starlight
-  - web-components
-  description: 'Live playground for Web Components in Astro Starlight: iframe srcdoc,
-    CodeMirror, bidirectional sync, controlled components, IIFE bundling, Docker pitfalls.'
-  category: frameworks-and-libraries
-- path: hooks/lint-on-edit.sh
-  type: hook
-  category: tools-and-configurations
-  bundles:
-  - common
-  tags:
-  - claude
-  - cursor
-  - docker
-  - hooks
-  - lint
-  - make
-  - shell
-  description: Post-edit hook that routes file edits to a Dockerised linter via `make
-    lint FILE=…`. Supports Claude PostToolUse and Cursor afterFileEdit. Silent on pass;
-    surfaces linter diagnostics and policy gaps back to the agent on failure.
-- path: hooks/registry-sync-on-skill.sh
-  type: hook
-  category: tools-and-configurations
-  tags:
-  - claude
-  - cursor
-  - hooks
-  - shell
-  description: Post-edit hook that fires when a SKILL.md is created or edited and checks
-    whether the skill's directory is already referenced in asset-registry.yml. If not,
-    it reminds the agent (per AGENTS.md) to register the skill in the same change;
-    silent when already registered. Supports Claude PostToolUse and Cursor afterFileEdit.
-    Reminder-only — never rewrites the registry. Disable with REGISTRY_SYNC=0.
-- path: skills/makefile-lint-router/
-  type: skill
-  category: tools-and-configurations
-  bundles:
-  - common
-  tags:
-  - docker
-  - hooks
-  - lint
-  - make
-  description: Template pair (hook + Makefile recipe) for lint-on-edit. Bundles
-    the drop-in `hooks/lint-on-edit.sh`, copy-ready `templates/` (minimal
-    Makefile, Claude/Cursor hook configs) and full `examples/` (TS monorepo,
-    Python/uv, Vue + Nest). Documents the `make lint FILE=…` contract, exit
-    codes (64 policy gap, 65 wiring missing), branch ordering rules and
-    anti-patterns.
-- path: rules/04-tools-and-configurations/4-lint-on-edit.mdc
-  type: rule
-  category: tools-and-configurations
-  bundles:
-  - common
-  tags:
-  - docker
-  - hooks
-  - lint
-  - make
-  description: Install the lint-on-edit hook in any project with Docker and a Makefile.
-    States the three-layer contract, exit codes, env knobs, and when not to install.
-x-bundle-descriptions:
-  common: Stack-agnostic minimum-viable starter set for any project
-x-category-descriptions:
-  architecture: 'Cross-cutting architectural invariants: hexagonal/DDD, monorepo,
-    vertical slices, Makefile structure'
-  standards: Project-wide coding/documentation standards (pure domain, indexing-friendly
-    docs)
-  programming-languages: Language-level rules and skills (TypeScript, Python, FP-TS
-    conventions)
-  frameworks-and-libraries: Framework- or library-scoped rules and skills (NestJS,
-    Lit, Vitest, Nuxt, React)
-  tools-and-configurations: 'Tooling and configuration: Docker, Git, npm, semantic
-    commits, Bitbucket, k8s'
-  workflows-and-processes: Process and workflow rules (spec-driven dev, indexing,
-    release workflows)
-  templates-and-models: Reusable templates and reference models
-  quality-assurance: Testing, verification, accessibility, performance, security audits,
-    UI verification
-  domain-specific: Business-domain-bound rules (Hub, Keycloak, real-estate)
-  other: Anything that genuinely does not fit above (escape hatch; use sparingly)
+  - path: .agents/skills/documentation-writer/
+    type: skill
+    tags:
+      - documentation
+    description: >-
+      Diátaxis Documentation Expert. An expert technical writer specializing in creating high-quality software
+      documentation, guided by the principles and structure of the Diátaxis technical documentation authoring framework.
+    category: standards
+  - path: .agents/skills/gh-cli/
+    type: skill
+    tags:
+      - github
+      - shell
+    description: >-
+      GitHub CLI (gh) comprehensive reference for repositories, issues, pull requests, Actions, projects, releases,
+      gists, codespaces, organizations, extensions, and all GitHub operations from the command line.
+    category: tools-and-configurations
+  - path: .agents/skills/git-commit/
+    type: skill
+    tags:
+      - git
+    category: tools-and-configurations
+  - path: .agents/skills/k8s-troubleshoot/
+    type: skill
+    tags:
+      - devops
+      - docker
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues using kubectl via Docker. Covers pod diagnostics, ConfigMap
+      modifications, rollout management, and DevOps report generation for out-of-scope actions.
+    category: tools-and-configurations
+  - path: .agents/skills/speckit-git-commit/
+    type: skill
+    tags:
+      - git
+      - spec-kit
+    description: Auto-commit changes after a Spec Kit command completes
+    category: workflows-and-processes
+  - path: .agents/skills/speckit-git-feature/
+    type: skill
+    tags:
+      - git
+      - spec-kit
+    description: Create a feature branch with sequential or timestamp numbering
+    category: workflows-and-processes
+  - path: .agents/skills/speckit-git-initialize/
+    type: skill
+    tags:
+      - git
+      - spec-kit
+    description: Initialize a Git repository with an initial commit
+    category: workflows-and-processes
+  - path: .agents/skills/speckit-git-remote/
+    type: skill
+    tags:
+      - git
+      - github
+    description: Detect Git remote URL for GitHub integration
+    category: workflows-and-processes
+  - path: .agents/skills/speckit-git-validate/
+    type: skill
+    tags:
+      - git
+      - spec-kit
+    description: Validate current branch follows feature branch naming conventions
+    category: workflows-and-processes
+  - path: .agents/skills/web-analysis/SKILL.md
+    type: skill
+    tags:
+      - docker
+      - security
+    description: >-
+      Deterministic web analysis tools executable via Docker. Covers Lighthouse (performance), pa11y (accessibility),
+      sitespeed.io (metrics), broken-link-checker, security headers, Wappalyzer (tech detection), and html-validate. All
+      tools produce machine-readable output without host dependencies.
+    category: quality-assurance
+  - path: .cursor/commands/k8s-troubleshoot.md
+    type: command
+    tags:
+      - devops
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues. Identifies pod errors, applies in-scope fixes (ConfigMap,
+      rollout), and generates DevOps reports for out-of-scope problems. All kubectl commands run inside Docker.
+    category: other
+  - path: .cursor/commands/speckit.analyze.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: >-
+      Perform a non-destructive cross-artifact consistency and quality analysis across spec.md, plan.md, and tasks.md
+      after task generation.
+    category: other
+  - path: .cursor/commands/speckit.checklist.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Generate a custom checklist for the current feature based on user requirements.
+    category: other
+  - path: .cursor/commands/speckit.clarify.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: >-
+      Identify underspecified areas in the current feature spec by asking up to 5 highly targeted clarification
+      questions and encoding answers back into the spec.
+    category: other
+  - path: .cursor/commands/speckit.constitution.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: >-
+      Create or update the project constitution from interactive or provided principle inputs, ensuring all dependent
+      templates stay in sync.
+    category: other
+  - path: .cursor/commands/speckit.fleet.review.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: >-
+      Cross-model evaluation of plan.md and tasks.md before implementation. Reviews feasibility, completeness,
+      dependency ordering, risk, and parallelization correctness using a different model than was used to generate the
+      artifacts.
+    category: other
+  - path: .cursor/commands/speckit.fleet.run.md
+    type: command
+    tags:
+      - ci-cd
+      - cursor
+      - spec-kit
+    description: >-
+      Orchestrate a full feature lifecycle through all SpecKit phases with human-in-the-loop checkpoints: specify ->
+      clarify -> plan -> checklist -> tasks -> analyze -> cross-model review -> implement -> verify -> CI. Detects
+      partially complete features and resumes from the right phase.
+    category: other
+  - path: .cursor/commands/speckit.implement.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Execute the implementation plan by processing and executing all tasks defined in tasks.md
+    category: other
+  - path: .cursor/commands/speckit.plan.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Execute the implementation planning workflow using the plan template to generate design artifacts.
+    category: other
+  - path: .cursor/commands/speckit.specify.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Create or update the feature specification from a natural language feature description.
+    category: other
+  - path: .cursor/commands/speckit.tasks.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Generate an actionable, dependency-ordered tasks.md for the feature based on available design artifacts.
+    category: other
+  - path: .cursor/commands/speckit.taskstoissues.md
+    type: command
+    tags:
+      - cursor
+      - github
+      - spec-kit
+    description: >-
+      Convert existing tasks into actionable, dependency-ordered GitHub issues for the feature based on available design
+      artifacts.
+    category: other
+  - path: .cursor/commands/speckit.verify.run.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+      - testing
+    description: >-
+      Perform a non-destructive post-implementation verification gate validating the implementation against spec.md,
+      plan.md, tasks.md, and constitution.md.
+    category: other
+  - path: .cursor/commands/spt.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step requires user input.
+    category: other
+  - path: .cursor/rules/0-rules-structure.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - rules
+    description: >-
+      Conventions for the rules/ tree: category folders, .mdc naming, required frontmatter, and how globs scope each
+      rule. Apply when creating or moving rules.
+    category: architecture
+  - path: .cursor/rules/4-specify-rules.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - spec-kit
+    description: >-
+      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
+      entries for this repo.
+    category: workflows-and-processes
+  - path: .cursor/rules/specify-rules.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - spec-kit
+    description: >-
+      Meta pointer: canonical project rules are under rules/; use this file to find architecture, NestJS, and spec-kit
+      context without duplicating long rules.
+    category: workflows-and-processes
+  - path: .specify/extensions/fleet/commands/fleet.md
+    type: command
+    tags:
+      - spec-kit
+    description: >-
+      Orchestrate a full feature lifecycle through all SpecKit phases with human-in-the-loop checkpoints: specify ->
+      clarify -> plan -> checklist -> tasks -> analyze -> cross-model review -> implement -> verify -> CI. Detects
+      partially complete features and resumes from the right phase.
+    category: workflows-and-processes
+  - path: .specify/extensions/fleet/commands/review.md
+    type: command
+    tags:
+      - spec-kit
+    description: >-
+      Cross-model evaluation of plan.md and tasks.md before implementation. Reviews feasibility, completeness,
+      dependency ordering, risk, and parallelization correctness using a different model than was used to generate the
+      artifacts.
+    category: workflows-and-processes
+  - path: .specify/extensions/git/commands/speckit.git.commit.md
+    type: command
+    tags:
+      - git
+      - spec-kit
+    description: Auto-commit changes after a Spec Kit command completes
+    category: workflows-and-processes
+  - path: .specify/extensions/git/commands/speckit.git.feature.md
+    type: command
+    tags:
+      - git
+      - spec-kit
+    description: Create a feature branch with sequential or timestamp numbering
+    category: workflows-and-processes
+  - path: .specify/extensions/git/commands/speckit.git.initialize.md
+    type: command
+    tags:
+      - git
+      - spec-kit
+    description: Initialize a Git repository with an initial commit
+    category: workflows-and-processes
+  - path: .specify/extensions/git/commands/speckit.git.remote.md
+    type: command
+    tags:
+      - git
+      - github
+    description: Detect Git remote URL for GitHub integration
+    category: workflows-and-processes
+  - path: .specify/extensions/git/commands/speckit.git.validate.md
+    type: command
+    tags:
+      - git
+      - spec-kit
+    description: Validate current branch follows feature branch naming conventions
+    category: workflows-and-processes
+  - path: .specify/extensions/verify/commands/verify.md
+    type: command
+    tags:
+      - spec-kit
+      - testing
+    description: >-
+      Perform a non-destructive post-implementation verification gate validating the implementation against spec.md,
+      plan.md, tasks.md, and constitution.md.
+    category: workflows-and-processes
+  - path: agents/archivist.md
+    type: agent
+    tags:
+      - documentation
+      - spec-kit
+    description: >-
+      Manages the project knowledge graph at memory/ (repo root): recall (inject tactical/strategic constraints at phase
+      start) and learn (extract insights after merge). ALWAYS uses /speckit.memory command for the structured digest.
+      Deduplicates rules; updates operational/tactical/strategic scopes.
+    category: workflows-and-processes
+  - path: agents/cartographer.md
+    type: agent
+    tags:
+      - spec-kit
+    description: >-
+      Roadmap and feature planning agent. Delegates to this agent when the user needs to plan a roadmap, break down a
+      project into features, prioritize work, or scope a phase of development. Runs /specify with a phase-level
+      perspective. Use proactively when a project needs strategic planning before individual feature specification.
+      Requires Opus 4.6 Max Thinking for deep strategic reasoning and critical analysis.
+    category: workflows-and-processes
+  - path: agents/debugger.md
+    type: agent
+    tags:
+      - debugging
+      - spec-kit
+    description: >-
+      Fixes failing tests or defects in the same isolated worktree where the Tester reported failure; signals
+      Orchestrator to re-run Tester. Reads memory from memory/ at the repo root.
+    category: quality-assurance
+  - path: agents/dependency-updater.md
+    type: agent
+    tags:
+      - common
+      - npm
+    description: >-
+      Dependency & Migration Strategist: scans package manifests, audits versions against registries, classifies updates
+      by SemVer tier, and produces a structured migration report with ordered upgrade plan, impact analysis, and links
+      to changelogs and migration guides.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: agents/gitter.md
+    type: agent
+    tags:
+      - git
+      - github
+    description: >-
+      Handles everyday Git workflows: analyzes all pending changes, groups them into logical batches, and commits each
+      with a semantic conventional message. Manages merge across the branch hierarchy (develop → staging → main →
+      master), push, pull, branch switching, and PR creation. Default action when invoked without instructions: smart
+      commit.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: agents/implementer.md
+    type: agent
+    tags:
+      - spec-kit
+    description: >-
+      Implements code only inside the Orchestrator-assigned Git worktree. No cross-worktree reads; follows project
+      standards for later Sonar/review on the phase branch. Reads specs from specs/ at the repo root; uses Speckit
+      commands when applicable.
+    category: workflows-and-processes
+  - path: agents/orchestrator.md
+    type: agent
+    tags:
+      - git
+      - spec-kit
+    description: >-
+      Orchestrates the agentic lifecycle using a parallel Git worktree strategy: phase branch, isolated spec worktrees,
+      mandatory tester gate before merge, reconciliation on phase, then reviewer. Invokes Archivist at phase start
+      (recall) and after quality closure (learn). All agents use Speckit commands exclusively; specs/ and memory/ live
+      at the repo root.
+    category: workflows-and-processes
+  - path: agents/qa-tester.md
+    type: agent
+    tags:
+      - e2e
+      - spec-kit
+      - testing
+    description: >-
+      E2E test gap analysis agent. Deeply studies ALL project specifications to understand conventions, depth, and
+      patterns, then extracts UI-facing user stories, identifies which ones lack E2E test coverage, and produces rich,
+      context-aware /specify prompts for writing full user-journey test specs. Use proactively when you need to audit
+      E2E coverage or plan E2E test specifications across the project. Requires Opus 4.6 Max Thinking for thorough spec
+      analysis and reasoning.
+    category: quality-assurance
+  - path: agents/reviewer.md
+    type: agent
+    tags:
+      - spec-kit
+    description: >-
+      Final quality audit on phase branch after parallel spec merges: logical conflicts, Sonar. ALWAYS uses
+      /speckit.analyze command. Authorizes merge to main only after quality gate passes.
+    category: quality-assurance
+  - path: agents/scraper.md
+    type: agent
+    tags:
+      - playwright
+      - scraping
+    description: >-
+      Pure web navigator powered by Playwright MCP. Crawls pages, extracts raw DOM data (tables, structured data,
+      metadata), captures screenshots and accessibility snapshots. Produces artifacts in SCRAP/{domain}/. Never analyzes
+      or interprets.
+    category: other
+  - path: agents/specifier.md
+    type: agent
+    tags:
+      - spec-kit
+    description: >-
+      Technical blueprint for one spec: clear boundaries, shared-file warnings. ALWAYS uses /speckit.specify command;
+      specs live under specs/ at the repo root.
+    category: workflows-and-processes
+  - path: agents/tester.md
+    type: agent
+    tags:
+      - spec-kit
+      - testing
+    description: >-
+      Runs the test suite in the isolated worktree; gates merge until success. On failure, produces logs for the
+      Debugger in the same worktree context. Reads specs from specs/ and memory from memory/ at the repo root.
+    category: quality-assurance
+  - path: commands/commit.md
+    type: command
+    tags:
+      - git
+    description: >-
+      Smart commit using the gitter agent. Analyzes all pending changes, groups them into logical semantic batches, and
+      commits each with a conventional message.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: commands/env-setup.md
+    type: command
+    tags:
+      - docker
+      - hub
+    description: >-
+      Manage dual-mode environment files (Hub vs hubless/standalone). Generates .env.example, .env.hub.example
+      (committed templates) and .env.hub, .env.hubless (local ready-to-use presets). Audits .gitignore and detects the
+      current .env mode.
+    category: tools-and-configurations
+  - path: commands/improve.md
+    type: command
+    tags:
+      - refactoring
+    description: >-
+      Continuous code improvement agent. Iterates on project quality by leveraging SonarQube (MCP + CLI scanner) and
+      dedicated Git branches. Loop: Scan → Analyze → Plan → Fix → Review → Re-scan until Quality Gate is green.
+    category: quality-assurance
+  - path: commands/k8s-troubleshoot.md
+    type: command
+    tags:
+      - devops
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues. Identifies pod errors, applies in-scope fixes (ConfigMap,
+      rollout), and generates DevOps reports for out-of-scope problems. All kubectl commands run inside Docker.
+    category: tools-and-configurations
+  - path: commands/merge.md
+    type: command
+    tags:
+      - git
+    description: >-
+      Merge current branch into the target using the gitter agent. Cautious about regressions. If the merge strategy is
+      ambiguous or not specified, asks the user for clarification before proceeding.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: commands/pr-history.md
+    type: command
+    tags:
+      - git
+      - github
+      - shell
+    description: >-
+      Show the latest merged pull request descriptions in the terminal, newest merge first, so the project state and
+      recent work are easy to scan.
+    category: tools-and-configurations
+  - path: commands/pre-kubify.md
+    type: command
+    tags:
+      - devops
+      - infrastructure
+      - kubernetes
+    description: >-
+      Scans a project to produce a concise infrastructure readiness report for the DevOps team before running /kubify.
+      Detects env vars, secrets, build-time vs runtime config, services topology, and generates ASCII architecture
+      diagrams for pprod and prod environments.
+    category: tools-and-configurations
+  - path: commands/push.md
+    type: command
+    tags:
+      - git
+    description: >-
+      Push current branch to the remote using the gitter agent. If the current branch is a feature branch, returns a
+      link to create a Pull Request with a suggested description.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: commands/scrape-site.md
+    type: command
+    tags:
+      - playwright
+      - scraping
+    description: >-
+      Intent-driven web scraping orchestrator. Detects scraping intent from natural language, builds a structured brief,
+      delegates to the scraper agent, and verifies deliverables. Supports data extraction, user flow analysis, site
+      structure cloning, and general-purpose scraping with configurable parameters.
+    category: other
+  - path: commands/spec-release-and-versioning.md
+    type: command
+    tags:
+      - ci-cd
+      - versioning
+    description: >-
+      Transform a versioning or release-related need into a full Speckit specification. Covers application version
+      metadata contracts, UI display rules, semantic-release CI/CD governance, and migration planning. References the
+      app-version-surface and semantic-release-js-ts-pipeline skills.
+    category: tools-and-configurations
+  - path: commands/specify-mcp-backend.md
+    type: command
+    tags:
+      - architecture
+      - backend
+      - documentation
+      - security
+      - spec-kit
+    description: >-
+      Generic prompt for /speckit.specify to create a backend MCP server specification. Covers transport choice,
+      endpoint contract, JSON-RPC lifecycle, capability modeling, security, observability, testing, and rollout.
+    category: templates-and-models
+  - path: commands/specify-mcp-chatbot.md
+    type: command
+    tags:
+      - architecture
+      - backend
+      - react
+      - security
+      - spec-kit
+      - typescript
+    description: >-
+      Generic prompt for /speckit.specify to create an MCP-powered chatbot or frontend client specification. Covers chat
+      UI, product chat endpoints, streaming events, MCP client lifecycle, backend orchestration boundaries, security,
+      testing, and rollout.
+    category: templates-and-models
+  - path: commands/specify-qa.md
+    type: command
+    tags:
+      - e2e
+      - spec-kit
+      - testing
+    description: >-
+      E2E specification command driven by project analysis. Scans all existing specs to learn conventions, identifies
+      E2E gaps, and directly produces complete specs (spec.md, plan.md, tasks.md) aligned with project quality and
+      patterns. Unlike qa-tester (analysis only), this command produces deliverables.
+    category: quality-assurance
+  - path: commands/spt.md
+    type: command
+    tags:
+      - cursor
+      - spec-kit
+    description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step requires user input.
+    category: workflows-and-processes
+  - path: hooks/registry-sync-on-skill.sh
+    type: hook
+    category: tools-and-configurations
+    tags:
+      - claude
+      - cursor
+      - hooks
+      - shell
+    description: >-
+      Post-edit hook that fires when a SKILL.md is created or edited and checks whether the skill's directory is already
+      referenced in asset-registry.yml. If not, it reminds the agent (per AGENTS.md) to register the skill in the same
+      change; silent when already registered. Supports Claude PostToolUse and Cursor afterFileEdit. Reminder-only —
+      never rewrites the registry. Disable with REGISTRY_SYNC=0.
+  - path: rules/00-architecture/0-hexagonal-ddd.mdc
+    type: rule
+    description: >-
+      Hexagonal (ports/adapters) layering: pure domain, application use cases, infrastructure adapters. Dependency rule
+      and mandatory design properties.
+    category: architecture
+    tags:
+      - architecture
+      - ddd
+      - hexagonal
+  - path: rules/00-architecture/0-makefile-structure.mdc
+    type: rule
+    tags:
+      - docker
+      - make
+    description: >-
+      Root Makefile invariants: mandatory targets, env-driven configuration, PHONY targets, and Docker-first execution.
+      Templates live in a skill.
+    category: architecture
+    bundles:
+      - common
+  - path: rules/00-architecture/0-monorepo.mdc
+    type: rule
+    tags:
+      - architecture
+      - monorepo
+    description: >-
+      Monorepo workspace invariants: package boundaries, acyclic package graph, shared contracts, and no upward imports
+      from shared libraries to apps.
+    category: architecture
+  - path: rules/00-architecture/0-rules-structure.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - rules
+    description: >-
+      Conventions for the rules/ tree: category folders, .mdc naming, required frontmatter, and how globs scope each
+      rule. Apply when creating or moving rules.
+    category: architecture
+  - path: rules/00-architecture/0-vertical-slices.mdc
+    type: rule
+    description: >-
+      Vertical-slice and functional-core / imperative-shell properties: where pure logic lives, how slices integrate,
+      and a decision policy for where edits go.
+    category: architecture
+    tags:
+      - architecture
+      - vertical-slices
+  - path: rules/01-standards/1-code-documentation-for-indexing.mdc
+    type: rule
+    tags:
+      - documentation
+      - indexing
+      - quality
+    description: >-
+      Rich inline documentation so embeddings and static analysis can resolve intent, relationships, and usage without
+      reading the whole file.
+    category: standards
+    bundles:
+      - common
+  - path: rules/01-standards/1-pure-domain.mdc
+    type: rule
+    description: >-
+      Language-agnostic pure domain: no side effects in core logic, errors as values, no I/O in domain types.
+      Complements language-specific 2-pure-domain.
+    category: standards
+    tags:
+      - architecture
+      - domain
+      - purity
+  - path: rules/02-programming-languages/2-anti-currying.mdc
+    type: rule
+    tags:
+      - fp-ts
+      - typescript
+    description: Rule 3 — Avoid deep currying and excessive point-free style; prefer named parameters and readable steps.
+    category: programming-languages
+  - path: rules/02-programming-languages/2-explicit-typing.mdc
+    type: rule
+    tags:
+      - typescript
+    description: Rule 1 — Explicit typing in domain code (no any, explicit function signatures) for LSP and RAG-friendly contracts.
+    category: programming-languages
+  - path: rules/02-programming-languages/2-pure-domain.mdc
+    type: rule
+    tags:
+      - fp-ts
+      - nestjs
+      - typescript
+    description: >-
+      Rule 4 — Pure functional core: no NestJS/I/O/throw in domain; typed errors; optional single-file domain for small
+      modules.
+    category: programming-languages
+  - path: rules/02-programming-languages/2-semantic-jsdoc.mdc
+    type: rule
+    tags:
+      - documentation
+      - typescript
+    description: Rule 2 — File-level and per-function JSDoc with @description for embedding-friendly domain documentation.
+    category: programming-languages
+  - path: rules/03-frameworks-and-libraries/3-flat-orchestration.mdc
+    type: rule
+    tags:
+      - nestjs
+      - typescript
+    description: "Rule 5 — NestJS use cases as thin injectable services: sequential pipe from validation to domain to persistence."
+    category: frameworks-and-libraries
+  - path: rules/03-frameworks-and-libraries/3-lit.mdc
+    type: rule
+    tags:
+      - lit
+      - web-components
+    description: >-
+      Invariants for Lit-based Web Components: reactivity, lifecycle, shadow DOM, and event contract. Cheatsheet and
+      detailed patterns are in a skill.
+    category: frameworks-and-libraries
+  - path: rules/03-frameworks-and-libraries/3-module-isolation.mdc
+    type: rule
+    tags:
+      - architecture
+      - nestjs
+    description: Rule 7 — No deep imports across vertical slices; use shared kernel or public facades (services/events).
+    category: frameworks-and-libraries
+  - path: rules/03-frameworks-and-libraries/3-nestjs-architecture.mdc
+    type: rule
+    tags:
+      - architecture
+      - fp-ts
+      - nestjs
+      - typescript
+    description: >-
+      NestJS stack and canonical folder layout for vertical-slice modules; index of rules R1–R7 and links to fp-ts
+      skills. Use with 0-vertical-slices and slice rules.
+    category: frameworks-and-libraries
+  - path: rules/03-frameworks-and-libraries/3-typed-boundaries.mdc
+    type: rule
+    tags:
+      - nestjs
+      - typescript
+      - validation
+    description: Rule 6 — Validate all external I/O with Zod or Effect Schema; technology-prefixed infrastructure filenames.
+    category: frameworks-and-libraries
+  - path: rules/03-frameworks-and-libraries/3-vitest-conventions.mdc
+    type: rule
+    tags:
+      - testing
+      - typescript
+      - vitest
+    description: "Vitest usage for this stack: run via Docker, configs per app, mocks, and file layout for Hono/hexagonal services."
+    category: frameworks-and-libraries
+  - path: rules/03-frameworks-and-libraries/3-wc-live-demos-in-starlight.mdc
+    type: rule
+    tags:
+      - astro
+      - documentation
+      - starlight
+      - web-components
+    description: >-
+      Invariants for live Web Component docs in Starlight: iframe isolation, bidirectional code↔preview sync, vanilla
+      playground host, controlled component contract.
+    category: frameworks-and-libraries
+  - path: rules/04-tools-and-configurations/4-npm-private-registry.mdc
+    type: rule
+    tags:
+      - docker
+      - monorepo
+      - npm
+      - security
+    description: >-
+      Declarative invariants for private npm scopes: single root .npmrc, token via env, Docker build hygiene, no token
+      in runtime images. Procedures in a skill.
+    category: tools-and-configurations
+  - path: rules/04-tools-and-configurations/4-semantic-commits.mdc
+    type: rule
+    tags:
+      - git
+    description: Commit hygiene — semantic, feature-scoped commits with clean file grouping for human and agent readability.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: rules/04-tools-and-configurations/4-static-validation.mdc
+    type: rule
+    category: tools-and-configurations
+    bundles:
+      - common
+    tags:
+      - docker
+      - hooks
+      - lint
+    description: >-
+      Install a bespoke static-validation hook in any project with Docker and a running dev stack. States the
+      runner/routing-table split, the file-local-linters-only constraint (no tsc, phpstan, mypy or test runners),
+      branch ordering, blocking vs warn-once policy, and the Bash-tool and worktree coverage limits.
+  - path: rules/04-tools-and-configurations/4-specify-rules.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - spec-kit
+    description: >-
+      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
+      entries for this repo.
+    category: tools-and-configurations
+  - path: rules/05-workflows-and-processes/5-spec-driven-dev.mdc
+    type: rule
+    tags:
+      - spec-kit
+      - workflow
+    description: "Spec-driven workflow: spec folder layout, indexation, and implementation handoff using SpecKit-style commands."
+    category: workflows-and-processes
+    bundles:
+      - common
+  - path: rules/05-workflows-and-processes/5-spec-indexing.mdc
+    type: rule
+    tags:
+      - spec-kit
+    description: >-
+      Spec and fix indexing rules. Defines the format, sequence, index conflict resolution, and archive handling.
+      Referenced by /specify, /specify-qa, and /index.
+    category: workflows-and-processes
+    bundles:
+      - common
+  - path: rules/07-quality-assurance/7-testing.mdc
+    type: rule
+    tags:
+      - quality
+      - tdd
+      - testing
+    description: >-
+      Agnostic testing principles: TDD loop, test pyramid, naming, and AAA. No framework syntax — framework rules live
+      under 03-* or project skills.
+    category: quality-assurance
+    bundles:
+      - common
+  - path: rules/07-quality-assurance/7-ui-verification.mdc
+    type: rule
+    tags:
+      - frontend
+      - quality
+      - ui
+      - verification
+    description: >-
+      Encodes the dev-time, in-browser visual and interactive verification invariant for any frontend change: every
+      modified UI surface MUST be observed in a real browser before the implementation is considered complete, and every
+      newly introduced interactive element MUST be exercised and its observable outcome asserted against the spec.
+    category: quality-assurance
+  - path: skills/app-version-surface/
+    type: skill
+    tags:
+      - common
+      - versioning
+    description: >-
+      Standardize how application components expose, transport, and display version metadata across the organization.
+      Covers frontend, backend, worker, gateway, and embedded packages. Use when adding version display, configuring
+      build metadata injection, creating version endpoints, or implementing version aggregation for multi-component
+      applications.
+    category: quality-assurance
+  - path: skills/authorization-models/
+    type: skill
+    tags:
+      - auth
+      - documentation
+      - security
+    description: >-
+      Centralize authorization model concepts and implementation guidance for RBAC, ABAC, ReBAC, ACL,
+      PBAC/policy-as-code, OPA, and Apache Casbin. Use when designing access-control specs, choosing an authorization
+      model, writing authorization architecture decisions, or implementing/configuring OPA Rego policies or Casbin
+      models, policies, adapters, and enforcers.
+    category: architecture
+  - path: skills/claude-plugin-release/
+    type: skill
+    tags:
+      - ci-cd
+      - claude
+      - git
+      - versioning
+    description: >-
+      Version, locally test, and release Claude Code plugins (.claude-plugin/plugin.json + marketplace). Covers the
+      version-resolution model (plugin.json vs marketplace.json vs git SHA), the local dev loop (--plugin-dir live
+      loading + shell-alias persistence — no settings.json key exists for it, /reload-plugins, claude plugin validate),
+      the plugin cache pitfall (installs are copied to ~/.claude/plugins/cache even from a local directory marketplace),
+      update propagation to installed users, and semantic-release automation that bumps plugin.json from Conventional
+      Commits. Use when bumping a plugin version, testing a plugin locally before publishing, wiring release automation
+      for a plugin repo, or debugging why users don't receive a plugin update.
+    category: tools-and-configurations
+  - path: skills/compose-env-ports/
+    type: skill
+    tags:
+      - docker
+      - docker-compose
+      - shell
+    description: >-
+      Detect and resolve local Docker Compose host-port collisions by reading compose files, extracting .env-backed
+      published-port variables, checking Docker Engine and local listener ports, and generating deterministic free port
+      assignments.
+    category: tools-and-configurations
+  - path: skills/cursor-dot-glow/
+    type: skill
+    tags:
+      - animation
+      - background
+      - canvas
+      - frontend
+      - interaction
+    description: >-
+      Build a cursor-following "spotlight" of dots over a faint dot-grid background, rendered on a full-viewport canvas.
+      Dots near the pointer light up in an accent colour with a smooth Gaussian falloff; the lit position trails the
+      cursor with easing. Reverse-engineered from zo.computer's hero background. Use when adding an interactive ambient
+      background, a hero dot field, a pointer spotlight, or a reveal-on-hover dotted texture.
+  - path: skills/devops-pipeline-design/
+    type: skill
+    tags:
+      - ci-cd
+      - docker
+      - github
+      - kubernetes
+      - security
+    description: >-
+      Design cloud deployment CI/CD pipelines from first principles. Use when creating or reviewing GitHub Actions,
+      Bitbucket Pipelines, Azure DevOps, Kubernetes GitOps, AWS ECS/S3/ECR, Docker build, environment promotion, runtime
+      configuration, build-time variables, or secrets handling workflows.
+    category: workflows-and-processes
+  - path: skills/docker-compose-orchestration/
+    type: skill
+    tags:
+      - docker
+      - docker-compose
+    description: >-
+      Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production
+      deployment
+    category: tools-and-configurations
+  - path: skills/docker-containerization/
+    type: skill
+    tags:
+      - ci-cd
+      - docker
+      - security
+    description: >-
+      Create optimized Docker containers with multi-stage builds, security best practices, and minimal image sizes. Use
+      when containerizing applications, creating Dockerfiles, optimizing container images, or setting up Docker Compose
+      services.
+    category: tools-and-configurations
+  - path: skills/docker-expert/
+    type: skill
+    tags:
+      - common
+      - docker
+    description: >-
+      You are an advanced Docker containerization expert with comprehensive, practical knowledge of container
+      optimization, security hardening, multi-stage builds, orchestration patterns, and production deployment strategies
+      based on current industry best practices.
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: skills/docker-hotreload-volume/
+    type: skill
+    tags:
+      - docker
+      - typescript
+    description: A universal Docker volume pattern to reconcile hot-reload with container-isolated node_modules
+    category: tools-and-configurations
+  - path: skills/dockerfile-dev-prod/
+    type: skill
+    tags:
+      - ci-cd
+      - docker
+    description: >-
+      Write Dockerfiles with multi-stage builds for development and production. Use when creating a Dockerfile,
+      configuring dev vs production builds, handling lockfile generation via make lock, or debugging dependency install
+      issues in Docker.
+    category: tools-and-configurations
+  - path: skills/dockerfile-multi-stage/
+    type: skill
+    tags:
+      - common
+      - docker
+    description: Create optimized multi-stage Dockerfiles for any language or framework
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: skills/documentation-writer/
+    type: skill
+    tags:
+      - common
+      - documentation
+    description: >-
+      Diátaxis Documentation Expert. An expert technical writer specializing in creating high-quality software
+      documentation, guided by the principles and structure of the Diátaxis technical documentation authoring framework.
+    category: standards
+    bundles:
+      - common
+  - path: skills/e2e-playwright/
+    type: skill
+    tags:
+      - docker
+      - e2e
+      - testing
+    description: >-
+      End-to-end testing with Playwright using a dedicated Docker Compose environment. Use when setting up E2E tests,
+      writing Playwright specs, configuring test infrastructure, or debugging E2E CI pipelines.
+    category: quality-assurance
+  - path: skills/e2e-spec-writing/
+    type: skill
+    tags:
+      - documentation
+      - e2e
+      - spec-kit
+      - testing
+    description: >-
+      Write complete E2E test specifications (spec.md, plan.md, tasks.md) following project conventions. Use when
+      producing E2E specs, writing end-to-end test scenarios, specifying Playwright/Cypress tests, or when a
+      specify/speckit command needs to output E2E deliverables.
+    category: quality-assurance
+  - path: skills/eslint-solid-nestjs/
+    type: skill
+    tags:
+      - eslint
+      - monorepo
+      - nestjs
+      - typescript
+    description: >-
+      ESLint Flat Config standard for TypeScript/NestJS monorepos — enforces SOLID principles, Clean Architecture layer
+      boundaries, and best practices via static analysis.
+    category: frameworks-and-libraries
+  - path: skills/find-skills/
+    type: skill
+    tags:
+      - common
+      - cursor
+    description: >-
+      Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X",
+      "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the
+      user is looking for functionality that might exist as an installable skill.
+    category: other
+    bundles:
+      - common
+  - path: skills/fluid-architecture-scroll-mastery/
+    type: skill
+    tags:
+      - css
+      - vue
+      - web-components
+    description: Eliminate double scrollbars and ensure seamless component dynamic expansion
+    category: frameworks-and-libraries
+  - path: skills/fp-ts-async-practical/
+    type: skill
+    tags:
+      - fp-ts
+      - typescript
+    description: Practical async patterns using TaskEither - clean pipelines instead of try/catch hell, with real API examples
+    category: programming-languages
+  - path: skills/fp-ts-backend/
+    type: skill
+    tags:
+      - backend
+      - fp-ts
+      - typescript
+    description: >-
+      Functional programming patterns for Node.js/Deno backend development using fp-ts, ReaderTaskEither, and functional
+      dependency injection
+    category: programming-languages
+  - path: skills/fp-ts-errors/
+    type: skill
+    tags:
+      - fp-ts
+      - typescript
+    description: >-
+      Handle errors as values using fp-ts Either and TaskEither for cleaner, more predictable TypeScript code. Use when
+      implementing error handling patterns with fp-ts.
+    category: programming-languages
+  - path: skills/fp-ts-pragmatic/
+    type: skill
+    tags:
+      - fp-ts
+      - typescript
+    description: >-
+      A practical, jargon-free guide to fp-ts functional programming - the 80/20 approach that gets results without the
+      academic overhead. Use when writing TypeScript with fp-ts library.
+    category: programming-languages
+  - path: skills/fp-ts-validation/
+    type: skill
+    tags:
+      - fp-ts
+      - typescript
+      - validation
+    description: Validation patterns using fp-ts with error accumulation, form validation, and API input validation
+    category: programming-languages
+  - path: skills/gh-cli/
+    type: skill
+    tags:
+      - git
+      - github
+      - shell
+    description: >-
+      GitHub CLI (gh) comprehensive reference for repositories, issues, pull requests, Actions, projects, releases,
+      gists, codespaces, organizations, extensions, and all GitHub operations from the command line.
+    category: tools-and-configurations
+  - path: skills/git-activity-report/
+    type: skill
+    tags:
+      - git
+      - github
+      - shell
+      - documentation
+    description: >-
+      Generate sourced Markdown activity reports from Git branch history. Use when Codex needs to scan commits and pull
+      requests or merge requests for a target branch over a configurable lookback period using git, Docker, optional
+      provider CLIs such as gh, glab, or Bitbucket tools, and optional MCP provider tools, then produce a digestible
+      report with href links back to the relevant commits and PRs/MRs.
+    category: workflows-and-processes
+  - path: skills/git-commit/
+    type: skill
+    tags:
+      - common
+      - git
+    description: >-
+      Execute git commit with conventional commit message analysis, intelligent staging, and message generation. Use
+      when user asks to commit changes, create a git commit, or mentions "/commit". Supports: (1) Auto-detecting type
+      and scope from changes, (2) Generating conventional commit messages from diff, (3) Interactive commit with
+      optional type/scope/description overrides, (4) Intelligent file staging for logical grouping
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: skills/grievances/
+    type: skill
+    tags:
+      - common
+      - documentation
+      - process
+    description: >-
+      Maintain `specs/GRIEVANCES.md`, the committed per-repo ledger of non-blocking findings — underlying problems,
+      technical debt and improvements met outside the scope of an in-flight spec ("what works but will not scale"). The
+      file is maintained programmatically by `scripts/grievances.py`: declare a grievance (short description, severity,
+      date), close it (date + commit hash), bump a recurrence, audit a repo, or migrate a legacy `DOLEANCES.md`. Use
+      when creating the ledger in a repo, when recording or closing a finding at the end of an implementation / test /
+      review phase, or when deciding whether a finding stays in the ledger or must be promoted to a spec or a
+      pilot-roadmap fiche. Triggers on "grievance", "GRIEVANCES.md", "doléance", "doleances", "DOLEANCES.md", "small
+      problem", "papercut", "technical debt backlog", "note this for later".
+  - path: skills/hub-app-registration/
+    type: skill
+    tags:
+      - auth
+      - common
+      - docker
+      - hub
+    description: >-
+      Register a downstream application in the Modelo Hub ecosystem. Use when onboarding a new app, configuring Hub
+      authentication, debugging registration/auth issues, or understanding the Hub SSO flow.
+    category: domain-specific
+  - path: skills/hub-documentation/
+    type: skill
+    tags:
+      - architecture
+      - documentation
+      - hub
+    description: Modelo Hub documentation map
+    category: domain-specific
+  - path: skills/javascript-resizable-panel/
+    type: skill
+    tags:
+      - css
+      - frontend
+      - typescript
+    description: >-
+      Build controlled drag-to-resize sidebars, split panes, and panels in frontend applications using CSS variables,
+      Pointer Events, accessible resize handles, cleanup-safe listeners, and CSS clamp limits.
+    category: frameworks-and-libraries
+  - path: skills/jsdoc-typescript-docs/
+    type: skill
+    tags:
+      - documentation
+      - typescript
+    description: >-
+      Documents TypeScript code with JSDoc comments, generates API documentation, and creates type-safe documentation.
+      Use when users request "JSDoc", "code documentation", "API docs", "TypeDoc", or "inline documentation".
+    category: programming-languages
+  - path: skills/k8s-troubleshoot/
+    type: skill
+    tags:
+      - devops
+      - docker
+      - infrastructure
+      - kubernetes
+    description: >-
+      Diagnose and resolve Kubernetes infrastructure issues using kubectl via Docker. Covers pod diagnostics, ConfigMap
+      modifications, rollout management, and DevOps report generation for out-of-scope actions.
+    category: tools-and-configurations
+  - path: skills/lit-web-components/
+    type: skill
+    tags:
+      - lit
+      - web-components
+    description: >-
+      Lit 3 web components: base class, reactivity, lifecycle, templates, events, overlay patterns, and anti-patterns.
+      Use when building or debugging Lit WCs.
+    category: frameworks-and-libraries
+  - path: skills/lsp-mcp/
+    type: skill
+    tags:
+      - code-intelligence
+      - lsp
+      - mcp
+      - tooling
+      - vscode
+    description: >-
+      Install, configure, and use the CJL.lsp-mcp VS Code extension — an MCP server that bridges VS Code's
+      already-running Language Servers (LSP) to AI agents. Covers MCP client setup for Claude Code, Cursor, and OpenCode
+      at both project and global scope, installing the right LSP-providing VS Code extension per language (Python,
+      JS/TS, HTML, CSS, Vue, Nuxt, PHP, Symfony, Go), registering extensions in the project .vscode/settings.json, and
+      driving the execute_lsp tool (hover, definition, references, rename, call hierarchy, symbols). Use when setting up
+      code-intelligence tooling for an agent or troubleshooting lsp-mcp.
+    category: tools-and-configurations
+  - path: skills/makefile-conventions/
+    type: skill
+    tags:
+      - docker
+      - make
+      - monorepo
+    description: >-
+      Templates and procedures for a project-root Makefile: env vars, targets up, down, test, setup, db-*, coverage. Use
+      when authoring or debugging Makefiles.
+    category: architecture
+    bundles:
+      - common
+  - path: skills/mcp-chatbot-client/
+    type: skill
+    tags:
+      - documentation
+      - nestjs
+      - python
+      - react
+      - security
+      - spec-kit
+      - typescript
+    description: >-
+      Create technology-agnostic specifications for adding an MCP-powered chatbot or MCP client to an application.
+      Covers frontend chat UI, backend orchestration, MCP client lifecycle, Streamable HTTP or stdio transport,
+      conversation/message endpoints, streaming updates, tool discovery, and chatbot/MCP participant roles.
+    category: frameworks-and-libraries
+  - path: skills/mcp-server-backend/
+    type: skill
+    tags:
+      - documentation
+      - nestjs
+      - python
+      - spec-kit
+      - typescript
+    description: >-
+      Create technology-agnostic specifications for adding a Model Context Protocol (MCP) server to an existing backend
+      application. Use when planning backend MCP server integration, choosing stdio vs Streamable HTTP transport,
+      documenting MCP transport endpoints, JSON-RPC lifecycle, tools/resources/prompts, authorization, security,
+      observability, and MCP client/server roles.
+    category: frameworks-and-libraries
+  - path: skills/model-tenant-agency-user-db/
+    type: skill
+    tags:
+      - auth
+      - security
+      - sql
+    description: >-
+      Model tenant, agency, and user database structures for real-estate SaaS products such as Septeo applications. Use
+      when designing MCD/ERD, SQL schemas, PostgreSQL RLS, role rules, tenant isolation, agency scoping, or
+      delete/retention semantics for tenant/agency/user domains with tenant admins, agency admins, and simple users.
+    category: domain-specific
+  - path: skills/multi-stage-dockerfile/
+    type: skill
+    tags:
+      - ci-cd
+      - common
+      - docker
+    description: >-
+      Create optimized multi-stage Dockerfiles for any language or framework, with dev/prod lockfile strategy. Use when
+      creating a Dockerfile, configuring dev vs production builds, handling lockfile generation via make lock, or
+      debugging dependency install issues in Docker (especially in monorepos with turbo prune).
+    category: tools-and-configurations
+    bundles:
+      - common
+  - path: skills/notion-spec-sync/
+    type: skill
+    tags:
+      - documentation
+      - mcp
+      - python
+      - spec-kit
+    description: >-
+      Deterministically synchronize a repository's root README plus SpecKit specifications and fixes into Notion through
+      the Notion MCP. Use when Codex must mirror README.md, specs/, specs/archive*/, fixes/, specs/fixes/, or
+      specs/archive*/fixes into a Notion workspace as a repo-scoped project page and table with stable cards containing
+      spec.md and review.md content, while keeping the LLM as orchestrator and deterministic logic in scripts.
+    category: workflows-and-processes
+  - path: skills/npm-private-registry/
+    type: skill
+    tags:
+      - ci-cd
+      - docker
+      - monorepo
+      - npm
+    description: >-
+      Integrate private npm packages in a Turborepo + bun + Docker monorepo. Use when adding a scoped private package
+      (@org/pkg), configuring registry auth in Docker builds, or debugging NPM_TOKEN issues. Covers .npmrc, Dockerfile
+      multi-stage, compose build args, and security cleanup.
+    category: tools-and-configurations
+  - path: skills/nuxt-ui/
+    type: skill
+    tags:
+      - css
+      - nuxt
+      - vue
+    description: >-
+      Build UIs with @nuxt/ui v4 — 125+ accessible Vue components with Tailwind CSS theming. Use when creating
+      interfaces, customizing themes to match a brand, building forms, or composing layouts like dashboards, docs sites,
+      and chat interfaces.
+    category: frameworks-and-libraries
+  - path: skills/nuxt/
+    type: skill
+    tags:
+      - nuxt
+      - vue
+    description: >-
+      Nuxt full-stack Vue framework with SSR, auto-imports, and file-based routing. Use when working with Nuxt apps,
+      server routes, useFetch, middleware, or hybrid rendering.
+    category: frameworks-and-libraries
+  - path: skills/openrouter-adversarial-review/
+    type: skill
+    category: quality-assurance
+    bundles:
+      - common
+    tags:
+      - llm
+      - quality
+      - security
+      - shell
+      - tooling
+      - verification
+    description: >-
+      Get a spec, a diff or a design reviewed by a model from a different lineage than the one that wrote it, through
+      OpenRouter, from the command line. One key reaches GPT, Kimi, Gemini, DeepSeek and the rest, so a second opinion
+      costs a string change rather than a new billing relationship. Covers the user-level key setup on fish, bash/zsh and
+      Windows (idempotent scripts that create or amend the key file and leave a placeholder to paste into), how to write a
+      prompt that refutes instead of flatters, which context actually improves a review and what it costs (a measured tier
+      table from T1 spec+diff to T5 whole-repo), and ships `llm-ask.sh` — a composable one-shot client with
+      repeatable `-f` file attachment plus a cached model catalogue (prices, context windows and republished
+      artificial_analysis benchmark scores, refetched past a 24h TTL) that powers `--top` and `@top` selection by
+      intelligence, coding or agentic index, one model per vendor so a panel spans distinct lineages, with
+      `--exclude-vendor` to drop your own; live cost and context-window checks in `--dry-run`, retries on 429/5xx,
+      jq-built payloads, 0600 header files and honest exit codes. Use when asking another model to attack your
+      work, picking a reviewer without knowing model names, reviewing a spec or a diff outside the agent that
+      produced it, setting up an OpenRouter key, or debugging a gateway that answers HTTP 200 with an error body.
+  - path: skills/s3-backend-proxy/
+    type: skill
+    tags:
+      - frontend
+      - python
+      - security
+      - typescript
+    description: >-
+      Design and implement backend proxy routes for serving S3 objects without exposing S3 directly to browsers. Covers
+      application route to S3 key mapping, trusted presigned URL proxying, Python and TypeScript examples, HTTP
+      browser-backend-S3 flows, streaming, headers, conditional requests, and preferred cache layers.
+    category: architecture
+  - path: skills/scroll-mastery/
+    type: skill
+    tags:
+      - css
+      - web-components
+    description: Scroll and UX mastery
+    category: frameworks-and-libraries
+  - path: skills/semantic-release-js-ts-pipeline/
+    type: skill
+    tags:
+      - ci-cd
+      - git
+      - npm
+      - versioning
+    description: >-
+      Standardize release automation for JavaScript/TypeScript projects using semantic-release. Covers version
+      calculation, Git tags, release notes, npm publishing policy, and CI/CD governance. Use when setting up automated
+      releases, configuring semantic-release plugins, defining branch strategies, or integrating release versions with
+      application metadata.
+    category: tools-and-configurations
+  - path: skills/sentry-fix-issues/
+    type: skill
+    tags:
+      - debugging
+      - sentry
+    description: >-
+      Find and fix issues from Sentry using MCP. Use when asked to fix Sentry errors, debug production issues,
+      investigate exceptions, or resolve bugs reported in Sentry. Methodically analyzes stack traces, breadcrumbs,
+      traces, and context to identify root causes.
+    category: quality-assurance
+  - path: skills/septeo-keycloak-user-register/
+    type: skill
+    tags:
+      - auth
+      - security
+    description: >-
+      Register users via the Septeo Keycloak Identity API (api-identite). Use when implementing user registration,
+      signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint
+      with PBKDF2-SHA256 password hashing.
+    category: domain-specific
+  - path: skills/sonarqube-config/
+    type: skill
+    tags:
+      - ci-cd
+      - sonarqube
+      - testing
+    description: >-
+      Write and maintain sonar-project.properties files and Dockerized SonarScanner setup for local SonarQube analysis.
+      Covers analysis scope (exclusions, test detection), copy-paste detection exclusions, coverage report paths, rule
+      suppression strategies, environment-driven scanner invocation, and language-specific examples. Use when creating
+      or editing sonar-project.properties, configuring SonarQube analysis scope, excluding files from scan, ignoring
+      SonarQube rules, or setting up local sonar-scanner.
+    category: quality-assurance
+  - path: skills/spec-reindex/
+    type: skill
+    tags:
+      - common
+      - spec-kit
+    description: >-
+      Verify and fix spec/fix folder indexation. Maintains two independent index sequences (specs and fixes), detects
+      conflicts (duplicates, gaps) per sequence, and re-indexes each into its own continuous sequence. Use when running
+      /index, reindexing specs, fixing spec numbering, or resolving index conflicts after branch merges.
+    category: workflows-and-processes
+    bundles:
+      - common
+  - path: skills/speckit-data-mcd/
+    type: skill
+    tags:
+      - documentation
+      - docker
+      - spec-kit
+      - sql
+    description: >-
+      Guide human/AI communication for Speckit data specifications and database change reports using focused conceptual
+      data models (MCD), with Mocodo and Mermaid notation for clarification, before/after diagrams, and implementation
+      summaries.
+    category: workflows-and-processes
+  - path: skills/sql-migration-guidelines/
+    type: skill
+    description: >-
+      Database-first SQL migration guidelines for relational schema changes with or without an ORM. Use when designing
+      migrations, reviewing ORM-generated SQL, modeling polymorphic relations, enforcing PostgreSQL referential
+      integrity, adding table and column descriptions, timestamps, updated_at triggers, foreign keys, constraints, and
+      indexes.
+    category: tools-and-configurations
+  - path: skills/static-validation-hooks/
+    type: skill
+    category: tools-and-configurations
+    bundles:
+      - common
+    tags:
+      - docker
+      - hooks
+      - lint
+      - nestjs
+      - python
+      - typescript
+    description: >-
+      Generate a bespoke static-validation hook in a consumer repo so agents never carry the burden of remembering to
+      lint. Ships a generic runner for `.agents/hooks/validate-on-edit.sh` (agent protocol, per-edit time budget, cached
+      container resolution, retry brake, warn-once degradation) plus python / typescript / nestjs routing tables and the
+      Claude and Cursor registration adapters. Documents the svc/strip/fix/check/skip routing vocabulary, branch
+      ordering, why whole-project checkers (tsc, phpstan, mypy) must stay in CI, worktree-aware container resolution,
+      and the Bash-tool coverage gap. Replaces the former `make lint FILE=…` router approach.
+  - path: skills/systematic-debugging/
+    type: skill
+    description: >-
+      Multi-layer investigation methodology: Static, Network, Code and Logs. See RESOURCES.md for complete Docker
+      command reference.
+    category: quality-assurance
+    bundles:
+      - common
+    tags:
+      - common
+  - path: skills/text-clip-cloud-word/
+    type: skill
+    tags:
+      - animation
+      - clip-path
+      - css
+      - frontend
+      - svg
+      - typography
+    description: >-
+      Make a single word in a heading reveal a moving layer (drifting clouds video, animated gradient, image) through
+      its letter shapes, with an iridescent foil shimmer and an embossed 3D edge. Built by clipping stacked layers to
+      glyph outlines via an SVG clipPath. Reverse-engineered from zo.computer's hero word "companion". Use when an
+      accent word in a hero/title needs a living texture inside the letters rather than a flat colour or a plain
+      gradient.
+  - path: skills/wc-live-demos-starlight/
+    type: skill
+    tags:
+      - astro
+      - documentation
+      - starlight
+      - web-components
+    description: >-
+      Live playground for Web Components in Astro Starlight: iframe srcdoc, CodeMirror, bidirectional sync, controlled
+      components, IIFE bundling, Docker pitfalls.
+    category: frameworks-and-libraries
+  - path: skills/web-analysis/
+    type: skill
+    tags:
+      - accessibility
+      - docker
+      - performance
+      - security
+      - seo
+      - web-analysis
+    description: >-
+      Deterministic web analysis tools executable via Docker. Covers performance (Lighthouse, sitespeed.io),
+      accessibility (pa11y, axe-core CLI), SEO, security headers, link checking, technology detection, and HTML
+      validation. All tools produce machine-readable output without host dependencies.
