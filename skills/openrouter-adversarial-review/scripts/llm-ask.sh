@@ -9,7 +9,7 @@
 # Requires curl + jq. Portable to bash 3.2 (the /bin/bash macOS still ships).
 set -euo pipefail
 
-readonly VERSION="1.0.0"
+readonly VERSION="1.1.0"
 
 readonly OPENROUTER_BASE="https://openrouter.ai/api/v1"
 readonly OPENAI_BASE="https://api.openai.com/v1"
@@ -34,6 +34,16 @@ MAX_TOKENS=""
 # nothing. Generous by design; lower it for interactive one-liners.
 TIMEOUT_S="${LLM_TIMEOUT_S:-600}"
 RETRIES="${LLM_RETRIES:-2}"
+# The budget bounds the whole run; TIMEOUT_S only ever bounded the request. Any
+# block reached before the socket opened — a stdin drain on a pipe nobody
+# closes, a read on a dead mount — used to run unbounded, which put exit 4 out
+# of reach. Empty means "derive it from timeout and retries".
+BUDGET_S="${LLM_BUDGET_S:-}"
+# How long an auto-detected stdin drain may block before giving up. All the
+# script can know up front is `! -t 0`, and that is as true of a real pipe as of
+# the idle one an agent harness, a CI runner or `ssh host cmd` hands it.
+STDIN_WAIT_S="${LLM_STDIN_WAIT_S:-5}"
+STDIN_MODE="auto"                  # auto | always | never
 ALIAS_FILE="${LLM_ALIAS_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/llm-ask/aliases}"
 MODELS_CACHE="${LLM_MODELS_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/llm-ask/models.json}"
 CACHE_TTL_H="${LLM_CACHE_TTL_H:-24}"
@@ -55,6 +65,7 @@ DRY_RUN=0
 DO_DOCTOR=0
 DO_PING=0
 DO_LIST=0
+if [ "${LLM_NO_STDIN:-0}" = "1" ]; then STDIN_MODE="never"; fi
 
 die() {
   printf 'llm-ask: %s\n' "$1" >&2
@@ -89,6 +100,10 @@ OPTIONS
       --exclude-vendor V  With --top: drop a vendor (repeatable). Your own lineage.
       --models-refresh  Refetch the model catalogue now, ignoring the 24h TTL.
   -s, --system TEXT     System prompt. Use @path to read it from a file.
+      --stdin           Always read stdin, waiting for EOF. Bounded by --budget.
+      --no-stdin        Never read stdin. $LLM_NO_STDIN=1.
+      --budget SECONDS  Wall-clock ceiling for the WHOLE run, armed at start-up.
+                        Default: timeout x (retries + 1) + slack. Exits 4.
       --base-url URL    Override the provider endpoint root (implies custom auth).
   -t, --temperature N   Only sent when set — some reasoning models reject it.
       --max-tokens N    Output cap. Defaults to 4096 for anthropic (required there).
@@ -103,7 +118,7 @@ OPTIONS
   -h, --help            This text.       --version
 
 EXIT
-  0 ok · 1 usage · 2 environment · 3 API error · 4 timeout
+  0 ok · 1 usage · 2 environment · 3 API error · 4 request timeout or budget
 EOF
 }
 
@@ -146,6 +161,9 @@ while [ $# -gt 0 ]; do
 "; shift 2 ;;
     --models-refresh) FORCE_REFRESH=1; shift ;;
     -s|--system)      need_value "$@"; SYSTEM="$(read_arg_or_file "$2")"; shift 2 ;;
+    --stdin)          STDIN_MODE="always"; shift ;;
+    --no-stdin)       STDIN_MODE="never"; shift ;;
+    --budget)         need_value "$@"; BUDGET_S="$2"; shift 2 ;;
     --base-url)       need_value "$@"; BASE_URL="$2"; shift 2 ;;
     -t|--temperature) need_value "$@"; TEMPERATURE="$2"; shift 2 ;;
     --max-tokens)     need_value "$@"; MAX_TOKENS="$2"; shift 2 ;;
@@ -171,6 +189,71 @@ done
 
 command -v curl >/dev/null 2>&1 || die "curl is required" "$EX_ENV"
 command -v jq   >/dev/null 2>&1 || die "jq is required (brew install jq)" "$EX_ENV"
+
+# ── Wall-clock guard over the whole run ───────────────────────────────────────
+#
+# curl's --max-time bounds the request and nothing else, so a client that blocks
+# before it opens a socket is unbounded by construction — the failure this
+# guards against was a 9-hour process that never sent a byte and printed
+# nothing. One alarm, armed here, before any blocking work.
+#
+# $PHASE names what was running when the alarm fires; silence is the part that
+# costs the caller their afternoon, not the hang itself.
+
+MAIN_PID="$$"
+PHASE="start-up"
+WATCHDOG_PID=""
+
+if [ -z "$BUDGET_S" ]; then
+  BUDGET_S=$(( TIMEOUT_S * (RETRIES + 1) + STDIN_WAIT_S + 60 ))
+fi
+case "$BUDGET_S" in
+  ''|*[!0-9]*) die "--budget takes whole seconds, got '$BUDGET_S'" "$EX_USAGE" ;;
+esac
+
+on_budget_exhausted() {
+  trap - TERM
+  warn "budget of ${BUDGET_S}s exhausted while: $PHASE"
+  warn "raise it with --budget N (or \$LLM_BUDGET_S), or reduce the work"
+  exit "$EX_TIMEOUT"
+}
+
+# bash defers a trap until the running foreground child returns, so signalling
+# the shell alone can be swallowed by exactly the blocked command the budget
+# exists to interrupt. Killing the children first unblocks the shell, which then
+# runs the trap and gets to say why it died.
+kill_descendants() {
+  local parent="$1" self="$2" child
+  for child in $(pgrep -P "$parent" 2>/dev/null || true); do
+    if [ -n "$self" ] && [ "$child" = "$self" ]; then continue; fi
+    kill_descendants "$child" "$self"
+    kill -TERM "$child" 2>/dev/null || true
+  done
+  return 0
+}
+
+arm_watchdog() {
+  [ "$BUDGET_S" -gt 0 ] || return 0
+  trap on_budget_exhausted TERM
+  # The three redirections are load-bearing: a background job inherits the
+  # caller's stdout, and `llm-ask.sh ... | tee` would then block until the
+  # watchdog's own sleep expired, waiting on a writer that has nothing to say.
+  (
+    # bash 3.2 has no $BASHPID; a child's $PPID is this subshell's own pid.
+    wd_self="$(exec sh -c 'echo $PPID')"
+    sleep "$BUDGET_S"
+    kill_descendants "$MAIN_PID" "$wd_self"
+    kill -TERM "$MAIN_PID" 2>/dev/null || true
+    sleep 5
+    kill -KILL "$MAIN_PID" 2>/dev/null || true
+  ) </dev/null >/dev/null 2>&1 &
+  WATCHDOG_PID=$!
+  note "watchdog armed: ${BUDGET_S}s for the whole run"
+}
+
+# Armed further down, immediately after `trap cleanup EXIT`: a watchdog that can
+# outlive an early `die` would SIGKILL whatever pid the OS recycles into
+# $MAIN_PID, and only cleanup reaps it.
 
 # ── Routing ───────────────────────────────────────────────────────────────────
 
@@ -248,15 +331,28 @@ CFG_FILE=""
 PAYLOAD_FILE=""
 BODY_FILE=""
 PROMPT_FILE=""
+STDIN_FILE=""
 
+# `if` rather than `[ x ] && rm`: under `set -e` a false test ends the whole
+# list non-zero, which aborts the trap and leaks every temp file below it.
 cleanup() {
-  [ -n "$CFG_FILE" ] && rm -f "$CFG_FILE"
-  [ -n "$PAYLOAD_FILE" ] && rm -f "$PAYLOAD_FILE"
-  [ -n "$BODY_FILE" ] && rm -f "$BODY_FILE"
-  [ -n "$PROMPT_FILE" ] && rm -f "$PROMPT_FILE"
+  if [ -n "$CFG_FILE" ]; then rm -f "$CFG_FILE"; fi
+  if [ -n "$PAYLOAD_FILE" ]; then rm -f "$PAYLOAD_FILE"; fi
+  if [ -n "$BODY_FILE" ]; then rm -f "$BODY_FILE"; fi
+  if [ -n "$PROMPT_FILE" ]; then rm -f "$PROMPT_FILE"; fi
+  if [ -n "$STDIN_FILE" ]; then rm -f "$STDIN_FILE"; fi
+  # Killing the subshell is not enough — its `sleep` is a separate process, it
+  # survives, and it holds the inherited fds. Left alive it would also SIGKILL
+  # whatever pid the OS eventually recycles into $MAIN_PID.
+  if [ -n "$WATCHDOG_PID" ]; then
+    kill_descendants "$WATCHDOG_PID" ""
+    kill -KILL "$WATCHDOG_PID" 2>/dev/null || true
+  fi
   return 0
 }
 trap cleanup EXIT
+
+arm_watchdog
 
 # Headers go through a 0600 config file rather than argv: process arguments are
 # world-readable on both macOS and Linux, and the key is in there.
@@ -594,8 +690,78 @@ note "provider=$PROVIDER model=$MODEL base=$API_BASE"
 
 # ── Assemble the prompt ───────────────────────────────────────────────────────
 
+# Announce the resolved route and the work ahead BEFORE anything can block, so
+# a stalled run says what it was attempting instead of producing zero bytes on
+# both streams. Everything below this line can wait on something.
+ATTACH_COUNT="$(printf '%s' "$FILE_LIST" | grep -c . || true)"
+ATTACH_BYTES=0
+if [ -n "$FILE_LIST" ]; then
+  # `if`, not `[ -n "$p" ] && wc`: a false test would end the loop non-zero and
+  # `pipefail` would then fail the assignment under `set -e`.
+  ATTACH_BYTES="$(printf '%s' "$FILE_LIST" | while IFS= read -r p; do
+    if [ -n "$p" ]; then wc -c <"$p"; fi
+  done | awk '{ n += $1 } END { print n + 0 }')"
+fi
+warn "$PROVIDER/$MODEL · ${ATTACH_COUNT} file(s), ${ATTACH_BYTES} attached bytes · budget ${BUDGET_S}s"
+
+# Drains stdin into $1 in the background, so the shell only ever blocks in a
+# 1-second sleep and stays able to run its TERM trap. $2 is the cap in seconds;
+# 0 waits for EOF (still under the global budget). Returns 1 if the cap fired.
+drain_stdin() {
+  local dest="$1" cap="$2" waited=0 pid
+  # `<&0` is required: bash redirects a background job's stdin from /dev/null
+  # unless the redirect is explicit, which would silently drop piped input.
+  cat <&0 >"$dest" &
+  pid=$!
+  # Disowned so that killing it — here or from the watchdog — does not make bash
+  # print a bare "Terminated: 15", which reads like a fault rather than the
+  # deliberate decision it is. bash still reaps the child, so polling ends.
+  disown "$pid" 2>/dev/null || true
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$cap" -gt 0 ] && [ "$waited" -ge "$cap" ]; then
+      kill -TERM "$pid" 2>/dev/null || true
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 0
+}
+
+# `! -t 0` says stdin is not a terminal. It does not say anyone will ever write
+# to it or close it, and under an agent harness, a CI runner, cron or
+# `ssh host cmd` nobody does — which is how reading stdin became a permanent
+# hang that no request timeout could reach.
 STDIN_DATA=""
-if [ ! -t 0 ]; then STDIN_DATA="$(cat || true)"; fi
+STDIN_CAP="$STDIN_WAIT_S"
+if [ "$STDIN_MODE" = "always" ]; then
+  STDIN_CAP=0
+elif [ -z "$PROMPT_ARG" ] && [ -z "$FILE_LIST" ]; then
+  # stdin is the only prompt source, so the pipe is deliberate: wait for it, and
+  # let the global budget be the thing that bounds the wait.
+  STDIN_CAP=0
+fi
+
+if [ "$STDIN_MODE" = "never" ]; then
+  note "stdin: not read (--no-stdin)"
+elif [ -t 0 ]; then
+  note "stdin: a terminal, not read"
+else
+  PHASE="reading stdin"
+  STDIN_FILE="$(mktemp)"
+  if [ "$STDIN_CAP" -eq 0 ]; then
+    note "stdin: waiting for EOF (bounded by the ${BUDGET_S}s budget)"
+  fi
+  if drain_stdin "$STDIN_FILE" "$STDIN_CAP"; then
+    STDIN_DATA="$(cat "$STDIN_FILE")"
+    note "stdin: $(wc -c <"$STDIN_FILE" | tr -d ' ') bytes"
+  else
+    # A truncated diff sent as if it were whole is worse than no diff at all.
+    warn "stdin sent no EOF within ${STDIN_CAP}s — ignoring it and continuing"
+    warn "pass --no-stdin to silence this, or --stdin to wait for a slow producer"
+  fi
+  PHASE="assembling the prompt"
+fi
 
 # Fixed order — instruction, then files, then stdin — so the same invocation
 # always produces the same bytes. Every block is delimited: the instruction must
@@ -630,7 +796,7 @@ if [ ! -s "$PROMPT_FILE" ]; then
 fi
 
 PROMPT_CHARS="$(wc -c <"$PROMPT_FILE" | tr -d ' ')"
-note "prompt: $PROMPT_CHARS chars from $(printf '%s' "$FILE_LIST" | grep -c . || true) file(s)"
+note "prompt: $PROMPT_CHARS chars from $ATTACH_COUNT file(s)"
 if [ "$PROMPT_CHARS" -gt "$WARN_CHARS" ]; then
   warn "prompt is $PROMPT_CHARS chars (~$((PROMPT_CHARS / 4)) tokens) — verify it fits the model's context window"
 fi
@@ -641,6 +807,7 @@ fi
 # invalid JSON the first time the input contains a quote, a backslash or a
 # newline — which for a diff is immediately.
 
+PHASE="building the JSON payload"
 PAYLOAD_FILE="$(mktemp)"
 
 case "$PROVIDER" in
@@ -682,6 +849,7 @@ if [ "$DRY_RUN" = "1" ]; then
   printf 'url      : %s\n' "$URL"
   printf 'key      : %s\n' "$(key_state "$PROVIDER")"
   printf 'timeout  : %ss per attempt, %s retr(y|ies)\n' "$TIMEOUT_S" "$RETRIES"
+  printf 'budget   : %ss for the whole run\n' "$BUDGET_S"
   DRY_PRICING=""
   if [ "$PROVIDER" = "openrouter" ]; then ensure_models_cache || true; DRY_PRICING="$(model_pricing "$MODEL" || true)"; fi
   report_estimate "$PROMPT_CHARS" "$DRY_PRICING"
@@ -699,7 +867,9 @@ fi
 
 write_curl_config "$PROVIDER" "$API_KEY"
 BODY_FILE="$(mktemp)"
+PHASE="waiting on $PROVIDER ($MODEL)"
 http_post "$URL"
+PHASE="reading the response"
 STATUS="$HTTP_STATUS"
 
 # A JSON error object can arrive with HTTP 200 — gateways in particular do this,

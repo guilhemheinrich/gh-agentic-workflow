@@ -11,10 +11,12 @@ description: >-
   repeatable `-f` file attachment and a cached model catalogue (prices, context
   windows and republished benchmark scores) that lets you name a reviewer by
   capability — `--top 5 --by coding`, `-m @top --exclude-vendor anthropic` —
-  instead of by slug. Use when asking another model to attack your work, picking a
+  instead of by slug, and a wall-clock budget that bounds the whole run rather than
+  just the request. Use when asking another model to attack your work, picking a
   reviewer without knowing model names, reviewing a spec or a diff outside the
-  agent that produced it, setting up an OpenRouter key, or debugging a gateway
-  that answers HTTP 200 with an error body.
+  agent that produced it, setting up an OpenRouter key, calling the client from an
+  agent or a hook where an inherited stdin never reaches EOF, or debugging a
+  gateway that answers HTTP 200 with an error body.
 tags:
   - llm
   - quality
@@ -49,6 +51,7 @@ of sending the context that helps rather than all the context there is.
 | File                              | Role                                                  |
 | --------------------------------- | ----------------------------------------------------- |
 | `scripts/llm-ask.sh`              | The client. Routing, retries, pricing, extraction.    |
+| `scripts/test-llm-ask.sh`         | Regression suite. Offline; asserts bounds, not just answers. |
 | `templates/openrouter-key.fish`   | Key setup — fish, macOS and Linux.                    |
 | `templates/openrouter-key.sh`     | Key setup — bash and zsh, macOS and Linux.            |
 | `templates/openrouter-key.ps1`    | Key setup — Windows, user-scope environment variable. |
@@ -159,8 +162,13 @@ The prompt does the work. Ask for a verdict and you get flattery; ask for
 refutation and you get findings. Reviewing a spec against its plan:
 
 ```bash
-llm-ask.sh -m gpt-pro -o review-gpt.md -f specs/012-tax-rounding/spec.md -f specs/012-tax-rounding/plan.md -s @adversarial.md "Review this specification against its plan."
+llm-ask.sh --no-stdin -m gpt-pro -o review-gpt.md -f specs/012-tax-rounding/spec.md -f specs/012-tax-rounding/plan.md -s @adversarial.md "Review this specification against its plan."
 ```
+
+`--no-stdin` because nothing is being piped in. Typing that line yourself, in a
+terminal, it changes nothing. Running it from an agent, a hook or a pipeline
+step — where stdin is an inherited pipe nobody closes — it removes a 5-second
+wait and a warning from every call. §7.1.
 
 Reviewing an implementation against the spec it claims to satisfy — diff on
 stdin, artefacts attached:
@@ -304,6 +312,7 @@ model    : openai/gpt-5.6-sol
 url      : https://openrouter.ai/api/v1/chat/completions
 key      : missing
 timeout  : 600s per attempt, 2 retr(y|ies)
+budget   : 1865s for the whole run
 prompt   : 27871 chars (~6967 tokens, estimate)
 cost     : ~USD 0.0174 in (@ USD 2.50/M) + up to USD 0.1200 out (8000 tok @ USD 15.00/M)
 context  : 6967 of 1050000 tokens (0.7%)
@@ -457,6 +466,9 @@ Every flag, and the environment variable that presets it:
 | `--min-context K`     | —               | `0`            | Require at least K tokens of context window when ranking.    |
 | `--models-refresh`    | —               | —              | Refetch the catalogue now, ignoring the TTL. Alone: fetch and exit. |
 | `-s, --system TEXT`   | —               | —              | System prompt; `@path` reads it from disk.                       |
+| `--stdin`             | —               | auto           | Always read stdin, waiting for EOF. Bounded by `--budget`. §7.1. |
+| `--no-stdin`          | `LLM_NO_STDIN=1`| auto           | Never read stdin. What an agent or a cron job wants. §7.1.       |
+| `--budget S`          | `LLM_BUDGET_S`  | derived        | Ceiling on the **whole run**, armed at start-up. §7.2.           |
 | `--base-url URL`      | `LLM_BASE_URL`  | per provider   | Endpoint root. The only supported way to reroute. §2.            |
 | `-t, --temperature N` | —               | **unset**      | Sent only when given; reasoning models reject non-default.       |
 | `--max-tokens N`      | —               | 4096 anthropic | Output cap. Omitted entirely elsewhere unless given.             |
@@ -475,12 +487,12 @@ Every flag, and the environment variable that presets it:
 `-m` also accepts a **selector** instead of a slug: `@top`, or `@top:N` for the
 Nth of the ranking, resolved through `--by` and `--exclude-vendor`. §6.
 
-Five environment variables have no flag: `LLM_ALIAS_FILE` (default
+Six environment variables have no flag: `LLM_ALIAS_FILE` (default
 `${XDG_CONFIG_HOME:-~/.config}/llm-ask/aliases`), `LLM_MODELS_CACHE` (default
 `${XDG_CACHE_HOME:-~/.cache}/llm-ask/models.json`), `LLM_CACHE_TTL_H` (default
 `24`), `LLM_WARN_CHARS` (default `400000` — the assembled-prompt size that
-triggers a stderr warning), and `OPENROUTER_API_KEY` /
-`LLM_OPENROUTER_API_KEY` from §2.
+triggers a stderr warning), `LLM_STDIN_WAIT_S` (default `5` — §7.1), and
+`OPENROUTER_API_KEY` / `LLM_OPENROUTER_API_KEY` from §2.
 The completion goes to **stdout**; diagnostics, warnings and usage go to
 **stderr**. That is what makes the script composable — `> review.md` captures the
 review and nothing else.
@@ -491,12 +503,64 @@ review and nothing else.
 | 1    | Bad invocation.                                                      |
 | 2    | Environment: missing `curl`/`jq`, missing key, no model.             |
 | 3    | Provider refused, or answered with nothing usable.                   |
-| 4    | Wall-clock budget exhausted.                                         |
+| 4    | Request timeout, or the whole-run budget exhausted. §7.2.            |
 
 An empty completion is exit 3, never a silent success — a refusal and a
 zero-token answer must not read like a clean review.
 
-### Timeouts: never let the clock kill a paid answer
+### 7.1 stdin: pass `--no-stdin` from an agent, a hook or a cron job
+
+The script reads stdin because `git diff | llm-ask.sh …` is the point. But the
+only thing it can detect up front is that stdin **is not a terminal**, and that
+is equally true of two opposite situations:
+
+- a real pipe, which sends bytes and then closes — `git diff` finishing;
+- an idle pipe nobody will ever write to or close — what an agent harness, a CI
+  runner, `cron`, and `ssh host cmd` all hand a child process.
+
+The second one used to block forever, before the request, where no request
+timeout could reach it. Three rules now apply instead:
+
+| Situation                                | Behaviour                                       |
+| ---------------------------------------- | ------------------------------------------------ |
+| stdin is a terminal                      | Not read at all.                                 |
+| A prompt argument or `-f` was also given | Wait `LLM_STDIN_WAIT_S` (5s), then warn and drop it. |
+| stdin is the **only** prompt source      | Wait for EOF, bounded by `--budget`.             |
+
+Dropped input is dropped whole and announced on stderr. A half-read diff sent as
+though it were complete would produce a confident review of code you never wrote.
+
+**In any non-interactive caller — a subagent, a git hook, a pipeline step — pass
+`--no-stdin` (or export `LLM_NO_STDIN=1`).** It removes the 5-second wait and the
+warning, and states the intent instead of leaving it to detection:
+
+```bash
+llm-ask.sh --no-stdin -m @top --by coding -f spec.md -f change.diff "Refute this"
+```
+
+### 7.2 The budget bounds the run; the timeout only bounds the request
+
+`--timeout` wraps curl. That leaves everything before the socket — reading stdin,
+reading a file off a stale mount, assembling the payload — outside its reach, and
+a client that can block there is not bounded by it at all.
+
+`--budget` is a second, wider guard, armed at start-up, before anything can
+block. It defaults to `timeout × (retries + 1) + stdin wait + 60s` slack, so the
+stock configuration caps a pathological run at roughly 31 minutes. Exceeding it
+exits 4 and names the phase it died in:
+
+```
+llm-ask: budget of 8s exhausted while: reading stdin
+```
+
+Every run also opens with one stderr line, printed **before** any blocking work,
+so a stalled process still says what it was attempting:
+
+```
+llm-ask: openrouter/openai/gpt-5.6-sol · 2 file(s), 44006 attached bytes · budget 1865s
+```
+
+### 7.3 Timeouts: never let the clock kill a paid answer
 
 The default is **600s per attempt**, deliberately generous. A reasoning-tier model
 handed 50k tokens of review context routinely spends several minutes before the
@@ -505,9 +569,11 @@ the input has already been billed and you have nothing.
 
 Exit 4 means exactly that. There is no retry on timeout — retrying a call that was
 probably still working would double the bill — so the fix is to raise `--timeout`,
-not to rerun it unchanged. Worst case is bounded at `timeout × (retries + 1)`, so
-the defaults cap a pathological run at 30 minutes. Shrink `--timeout` only for
-short interactive questions where a fast failure beats a slow answer.
+not to rerun it unchanged. The request side is bounded at `timeout × (retries + 1)`
+and the run as a whole by `--budget` (§7.2). Shrink `--timeout` only for short
+interactive questions where a fast failure beats a slow answer, and raise
+`--budget` with it whenever you raise `--timeout` — the derived default only
+tracks the flags you actually pass.
 
 ## 8. Failure modes
 
@@ -522,6 +588,8 @@ short interactive questions where a fast failure beats a slow answer.
 | 429                                         | Rate limited. The script retries twice with backoff.         |
 | Empty text, `finish_reason=content_filter`  | Refusal. Exit 3.                                             |
 | Truncated text, `finish_reason=length`      | Warned on stderr; raise `--max-tokens`.                      |
+| Runs ~5s longer than expected, "no EOF" on stderr | An idle stdin was waited on and dropped. `--no-stdin`. §7.1. |
+| `budget … exhausted while: <phase>`         | The whole-run guard fired. The phase names what blocked. §7.2. |
 
 ## 9. Payload hygiene and secrets
 
@@ -580,7 +648,9 @@ convention as §2 — `OPENAI_API_KEY` / `LLM_OPENAI_API_KEY`, `ANTHROPIC_API_KE
 | Keys in a project-scope `.claude/settings.json`     | Committed secret.                                                   |
 | Interpolating a diff into a JSON string             | Invalid payload on the first quote. §9.                             |
 | Hardcoding model slugs across scripts               | Slugs drift; use the alias file.                                    |
-| Shrinking `--timeout` to "fail fast"                | You pay for the input and throw the answer away. §7.                |
+| Shrinking `--timeout` to "fail fast"                | You pay for the input and throw the answer away. §7.3.              |
+| Calling it from an agent or a hook without `--no-stdin` | An idle inherited stdin costs 5s per call and a warning on every one. §7.1. |
+| Trusting a request timeout to bound a client        | It bounds the request. Anything before the socket needs `--budget`. §7.2. |
 | Retrying a 400 or 404                               | Deterministic refusals. Only 429/5xx/network are worth a retry.      |
 | A dollar sign directly before a digit in a SKILL.md  | Slash-command argument substitution eats it: an amount like USD 2.50 written that way becomes the second word the user typed. |
 | `grep`/`sed` over prose to drive control flow       | Ask for a delimited block, or request structure and parse with jq.  |
@@ -596,6 +666,22 @@ convention as §2 — `OPENAI_API_KEY` / `LLM_OPENAI_API_KEY`, `ANTHROPIC_API_KE
 ## Implementation Status
 
 **Fully implemented; live-verified except the completion call.**
+
+**v1.1.0 — the stdin hang.** v1.0.0 blocked forever on a stdin that was not a
+terminal and never reached EOF. The block sat before the HTTP request, so
+`--timeout`, which only wraps curl, never armed: no output, no error, no exit
+code. One reported run was killed by its operator after 9 hours. The trigger was
+the calling environment, not the flags — an idle inherited pipe, as handed out by
+agent harnesses, CI runners, `cron` and `ssh host cmd` — which is why it looked
+correlated with multi-`-f` invocations that happened to be launched that way.
+
+Fixed on three fronts: the stdin read is drained in the background under a cap
+(§7.1); a `--budget` guard is armed at start-up and bounds the whole run,
+naming the phase it killed (§7.2); and one stderr line is printed before any
+blocking work. `scripts/test-llm-ask.sh` covers it — 9 cases, offline, each
+asserting a bound rather than an answer, including one that runs the assembly
+path with the request never sent. The suite was run against v1.0.0 through
+`LLM_ASK_SUT=` and reproduces the hang there (4 red), and is green on v1.1.0.
 
 `llm-ask.sh` was exercised against a stub provider on twenty paths: happy path,
 prompt+stdin fidelity with quotes/backslashes/`${}` in the payload, HTTP 200
@@ -638,4 +724,6 @@ verification.
 **Not verified:** the completion path itself. `chat/completions` has never been
 called for real, because this machine holds no OpenRouter key. Auth, billing and
 per-model parameter quirks are stub-verified only; your first real review is what
-proves them.
+proves them. The v1.1.0 guards are likewise verified on macOS bash 3.2 only —
+`pgrep`, `disown` and job reaping behave the same on Linux bash 5, but that was
+not run here.
