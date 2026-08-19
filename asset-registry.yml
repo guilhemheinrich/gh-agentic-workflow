@@ -1078,6 +1078,25 @@ assets:
       ESLint Flat Config standard for TypeScript/NestJS monorepos — enforces SOLID principles, Clean Architecture layer
       boundaries, and best practices via static analysis.
     category: frameworks-and-libraries
+  - path: skills/eza-file-overview/
+    type: skill
+    category: tools-and-configurations
+    bundles:
+      - common
+    tags:
+      - documentation
+      - git
+      - shell
+      - tooling
+    description: >-
+      Show which files a change touched, at a glance, in a chat transcript or in a terminal. Ships git-impacted.sh, which
+      turns any git range — or the working tree — into a directory-grouped list where every path is a clickable markdown
+      link carrying its status and its +added/-removed tail, and eza-docs.sh, a version-keyed local cache of eza's own
+      help and man pages so nothing in the skill paraphrases the binary. Documents the four things eza cannot do (no
+      commit range, a deleted path exits 2, no annotation column, EZA_COLORS globs match the basename only) and the one
+      that matters most: ANSI colour, OSC 8 hyperlinks and Nerd Font icons are terminal features that reach a chat as
+      literal garbage. Use when reporting the files an AI iteration created or modified, rendering a file tree with
+      per-file semantics, colouring a listing with EZA_COLORS, or looking up an eza flag.
   - path: skills/find-skills/
     type: skill
     tags:
