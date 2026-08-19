@@ -834,6 +834,16 @@ assets:
     category: tools-and-configurations
     bundles:
       - common
+  - path: rules/04-tools-and-configurations/4-specify-rules.mdc
+    type: rule
+    tags:
+      - cursor
+      - meta
+      - spec-kit
+    description: >-
+      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
+      entries for this repo.
+    category: tools-and-configurations
   - path: rules/04-tools-and-configurations/4-static-validation.mdc
     type: rule
     category: tools-and-configurations
@@ -845,18 +855,8 @@ assets:
       - lint
     description: >-
       Install a bespoke static-validation hook in any project with Docker and a running dev stack. States the
-      runner/routing-table split, the file-local-linters-only constraint (no tsc, phpstan, mypy or test runners),
-      branch ordering, blocking vs warn-once policy, and the Bash-tool and worktree coverage limits.
-  - path: rules/04-tools-and-configurations/4-specify-rules.mdc
-    type: rule
-    tags:
-      - cursor
-      - meta
-      - spec-kit
-    description: >-
-      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
-      entries for this repo.
-    category: tools-and-configurations
+      runner/routing-table split, the file-local-linters-only constraint (no tsc, phpstan, mypy or test runners), branch
+      ordering, blocking vs warn-once policy, and the Bash-tool and worktree coverage limits.
   - path: rules/05-workflows-and-processes/5-spec-driven-dev.mdc
     type: rule
     tags:
@@ -1089,13 +1089,13 @@ assets:
       - shell
       - tooling
     description: >-
-      Show which files a change touched, at a glance, in a chat transcript or in a terminal. Ships git-impacted.sh, which
-      turns any git range — or the working tree — into a directory-grouped list where every path is a clickable markdown
-      link carrying its status and its +added/-removed tail, and eza-docs.sh, a version-keyed local cache of eza's own
-      help and man pages so nothing in the skill paraphrases the binary. Documents the four things eza cannot do (no
-      commit range, a deleted path exits 2, no annotation column, EZA_COLORS globs match the basename only) and the one
-      that matters most: ANSI colour, OSC 8 hyperlinks and Nerd Font icons are terminal features that reach a chat as
-      literal garbage. Use when reporting the files an AI iteration created or modified, rendering a file tree with
+      Show which files a change touched, at a glance, in a chat transcript or in a terminal. Ships git-impacted.sh,
+      which turns any git range — or the working tree — into a directory-grouped list where every path is a clickable
+      markdown link carrying its status and its +added/-removed tail, and eza-docs.sh, a version-keyed local cache of
+      eza's own help and man pages so nothing here paraphrases the binary. Documents the four things eza cannot do (no
+      commit range, no deleted files, no annotation column, colour globs match the basename only) and the one that
+      matters most: ANSI colour, OSC 8 hyperlinks and Nerd Font icons are terminal features that arrive as literal
+      garbage in a chat. Use when reporting the files an AI iteration created or modified, rendering a file tree with
       per-file semantics, colouring a listing with EZA_COLORS, or looking up an eza flag.
   - path: skills/find-skills/
     type: skill
@@ -1410,17 +1410,15 @@ assets:
     description: >-
       Get a spec, a diff or a design reviewed by a model from a different lineage than the one that wrote it, through
       OpenRouter, from the command line. One key reaches GPT, Kimi, Gemini, DeepSeek and the rest, so a second opinion
-      costs a string change rather than a new billing relationship. Covers the user-level key setup on fish, bash/zsh and
-      Windows (idempotent scripts that create or amend the key file and leave a placeholder to paste into), how to write a
-      prompt that refutes instead of flatters, which context actually improves a review and what it costs (a measured tier
-      table from T1 spec+diff to T5 whole-repo), and ships `llm-ask.sh` — a composable one-shot client with
-      repeatable `-f` file attachment plus a cached model catalogue (prices, context windows and republished
-      artificial_analysis benchmark scores, refetched past a 24h TTL) that powers `--top` and `@top` selection by
-      intelligence, coding or agentic index, one model per vendor so a panel spans distinct lineages, with
-      `--exclude-vendor` to drop your own; live cost and context-window checks in `--dry-run`, retries on 429/5xx,
-      jq-built payloads, 0600 header files and honest exit codes. Use when asking another model to attack your
-      work, picking a reviewer without knowing model names, reviewing a spec or a diff outside the agent that
-      produced it, setting up an OpenRouter key, or debugging a gateway that answers HTTP 200 with an error body.
+      costs a string change rather than a new billing relationship. Covers the user-level key setup on fish, bash/zsh
+      and Windows, how to write a prompt that refutes instead of flatters, which context actually improves a review and
+      what it costs (a measured tier table), and ships `llm-ask.sh` — a composable one-shot client with repeatable `-f`
+      file attachment and a cached model catalogue (prices, context windows and republished benchmark scores) that lets
+      you name a reviewer by capability — `--top 5 --by coding`, `-m @top --exclude-vendor anthropic` — instead of by
+      slug, and a wall-clock budget that bounds the whole run rather than just the request. Use when asking another
+      model to attack your work, picking a reviewer without knowing model names, reviewing a spec or a diff outside the
+      agent that produced it, setting up an OpenRouter key, calling the client from an agent or a hook where an
+      inherited stdin never reaches EOF, or debugging a gateway that answers HTTP 200 with an error body.
   - path: skills/s3-backend-proxy/
     type: skill
     tags:
