@@ -271,6 +271,51 @@ prepare and verify everything, but a human still supplies the OTP — storing a 
 secret to remove that step trades the whole benefit away. Trusted publishing is the
 only path that removes the human **and** the credential.
 
+**Two scripts ship with this skill.** Both honour `NPM_BIN`, so the npm call can be
+wrapped on a Docker-only host:
+
+```bash
+export NPM_BIN="docker run --rm -v $HOME/.npmrc:/root/.npmrc:ro node:24 npm"
+```
+
+[`scripts/npm-token-audit.sh`](scripts/npm-token-audit.sh) — the rotation queue.
+Lists every token **soonest expiry first**, already-expired ones ahead of those,
+unknown-expiry last. Exits `3` when anything expires within `--warn-days` (default
+14), so it works as a scheduled check.
+
+```
+STATUS   EXPIRES     DAYS  ID        PERM  NAME
+EXPIRED  2026-05-11  -103  ee55ff66  write old-bitbucket-publish
+SOON     2026-08-22  0     aa11bb22  write septeo-immo-publish-2026-05
+ok       2026-10-30  69    cc33dd44  read  ci-readonly-consumer
+unknown  -           -     1177aa88  write legacy-no-expiry
+```
+
+One caveat the script handles rather than hides: **`npm token list` renders no
+expiry column** — verified against npm 11.17.0 and 12.0.2, whose columns are
+`key, token, id, name, created, readonly, CIDR whitelist`. Expiry is echoed only at
+creation. The script therefore reads `--json`, which dumps the raw
+`/-/npm/v1/tokens` payload, and **probes** for the expiry field (`expires`,
+`expires_at`, `expiresAt`, `expiration`, `expiry`) rather than assuming a name. It
+accepts an ISO date, an epoch in seconds or an epoch in milliseconds. If the
+payload carries no expiry at all, it says so and points at the website instead of
+inventing an order. Use `--raw-keys` to see what the registry actually returned.
+
+[`scripts/rotate-npm-publish-token.sh`](scripts/rotate-npm-publish-token.sh) — the
+rotation itself.
+
+```bash
+./scripts/rotate-npm-publish-token.sh --package @org/pkg --verify-publish . --revoke <old-id>
+```
+
+It refuses `--expires` above 90, defaults the name to `<target>-publish-<YYYY-MM>`,
+always passes `--bypass-2fa`, verifies the new token with `whoami` and an optional
+`publish --dry-run`, and **revokes the old token only after that verification
+passes**. The token is printed once, alone on the last line of stdout, so it can be
+piped into a secret store; every other line goes to stderr, and token-shaped
+strings are stripped from any error output. Use `--dry-run` to see the exact
+`npm token create` invocation without creating anything.
+
 
 
 ### Required CI environment
