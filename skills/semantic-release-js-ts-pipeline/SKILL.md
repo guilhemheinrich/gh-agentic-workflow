@@ -3,8 +3,11 @@ name: semantic-release-js-ts-pipeline
 description: >-
   Standardize release automation for JavaScript/TypeScript projects using
   semantic-release. Covers version calculation, Git tags, release notes, npm
-  publishing policy, and CI/CD governance. Use when setting up automated
-  releases, configuring semantic-release plugins, defining branch strategies, or
+  publishing policy, and CI/CD governance. Treats OIDC trusted publishing as the
+  default npm authentication, and documents the failure modes of a broken release (EOTP,
+  E403, ENONPMTOKEN, a branch frozen by a skip-CI release commit). Use when
+  setting up automated releases, configuring semantic-release plugins, choosing
+  between a trusted publisher and an NPM_TOKEN, defining branch strategies, or
   integrating release versions with application metadata.
 tags:
   - ci-cd
@@ -143,12 +146,98 @@ npx semantic-release
 
 Performs the full pipeline: version calculation, tag, release notes, optional npm publish.
 
+### npm authentication — prefer trusted publishing (OIDC) over a token
+
+For packages published to **registry.npmjs.org**, authenticate the release job with
+**OIDC trusted publishing**. The CI job proves its identity to npm and receives a
+short-lived publish token; no `NPM_TOKEN` secret exists, so nothing expires, leaks
+or has to be rotated. Reach for a token only when the registry does not support
+trusted publishing (a self-hosted Verdaccio, Artifactory, GitHub Packages).
+
+**Mechanism.** `@semantic-release/npm` asks the CI provider for an id-token scoped
+to `npm:registry.npmjs.org`, POSTs it to
+`https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/<package-name>`,
+and publishes with the token it gets back. It tries this **before** any token auth
+and falls back to `NPM_TOKEN` when the exchange fails — so a misconfigured trusted
+publisher surfaces as `ENONPMTOKEN`, not as an OIDC error.
+
+**Hard requirements** (all four, or the exchange is refused):
+
+| Requirement | Value |
+| --- | --- |
+| Plugin | `@semantic-release/npm` **≥ 13**, shipped by `semantic-release` **≥ 25** (engines `^22.14.0 \|\| >= 24.10.0`) |
+| npm CLI | **≥ 11.5.1** — `node:24` carries 11.17.0; **`node:22` still carries 10.9.8**, so Node 22 needs an explicit npm upgrade |
+| Job permission | `id-token: write` |
+| Registry-side | a trusted publisher declared on the package |
+
+**Declaring the publisher** (npmjs → package → *Settings* → *Trusted Publisher*).
+The available providers are **GitHub Actions**, **GitLab CI/CD** and **CircleCI**.
+For GitHub Actions:
+
+| Field | Value |
+| --- | --- |
+| Organization or user | the GitHub org or user |
+| Repository | the repository name |
+| Workflow filename | the **filename only**, extension included — `release.yml`, never `.github/workflows/release.yml` |
+| Environment name | leave empty unless the job declares an `environment:` |
+| Allowed actions | `npm publish` |
+
+**Order of operations matters.** Declare the publisher **before** merging the
+workflow change. A release that runs first fails at publish, and — when
+`@semantic-release/git` is configured — leaves the branch frozen (see
+[Failure modes](#failure-modes)).
+
+**Workflow shape.** Do not set `registry-url`, `scope` or `NODE_AUTH_TOKEN` on
+`setup-node`: the `.npmrc` auth line it writes only competes with OIDC. Do not pass
+`--provenance` or `NPM_CONFIG_PROVENANCE` either — trusted publishing attests by
+default.
+
+```yaml
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write        # required: OIDC token exchange + provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"   # npm >= 11.5.1; no registry-url, no NODE_AUTH_TOKEN
+      - run: npm ci
+      - run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+```
+
+Confirm success in the log — these three lines, in order:
+
+```
+Verifying OIDC context for publishing from GitHub Actions
+OIDC token exchange with the npm registry succeeded
+Publishing version <x.y.z> to npm registry on dist-tag latest
+```
+
+**After the first green publish**, delete the now-unused `NPM_TOKEN` secret and set
+the package to *Require two-factor authentication and disallow tokens*.
+
+**Two properties that bite later.** The **workflow filename is part of the trust
+identity** — renaming `release.yml` breaks publishing silently. And the exchange is
+**per package**, so every new package under the same scope needs its own publisher.
+
+
 ### Required CI environment
 
 | Secret / condition | Purpose |
 | --- | --- |
 | `GITHUB_TOKEN` or `GITLAB_TOKEN` (or CI equivalents) | Authenticate to the forge to create releases and often to push tags |
-| `NPM_TOKEN` | Only if **publishing to npm** (or another registry via npm CLI) |
+| `NPM_TOKEN` | Only when publishing to a registry that has **no** trusted publishing — see [npm authentication](#npm-authentication--prefer-trusted-publishing-oidc-over-a-token). On registry.npmjs.org, prefer OIDC and set no secret at all |
+| `id-token: write` permission | Required for OIDC trusted publishing and for provenance |
 | **Git history** | **Not** a shallow clone for full commit analysis, **or** ensure tags and relevant commits are fetched (`fetch-depth: 0` in GitHub Actions is common) |
 
 ### Example: GitHub Actions (release job)
@@ -170,7 +259,11 @@ release:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-Add `NPM_TOKEN` to `env` when using `@semantic-release/npm`.
+The snippet above is the token-free minimum for a **deployed app** (forge release only).
+When using `@semantic-release/npm` against registry.npmjs.org, add `id-token: write`
+and bump `node-version` to `24` instead of adding a secret — see
+[npm authentication](#npm-authentication--prefer-trusted-publishing-oidc-over-a-token).
+Add `NPM_TOKEN` to `env` only for a registry without trusted publishing.
 
 In repositories that require **all Node/npm commands to run inside Docker**, execute the same steps in a job that uses the project’s Node image and runs `npx semantic-release` there instead of on the default runner’s bare Node install.
 
@@ -226,11 +319,31 @@ After semantic-release **creates a Git tag** (e.g. `v1.2.3`), CI can **read that
 - [ ] Conventional commits enforced (commitlint or equivalent)
 - [ ] `.releaserc.json` (or `release` in `package.json`) created with the correct **project type** (app vs package vs opt-in changelog/git)
 - [ ] CI: **dry-run** on PR, **full release** on merge to `main` (or other configured release branches)
-- [ ] Secrets: `GITHUB_TOKEN` / `GITLAB_TOKEN`; **`NPM_TOKEN` only if publishing**
+- [ ] Secrets: `GITHUB_TOKEN` / `GITLAB_TOKEN`. On registry.npmjs.org, **no npm secret** — use trusted publishing
+- [ ] Publishing to npmjs: trusted publisher declared on the package **before** the workflow change merges, `id-token: write` on the job, `semantic-release` >= 25, Node 24
 - [ ] Git checkout in CI is **not shallow** (`fetch-depth: 0` or equivalent) and tags are available
 - [ ] Branch strategy **documented** and matches `branches` in config
 - [ ] Version surfacing planned with [**app-version-surface**](../app-version-surface/SKILL.md) for `version` / `displayVersion`
 - [ ] Team **onboarded** on commit message rules and release expectations
+
+---
+
+## Failure modes
+
+Each row below was observed on a real pipeline. The error code is the fastest
+discriminator — read it before changing anything.
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `npm error code EOTP` — *requires a one-time password* | The npm account enforces 2FA on writes and the token in use does not bypass it. A classic **Publish** token never bypasses it; a classic **Automation** or a **Granular** token does. Independently, a package set to `mfa=publish` refuses **even an Automation token** | Move to [trusted publishing](#npm-authentication--prefer-trusted-publishing-oidc-over-a-token). Staying on tokens means `npm access set mfa=automation <pkg>` **and** an Automation or Granular token |
+| `npm error code ENONPMTOKEN` on a job with no secret | The OIDC exchange was refused, and the plugin fell back to token auth | Check the publisher's **workflow filename** and repository on npmjs, and that `id-token: write` is declared |
+| `npm error code E403 You cannot publish over the previously published versions` | A publish step ran when no release was due. `semantic-release` exits **0** when it decides not to release, so a step gated on its exit status still fires and republishes the unchanged version | Let `@semantic-release/npm` own the publish (`npmPublish: true`). Never bolt a separate `npm publish` step onto the job |
+| `npm error code EUSAGE` on provenance | Provenance cannot be attested for a restricted package | `publishConfig.access: "public"`, or drop provenance |
+| **The branch is frozen: no run fires at all** | `@semantic-release/git` runs in `prepare`, so the `chore(release): x.y.z [skip ci]` commit and the tag are pushed **before** `publish`. When publishing fails, the branch head carries the CI-skip marker and no push event can retry — and `semantic-release` never re-publishes a version it already tagged | Push an empty commit with a **releasable** type (`fix:`); a `chore:` commit triggers the workflow and then publishes nothing while reporting success. The stuck version number is lost — accept the gap |
+
+**One trap worth its own line:** the forge scans the **whole** commit message for the
+CI-skip marker, body included. Quoting that marker while *explaining* this failure
+suppresses the very run you are trying to trigger. Name it, never reproduce it.
 
 ---
 
@@ -243,6 +356,9 @@ After semantic-release **creates a Git tag** (e.g. `v1.2.3`), CI can **read that
 - Using **`package.json#version` alone** as runtime truth for **deployed apps** (use **Git tag** / build injection).
 - **Publishing to npm** from a repo that only ships a **container or static bundle** with no package consumers.
 - Running **full** `semantic-release` on **every** branch instead of only **configured** release branches.
+- Storing a long-lived `NPM_TOKEN` when the registry supports **trusted publishing** (a secret that expires silently and can leak, replacing one that cannot).
+- Bolting a **separate `npm publish` step** onto the release job next to `semantic-release`, gated on its step outcome — see `E403` in [Failure modes](#failure-modes).
+- Passing `--provenance` **and** using trusted publishing (redundant: the attestation is automatic).
 
 ---
 
