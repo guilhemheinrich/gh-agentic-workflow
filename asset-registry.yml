@@ -1449,9 +1449,9 @@ assets:
       Standardize release automation for JavaScript/TypeScript projects using semantic-release. Covers version
       calculation, Git tags, release notes, npm publishing policy, and CI/CD governance. Treats OIDC trusted publishing
       as the default npm authentication, and documents the failure modes of a broken release (EOTP, E403, ENONPMTOKEN, a
-      branch frozen by a skip-CI release commit). Use when setting up automated releases, configuring semantic-release
-      plugins, choosing between a trusted publisher and an NPM_TOKEN, defining branch strategies, or integrating release
-      versions with application metadata.
+      branch frozen by a skip-CI release commit). Covers the mandatory 90-day granular-token rotation and how to script
+      it. Use when setting up automated releases, configuring semantic-release plugins, choosing between a trusted
+      publisher and an NPM_TOKEN, defining branch strategies, or integrating release versions with application metadata.
     category: tools-and-configurations
   - path: skills/sentry-fix-issues/
     type: skill

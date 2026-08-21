@@ -5,7 +5,8 @@ description: >-
   semantic-release. Covers version calculation, Git tags, release notes, npm
   publishing policy, and CI/CD governance. Treats OIDC trusted publishing as the
   default npm authentication, and documents the failure modes of a broken release (EOTP,
-  E403, ENONPMTOKEN, a branch frozen by a skip-CI release commit). Use when
+  E403, ENONPMTOKEN, a branch frozen by a skip-CI release commit). Covers the
+  mandatory 90-day granular-token rotation and how to script it. Use when
   setting up automated releases, configuring semantic-release plugins, choosing
   between a trusted publisher and an NPM_TOKEN, defining branch strategies, or
   integrating release versions with application metadata.
@@ -230,6 +231,47 @@ the package to *Require two-factor authentication and disallow tokens*.
 identity** — renaming `release.yml` breaks publishing silently. And the exchange is
 **per package**, so every new package under the same scope needs its own publisher.
 
+### Token rotation is now mandatory
+
+If you publish to registry.npmjs.org with a token, budget for a rotation **at least
+four times a year, forever**. This is npm policy, not a setting you picked badly:
+
+- **2025-12-09** — all *classic* tokens were permanently revoked. The
+  never-expiring automation token no longer exists.
+- Granular tokens with **write** permission are **capped at 90 days**; the default
+  is often 7.
+- Granular tokens enforce 2FA unless **Bypass 2FA** was ticked **at creation**. The
+  box is unticked by default and cannot be added to an existing token — a token
+  created without it fails every publish with `EOTP` and must be recreated.
+
+**Which CI can escape it.** npm's trusted publishers are **GitHub Actions**,
+**GitLab CI/CD** and **CircleCI**. **Bitbucket Pipelines is absent**, so a package
+published from Bitbucket Pipelines has no token-free path today — the 90-day
+rotation is structural there, and the only ways out are moving the publishing
+repository to a supported forge or publishing to a registry you control.
+
+**Scripting the rotation.** `npm token create` (npm >= 11) creates granular tokens
+with exact scoping, so the rotation is repeatable rather than a click-path someone
+gets wrong every quarter:
+
+| Flag | Use |
+| --- | --- |
+| `--name`, `--token-description` | identify the token; date the name so the next rotation is obvious |
+| `--expires <days>` | lifetime **in days**; 90 is the ceiling for a write token |
+| `--scopes <scope>` / `--packages <pkg>` / `--orgs <org>` | narrow the blast radius — prefer one package over a whole scope |
+| `--packages-and-scopes-permission read-write` | what a publish needs; `read-only` for a consumer token |
+| `--orgs-permission no-access` | withhold org administration, which a publish never needs |
+| `--bypass-2fa` | **the flag that avoids `EOTP`** — omit it and every publish fails |
+| `--cidr <range>` | optional, only if the CI has stable egress addresses |
+| `--otp <code>`, `--password` | creation is authenticated; see the limit below |
+
+**The rotation cannot be fully unattended.** Creating a token prompts for the
+account password and, with 2FA on, for a one-time code. A script can therefore
+prepare and verify everything, but a human still supplies the OTP — storing a TOTP
+secret to remove that step trades the whole benefit away. Trusted publishing is the
+only path that removes the human **and** the credential.
+
+
 
 ### Required CI environment
 
@@ -335,7 +377,8 @@ discriminator — read it before changing anything.
 
 | Symptom | Cause | Fix |
 | --- | --- | --- |
-| `npm error code EOTP` — *requires a one-time password* | The npm account enforces 2FA on writes and the token in use does not bypass it. A classic **Publish** token never bypasses it; a classic **Automation** or a **Granular** token does. Independently, a package set to `mfa=publish` refuses **even an Automation token** | Move to [trusted publishing](#npm-authentication--prefer-trusted-publishing-oidc-over-a-token). Staying on tokens means `npm access set mfa=automation <pkg>` **and** an Automation or Granular token |
+| `npm error code EOTP` — *requires a one-time password* | The token in use does not bypass 2FA. Since 2025-12-09 only **granular** tokens exist, and they enforce 2FA unless **Bypass 2FA** was ticked **at creation** — the box is unticked by default and cannot be added afterwards. Independently, a package set to `mfa=publish` refuses every token, bypass or not | Move to [trusted publishing](#npm-authentication--prefer-trusted-publishing-oidc-over-a-token). Staying on tokens means recreating the token **with Bypass 2FA ticked**, and `npm access set mfa=automation <pkg>` |
+| `npm error code E401` / `ENEEDAUTH` roughly every 90 days | Granular write tokens are **capped at 90 days** (default often 7). Classic never-expiring tokens were permanently revoked on 2025-12-09, so no long-lived token exists any more | Trusted publishing, or accept a rotation every 90 days — see [Token rotation is now mandatory](#token-rotation-is-now-mandatory) |
 | `npm error code ENONPMTOKEN` on a job with no secret | The OIDC exchange was refused, and the plugin fell back to token auth | Check the publisher's **workflow filename** and repository on npmjs, and that `id-token: write` is declared |
 | `npm error code E403 You cannot publish over the previously published versions` | A publish step ran when no release was due. `semantic-release` exits **0** when it decides not to release, so a step gated on its exit status still fires and republishes the unchanged version | Let `@semantic-release/npm` own the publish (`npmPublish: true`). Never bolt a separate `npm publish` step onto the job |
 | `npm error code EUSAGE` on provenance | Provenance cannot be attested for a restricted package | `publishConfig.access: "public"`, or drop provenance |
