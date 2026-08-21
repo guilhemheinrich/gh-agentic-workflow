@@ -1206,10 +1206,10 @@ assets:
       Maintain `specs/GRIEVANCES.md`, the committed per-repo ledger of non-blocking findings — underlying problems,
       technical debt and improvements met outside the scope of an in-flight spec ("what works but will not scale"). The
       file is maintained programmatically by `scripts/grievances.py`: declare a grievance (short description, severity,
-      date), close it (date + commit hash), bump a recurrence, audit a repo, or migrate a legacy `GRIEVANCES.md`. Use
+      date), close it (date + commit hash), bump a recurrence, audit a repo, or migrate a legacy `DOLEANCES.md`. Use
       when creating the ledger in a repo, when recording or closing a finding at the end of an implementation / test /
       review phase, or when deciding whether a finding stays in the ledger or must be promoted to a spec or a
-      pilot-roadmap fiche. Triggers on "grievance", "GRIEVANCES.md", "doléance", "doleances", "GRIEVANCES.md", "small
+      pilot-roadmap fiche. Triggers on "grievance", "GRIEVANCES.md", "doléance", "doleances", "DOLEANCES.md", "small
       problem", "papercut", "technical debt backlog", "note this for later".
   - path: skills/hub-app-registration/
     type: skill
@@ -1447,9 +1447,11 @@ assets:
       - versioning
     description: >-
       Standardize release automation for JavaScript/TypeScript projects using semantic-release. Covers version
-      calculation, Git tags, release notes, npm publishing policy, and CI/CD governance. Use when setting up automated
-      releases, configuring semantic-release plugins, defining branch strategies, or integrating release versions with
-      application metadata.
+      calculation, Git tags, release notes, npm publishing policy, and CI/CD governance. Treats OIDC trusted publishing
+      as the default npm authentication, and documents the failure modes of a broken release (EOTP, E403, ENONPMTOKEN, a
+      branch frozen by a skip-CI release commit). Use when setting up automated releases, configuring semantic-release
+      plugins, choosing between a trusted publisher and an NPM_TOKEN, defining branch strategies, or integrating release
+      versions with application metadata.
     category: tools-and-configurations
   - path: skills/sentry-fix-issues/
     type: skill
