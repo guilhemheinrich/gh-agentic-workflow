@@ -25,3 +25,10 @@ Pour un nouveau skill, ajouter une entrée sous `assets:` :
 - `bundles` : ajouter `common` uniquement si le skill fait partie du starter set minimal et agnostique.
 
 Le registre est validé contre `asset-registry.schema.json` ; vérifier l'absence de diagnostics après modification.
+
+## Active Technologies
+- Python 3.12, standard library only (015-grievance-slug-ids)
+- Committed markdown ledgers as storage — JSON headers are the source of truth, tables are derived (015-grievance-slug-ids)
+
+## Recent Changes
+- 015-grievance-slug-ids: Added Python 3.12 standard-library CLI work in `skills/grievances/`

@@ -63,7 +63,7 @@ docker run --rm -v "$PWD:/repo" -v "<skill>:/skill:ro" -w /repo python:3.12-alpi
 | Subcommand | What it does |
 |---|---|
 | `init` | Create the ledger + `specs/CLAUDE.md` guidance; print the root-`CLAUDE.md` pointer to paste. Never overwrites. |
-| `add` | Declare a grievance. Allocates the next `GRV-NNNN`, appends the detail block, rebuilds the tables. |
+| `add` | Declare a grievance. Names it from `--short` (or takes `--id`), appends the detail block, rebuilds the tables. |
 | `resolve <id>` | Close it: date + commit hash. Moves its row to the resolved table. |
 | `reopen <id>` | Move it back to the open table, keeping the history. |
 | `bump <id>` | Count another occurrence (`×N`) instead of declaring a duplicate. |
@@ -146,6 +146,69 @@ Three regions, in this order:
 **Fix.** … **Effort: 1d.**
 <!-- /grievance:GRV-0007 -->
 ```
+
+## Identifiers
+
+An identifier is a **name**, not a counter. It is derived from the grievance's own
+short description, so two developers on branches from a common ancestor cannot
+allocate the same one — which is exactly what a counter guarantees they will do.
+
+```
+GRV-worker-hosted-api-scale            from "worker co-hosted with the API will not scale"
+GRV-db-naming                          from "DB naming"
+GRV-release-pipeline-npm-token-9c23    from a description too long to fit whole
+GRV-0007                               legacy, read-only, never minted again
+```
+
+**Shape**: `GRV-` then 2 to 5 lowercase alphanumeric segments, 40 characters
+maximum. Words shorter than 3 characters are dropped unless they are uppercase in
+the description — that is what keeps `DB naming` working as `GRV-db-naming`.
+
+**The trailing 4-character segment means the name is abbreviated.** A bounded
+name cannot be a unique function of an unbounded description, so when the words
+do not all fit, a discriminator computed from the whole description is appended.
+Without it, `"release pipeline npm token expires after ninety days"` and
+`"release pipeline npm token bypasses two factor auth"` would collide, and the
+merged ledger would stop loading.
+
+**The identifier is frozen at declaration.** Rewording `--short` later leaves it
+alone, because commit messages and spec folders point at it. The two are allowed
+to diverge; the description is what the table shows.
+
+**Legacy `GRV-NNNN` identifiers coexist forever.** They are read, addressed and
+mutated normally, and nothing renames them. Only the descriptive form is minted.
+
+**Naming it yourself**: `--id GRV-two-or-more-words` when the derived name reads
+badly. A supplied name need not reuse any word from `--short`.
+
+**When derivation refuses**: a description with fewer than two significant words
+(`"slow"`), or whose first two words already exceed the ceiling
+(`"internationalization misconfiguration"`). Lengthen it, shorten it, or pass
+`--id`.
+
+**`--force` now requires `--id`.** It used to mean "declare a second entry with
+this same description". It cannot: identical descriptions derive identical
+identifiers, so the forced declaration would be refused a step later. To record a
+genuinely distinct finding that happens to share a description, name it:
+`--force --id GRV-distinct-name`.
+
+## Resolving a merge conflict in the ledger
+
+Two branches both append near the same point, so git still reports a textual
+conflict. That conflict is trivial now:
+
+1. Keep **both** sides. Duplicated or stale table rows at this point are expected.
+2. Run `grievances.py rebuild`. The tables are regenerated from the JSON headers,
+   so it repairs the ordering, the counts and the spacing.
+
+If both sides carry the **same** identifier, they described the same finding in
+the same words. Keep one block, delete the other, `bump` the survivor, then
+`rebuild`. Deleting that block is the one sanctioned hand-edit to tool-owned
+content, and it exists only for this path.
+
+The tool refuses to read a ledger that still carries `<<<<<<< ` or `>>>>>>> `,
+rather than parsing the markers as content. A bare `=======` is fine — it is
+legal markdown and grievance prose is yours.
 
 **The ownership contract — this is what makes the file safe to edit by hand:**
 
@@ -271,6 +334,12 @@ docs(grievances)!: rename the ledger to GRIEVANCES.md and index it programmatica
   checked by `check`.
 - **Hand-editing the tables or a JSON header.** They are generated; your edit dies
   at the next mutation. Use the CLI, or `rebuild` after a genuine repair.
+- **Hand-editing an identifier.** It is the anchor, and it is quoted in commit
+  messages and spec folders the ledger cannot reach. Renaming it breaks every
+  inbound reference silently. There is no rename command on purpose.
+- **Reading a merge-conflicted ledger and "fixing" what the tool reports.** A
+  refusal naming `<<<<<<< `, an unusable id, an over-long id or a duplicate id is
+  telling you the file is not yet resolved. Resolve it, then `rebuild`.
 - **Using it as a second backlog.** If entries acquire owners and sprints, the
   boundary has failed — those were roadmap fiches all along. Severity and `×N` are
   the only ranking signals here.

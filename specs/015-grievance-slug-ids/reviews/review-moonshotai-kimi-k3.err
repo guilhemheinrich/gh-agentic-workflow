@@ -1,0 +1,2 @@
+llm-ask: openrouter/moonshotai/kimi-k3 · 8 file(s), 133255 attached bytes · budget 3200s
+llm-ask: empty completion (finish_reason=error); re-run with --json to see the body

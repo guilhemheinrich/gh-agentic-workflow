@@ -4,9 +4,9 @@
 The ledger is a committed markdown file that carries, per grievance, a
 machine-owned JSON header and a human-owned prose body:
 
-    <!-- grievance:GRV-0001 {"id": "GRV-0001", ...} -->
-    <a id="grv-0001"></a>
-    ### GRV-0001 - high - 2026-07-30 - short description
+    <!-- grievance:GRV-worker-hosted-api {"id": "GRV-worker-hosted-api", ...} -->
+    <a id="grv-worker-hosted-api"></a>
+    ### GRV-worker-hosted-api - high - 2026-07-30 - short description
 
     `internal/worker/main.go:42` - declared in spec 156 review
 
@@ -14,6 +14,11 @@ machine-owned JSON header and a human-owned prose body:
 
     **Finding.** ...
     <!-- /grievance:GRV-0001 -->
+
+Identifiers are NAMES derived from the short description, not counters: a
+counter read from the file collides whenever two branches share an ancestor.
+Legacy `GRV-NNNN` identifiers are read forever and never minted again nor
+renamed. A trailing 4-character segment means the description did not fit whole.
 
 Those JSON headers are the single source of truth. The two index tables at the
 top of the file (open grievances, then resolved ones) are DERIVED: every
@@ -27,6 +32,8 @@ Ownership contract:
 Usage:
     grievances.py init
     grievances.py add --short "..." --severity high [--locus f.go:42] [--finding ...]
+    grievances.py add --short "..." --severity high --id GRV-worker-hosted-api
+    grievances.py add --short "<existing>" --severity low --force --id GRV-distinct-name
     grievances.py resolve GRV-0001 --commit 1a2b3c4 [--note "..."]
     grievances.py resolve GRV-0002 --wont-fix --note "..."
     grievances.py resolve GRV-0003 --promoted-to specs/156-cdar-refresh/ --note "..."
@@ -45,11 +52,13 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -71,15 +80,53 @@ GENERATED_NOTE = (
     "they are rebuilt from the JSON headers under `# Details` on every mutation. -->"
 )
 
+ID_PREFIX = "GRV-"
+ID_MAX_LEN = 40
+ID_DISCRIMINATOR_LEN = 4
+
+# Two identifier forms coexist, and they are deliberately DISJOINT: the legacy
+# form is exactly four digits and therefore carries no hyphen after the prefix,
+# while the descriptive form always carries at least one. That is what lets a
+# single union pattern read a mixed ledger with no per-entry format flag.
+#   legacy       GRV-0007                     read-only, never minted again
+#   descriptive  GRV-worker-hosted-api-scale  minted from the short description
+LEGACY_ID_RE = re.compile(r"^GRV-\d{4}$")
+SLUG_ID_RE = re.compile(r"^GRV-[a-z0-9]+(?:-[a-z0-9]+){1,4}$")
+# Unanchored, for embedding in BLOCK_RE only. Never assign this to a validator:
+# without ^...$ a suffix-padded identifier passes.
+ANY_ID_PATTERN = r"GRV-(?:\d{4}|[a-z0-9]+(?:-[a-z0-9]+){1,4})"
+
+# Words never worth putting in an identifier. The first 48 are taken verbatim
+# from this repository's own branch-name generator
+# (.specify/scripts/bash/create-new-feature.sh:184) so one vocabulary serves
+# both naming schemes. The last 6 are an extension: a branch name is a noun
+# phrase, a grievance description is a sentence. Without `not`,
+# "worker co-hosted with the API will not scale" mints
+# GRV-worker-hosted-api-not-scale instead of GRV-worker-hosted-api-scale.
+STOP_WORDS = frozenset(
+    """
+    i a an the to for of in on at by with from is are was were be been being
+    have has had do does did will would should could can may might must shall
+    this that these those my your our their want need add get set
+    not no and or it its
+    """.split()
+)
+
 # Trailing blank lines are part of the match so that re-rendering normalizes the
 # spacing between blocks instead of growing it on every mutation.
 BLOCK_RE = re.compile(
-    r"<!-- grievance:(GRV-\d{4}) (\{.*?\}) -->\n(.*?)<!-- /grievance:\1 -->\n*",
+    rf"<!-- grievance:({ANY_ID_PATTERN}) (\{{.*?\}}) -->\n(.*?)<!-- /grievance:\1 -->\n*",
     re.DOTALL,
 )
+# Matches an opener whatever its identifier looks like, so a marker BLOCK_RE
+# rejects is reported instead of silently vanishing from the model.
+MARKER_OPEN_RE = re.compile(r"^<!-- grievance:(\S+) \{", re.MULTILINE)
+# Git writes these in pairs. A bare `=======` is NOT checked: it is legal
+# markdown (a setext underline, a rule) and grievance prose is author-owned.
+CONFLICT_MARKERS = ("<<<<<<< ", ">>>>>>> ")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
-ID_RE = re.compile(r"^GRV-\d{4}$")
+ID_RE = re.compile(rf"^(?:{ANY_ID_PATTERN})$")
 
 
 class UserError(Exception):
@@ -212,6 +259,14 @@ class Ledger:
                 f"create it with: {Path(sys.argv[0]).name} init --file {path}"
             )
         text = path.read_text(encoding="utf-8")
+        conflicts = find_conflict_markers(text)
+        if conflicts:
+            raise UserError(
+                f"{path}: unresolved merge conflict ({len(conflicts)} marker line(s), "
+                f"first: {conflicts[0]!r})\n"
+                "resolve the conflict first — keep both sides, then run: "
+                f"{Path(sys.argv[0]).name} rebuild"
+            )
         for marker in (OPEN_START, OPEN_END, RESOLVED_START, RESOLVED_END):
             if marker not in text:
                 raise UserError(
@@ -222,6 +277,21 @@ class Ledger:
         grievances: list[Grievance] = []
         prose: dict[str, str] = {}
         seen: set[str] = set()
+        # A marker BLOCK_RE cannot parse is not an error there — it is INVISIBLE.
+        # The entry would vanish from the model and from the regenerated tables
+        # while its text stayed in the file, because render() only rewrites what
+        # it matched. Sweep the openers and refuse rather than lose an entry.
+        parsed = {m.group(1) for m in BLOCK_RE.finditer(text)}
+        unparsed = [gid for gid in MARKER_OPEN_RE.findall(text) if gid not in parsed]
+        if unparsed:
+            raise UserError(
+                f"{path}: {len(unparsed)} grievance marker(s) carry an unusable id: "
+                f"{', '.join(repr(g) for g in unparsed[:3])}\n"
+                "each id must be GRV-NNNN (legacy) or GRV- plus 2 to 5 lowercase "
+                "alphanumeric segments; fix the marker, its JSON header and its "
+                "heading, then run: "
+                f"{Path(sys.argv[0]).name} rebuild"
+            )
         for match in BLOCK_RE.finditer(text):
             gid, raw_meta, body = match.group(1), match.group(2), match.group(3)
             try:
@@ -231,7 +301,17 @@ class Ledger:
             if meta.get("id") != gid:
                 raise UserError(f"{path}: {gid} marker disagrees with its JSON id {meta.get('id')!r}")
             if gid in seen:
-                raise UserError(f"{path}: {gid} appears twice")
+                raise UserError(
+                    f"{path}: {gid} appears twice — two entries cannot share an id\n"
+                    "this is a merge artefact: both sides described the same finding in "
+                    "the same words\n"
+                    "recover by keeping ONE of the two blocks, then: "
+                    f"{Path(sys.argv[0]).name} bump {gid} && "
+                    f"{Path(sys.argv[0]).name} rebuild"
+                )
+            # The patterns carry no length bound, so the ceiling is checked here
+            # too. Enforced only at declaration, it would not be a ceiling.
+            check_id(gid)
             seen.add(gid)
             grievances.append(Grievance.from_meta(meta))
             prose[gid] = extract_prose(gid, body)
@@ -243,9 +323,16 @@ class Ledger:
                 return g
         raise UserError(f"{self.path}: no such grievance: {gid}")
 
-    def next_id(self) -> str:
-        numbers = [int(g.id.split("-")[1]) for g in self.grievances]
-        return f"GRV-{max(numbers, default=0) + 1:04d}"
+    def taken_ids(self) -> set[str]:
+        """Every identifier already in this ledger, for the uniqueness check.
+
+        Replaces the old next_id(), which parsed g.id.split("-")[1] as an int and
+        therefore raised an unhandled ValueError on any descriptive identifier.
+
+        Uniqueness lives here rather than inside derive_id so that a supplied
+        --id gets exactly the same check as a derived one.
+        """
+        return {g.id for g in self.grievances}
 
     def append(self, g: Grievance, prose: str) -> None:
         self.grievances.append(g)
@@ -388,9 +475,118 @@ def check_short(value: str) -> str:
 
 
 def check_id(value: str) -> str:
+    """Validate an identifier's shape, whichever form it uses.
+
+    Called from the command line AND from Ledger.load. The patterns carry no
+    length bound, so the ceiling is a separate check: enforcing it only when
+    declaring would let an over-long identifier live in a stored header forever.
+    """
     if not ID_RE.match(value):
-        raise UserError(f"invalid grievance id {value!r}: expected GRV-NNNN")
+        raise UserError(
+            f"invalid grievance id {value!r}\n"
+            f"expected {ID_PREFIX}NNNN (legacy, read-only) or "
+            f"{ID_PREFIX} plus 2 to 5 lowercase alphanumeric segments, "
+            "e.g. GRV-worker-hosted-api-scale"
+        )
+    if len(value) > ID_MAX_LEN:
+        raise UserError(
+            f"grievance id {value!r} is {len(value)} chars; the ceiling is {ID_MAX_LEN}"
+        )
     return value
+
+
+def check_new_id(value: str) -> str:
+    """Validate an identifier that is about to be minted.
+
+    Refuses the legacy form on top of check_id: it is read-only, so a caller
+    asking for GRV-0099 is asking for something the tool no longer produces.
+    """
+    check_id(value)
+    if LEGACY_ID_RE.match(value):
+        raise UserError(
+            f"{value!r} uses the legacy sequential form, which is never minted again\n"
+            "pass a descriptive id instead, e.g. --id GRV-worker-hosted-api"
+        )
+    return value
+
+
+# ── Identifiers ────────────────────────────────────────────────────────────
+
+
+def _fold(token: str) -> str:
+    """Lowercase and strip accents, so `requête` yields `requete`."""
+    decomposed = unicodedata.normalize("NFKD", token)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).lower()
+
+
+def significant_words(short: str) -> list[str]:
+    """The words worth naming a grievance after, in order of appearance.
+
+    The acronym test reads the ORIGINAL token, before folding. Deciding after a
+    global lowercase makes it impossible — there is no case left to inspect —
+    and `DB naming` would then be refused for having only one long word.
+    """
+    keep: list[str] = []
+    for token in re.findall(r"[A-Za-z0-9\u00C0-\u017F]+", short):
+        word = _fold(token)
+        if not word or word in STOP_WORDS:
+            continue
+        if len(word) < 3 and not token.isupper():
+            continue
+        keep.append(word)
+    return keep
+
+
+def derive_id(short: str) -> str:
+    """Mint an identifier from a short description. Pure; raises on refusal.
+
+    Deliberately knows nothing about the ledger: uniqueness is the caller's
+    check, applied identically to a derived and to a supplied identifier.
+    Letting derivation own it is how a supplied --id skipped it.
+
+    A truncated name carries a discriminator computed from the WHOLE word list;
+    a complete name carries none. Without that, two distinct findings whose
+    descriptions share their opening words derive one identifier, and the merged
+    ledger stops loading — the exact defect this whole change removes.
+    """
+    words = significant_words(short)
+    if len(words) < 2:
+        raise UserError(
+            f"cannot derive an id from {short!r}: fewer than 2 significant words\n"
+            "lengthen --short, or name it yourself with --id GRV-two-or-more-words"
+        )
+    kept: list[str] = []
+    for word in words:
+        if len(ID_PREFIX + "-".join(kept + [word])) > ID_MAX_LEN:
+            break
+        kept.append(word)
+    if len(kept) == len(words) and len(kept) >= 2:
+        return ID_PREFIX + "-".join(kept)
+    # Words were dropped, so the readable part is not unique on its own.
+    disc = hashlib.sha256(" ".join(words).encode("utf-8")).hexdigest()[:ID_DISCRIMINATOR_LEN]
+    while kept and len(ID_PREFIX + "-".join(kept) + "-" + disc) > ID_MAX_LEN:
+        kept.pop()
+    if len(kept) < 2:
+        raise UserError(
+            f"cannot derive an id from {short!r}: its first two significant words "
+            f"already exceed the {ID_MAX_LEN}-char ceiling\n"
+            "shorten --short, or name it yourself with --id GRV-two-or-more-words"
+        )
+    return ID_PREFIX + "-".join(kept) + "-" + disc
+
+
+def find_conflict_markers(text: str) -> list[str]:
+    """Return the unresolved git conflict marker lines in `text`.
+
+    Keys on the angle-bracket forms only. A bare `=======` line is legal
+    markdown and appears in author-owned prose, so checking it would reject
+    valid ledgers.
+    """
+    return [
+        line
+        for line in text.split("\n")
+        if any(line.startswith(marker) for marker in CONFLICT_MARKERS)
+    ]
 
 
 # ── Templates ──────────────────────────────────────────────────────────────
@@ -642,22 +838,40 @@ def cmd_add(args: argparse.Namespace) -> int:
     date = check_date(args.date)
     if args.severity not in SEVERITIES:
         raise UserError(f"--severity must be one of {', '.join(SEVERITIES)}")
-    if not args.force:
-        needle = short.lower()
-        for g in ledger.grievances:
-            if g.status == "open" and g.short.lower() == needle:
-                raise UserError(
-                    f"{g.id} already carries this exact short description.\n"
-                    f"met it again? bump the counter instead: grievances.py bump {g.id}\n"
-                    "genuinely a distinct finding? re-run with --force"
-                )
+    duplicate = next(
+        (g for g in ledger.grievances if g.status == "open" and g.short.lower() == short.lower()),
+        None,
+    )
+    if duplicate is not None and not args.force:
+        raise UserError(
+            f"{duplicate.id} already carries this exact short description.\n"
+            f"met it again? bump the counter instead: grievances.py bump {duplicate.id}\n"
+            "genuinely a distinct finding? re-run with --force AND --id <name>"
+        )
+    if duplicate is not None and not args.id:
+        # --force used to mean "declare a second entry with this description".
+        # It cannot mean that any more: identical descriptions derive identical
+        # identifiers, so the forced path would be refused one step later.
+        raise UserError(
+            f"--force needs --id: {duplicate.id} has the same description, so "
+            "deriving would produce the same id\n"
+            "name the new one explicitly, e.g. --id GRV-two-or-more-words"
+        )
     if not args.impact and not args.body_file and not args.allow_no_impact:
         raise UserError(
             "--impact is required: an entry without an impact line gets ignored forever.\n"
             "pass --allow-no-impact only for a pure papercut whose cost is self-evident"
         )
+    gid = check_new_id(args.id) if args.id else derive_id(short)
+    taken = ledger.taken_ids()
+    if gid in taken:
+        raise UserError(
+            f"{gid} is already used in {path}\n"
+            f"met the same finding again? bump the counter: grievances.py bump {gid}\n"
+            "genuinely distinct? name it yourself with --id <name>"
+        )
     grievance = Grievance(
-        id=ledger.next_id(),
+        id=gid,
         short=short,
         severity=args.severity,
         date=date,
@@ -997,7 +1211,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--effort", help="indicative effort, e.g. 0.5d")
     p_add.add_argument("--body-file", help="read the whole prose body from this markdown file instead")
     p_add.add_argument("--allow-no-impact", action="store_true", help="papercut whose cost is self-evident")
-    p_add.add_argument("--force", action="store_true", help="declare even if an open grievance has the same --short")
+    p_add.add_argument("--force", action="store_true", help="declare even if an open grievance has the same --short (requires --id)")
+    p_add.add_argument(
+        "--id",
+        help="name it yourself instead of deriving from --short, e.g. GRV-worker-hosted-api; "
+        "need not reuse words from --short",
+    )
     p_add.set_defaults(func=cmd_add)
 
     p_res = with_common(sub.add_parser("resolve", help="close a grievance: date + commit hash"))
