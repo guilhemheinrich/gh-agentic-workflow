@@ -1,0 +1,2 @@
+llm-ask: openrouter/google/gemini-3.7-flash · 8 file(s), 115903 attached bytes · budget 2000s
+llm-ask: answer truncated (finish_reason=length) — raise --max-tokens
