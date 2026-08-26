@@ -40,6 +40,8 @@ Rules are filed under `rules/00-…-09-…` with `{N}-{slug}.mdc` names — see 
 ## Active Technologies
 - Markdown (agent/command/skill definitions), Bash (Docker commands in skill) + Playwright MCP (`user-playwright`), Docker (deterministic tools) (010-refactor-scraper-separation)
 - Filesystem (`SCRAP/{DOMAIN}/` output directory) (010-refactor-scraper-separation)
+- Python 3.12, standard library only (015-grievance-slug-ids)
+- Committed markdown ledgers as storage — JSON headers are the source of truth, tables are derived (015-grievance-slug-ids)
 
 ## Recent Changes
 - 010-refactor-scraper-separation: Added Markdown (agent/command/skill definitions), Bash (Docker commands in skill) + Playwright MCP (`user-playwright`), Docker (deterministic tools)
