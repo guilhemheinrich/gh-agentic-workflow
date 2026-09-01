@@ -950,6 +950,29 @@ assets:
       published-port variables, checking Docker Engine and local listener ports, and generating deterministic free port
       assignments.
     category: tools-and-configurations
+  - path: skills/cursor-adversarial-review/
+    type: skill
+    category: quality-assurance
+    tags:
+      - llm
+      - quality
+      - security
+      - shell
+      - tooling
+      - verification
+    description: >-
+      Get a spec, a diff or a design attacked by a panel of models from different lineages, through the Cursor CLI
+      (`cursor-agent`), from the command line. The symmetric counterpart of openrouter-adversarial-review, and a better
+      fit for code: the reviewer is an agent that reads files itself, so context arrives as a staged workspace rather
+      than as text pasted into a prompt, and a finding comes back as `path:line` that opens in your editor. Covers the
+      login, the workspace-trust gate, the read-only `--mode ask` guarantee, and the two traps that make a naive
+      `cursor-agent -p` review worthless — piped stdin is silently discarded, and user-level hooks and skills are
+      injected into every call. Ships `cursor-review.sh`, which stages `-f` files, `-d` directories, `--diff` and
+      `--changed` into an ephemeral workspace, materialises stdin into a file the agent can actually read, fans a panel
+      of one-model-per-vendor lanes out concurrently with `--panel 3 --exclude-vendor anthropic`, and bounds the whole
+      run rather than just one request. Use when asking another model to attack your work, reviewing a change outside
+      the agent that produced it, running a multi-model panel over one code context, or debugging a `cursor-agent` call
+      that returns a confident review of nothing.
   - path: skills/cursor-dot-glow/
     type: skill
     tags:
