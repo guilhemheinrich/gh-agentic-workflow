@@ -923,6 +923,29 @@ assets:
       model, writing authorization architecture decisions, or implementing/configuring OPA Rego policies or Casbin
       models, policies, adapters, and enforcers.
     category: architecture
+  - path: skills/change-projection/
+    type: skill
+    tags:
+      - documentation
+      - process
+      - python
+      - spec-kit
+      - verification
+    description: >-
+      Hand the human a spatial view of a change before a single line is written — the file tree the implementation is
+      about to touch, one line of intent per file, and an explicit list of what it leaves alone. A `tasks.md` is ordered
+      by execution; a reviewer of scope thinks in space, and only one of the two projections was ever produced. Ships
+      `scripts/projection.py`, which derives the file set from `tasks.md` (so the projection cannot claim a file no task
+      edits), renders a chat-safe tree with the weight of each file signalled, checks the projection against the task
+      list, and runs the after-shot — the same projection diffed against `git diff --name-only` once the code lands, so
+      unplanned scope and silently skipped tasks both surface for the cost of one diff. Enforces the two language rules
+      rather than trusting them: the committed artefact is final and English, so `check` probes the intents for
+      non-English prose and `render` refuses to write a translated tree, while the tree pasted into the conversation is
+      rendered in the caller's language through `--lang` and a throwaway overlay. Use at the close of `/tasks`, after
+      any scope change, when negotiating what to cut from a feature, or after implementation to detect drift. Triggers
+      on "projection", "what will this touch", "scope review", "which files does this change hit", "drift detection",
+      "unplanned scope", "projection.md".
+    category: workflows-and-processes
   - path: skills/claude-plugin-release/
     type: skill
     tags:
