@@ -1009,6 +1009,29 @@ assets:
       Dots near the pointer light up in an accent colour with a smooth Gaussian falloff; the lit position trails the
       cursor with easing. Reverse-engineered from zo.computer's hero background. Use when adding an interactive ambient
       background, a hero dot field, a pointer spotlight, or a reveal-on-hover dotted texture.
+  - path: skills/data-projection/
+    type: skill
+    tags:
+      - process
+      - python
+      - spec-kit
+      - sql
+      - verification
+    description: >-
+      Show what a change does to a relational database, before it is written, in two separate reports whose shape never
+      drifts. The schema view answers which tables are touched and what moves structurally — columns, indexes,
+      constraints, the migration, whether it is reversible. The effect view answers the other question entirely: what
+      one use case does to the data, step by step — which rows match, which value replaces which, what refuses to write,
+      and the net tally of rows inserted, updated and deleted. Ships `scripts/dataproj.py`, which owns every structural
+      decision through closed operation vocabularies: an op outside the enum is a validation error, the glyphs and
+      tallies are derived, and prose exists in exactly one column. The anchors are real, not declarative: task ids must
+      exist in `tasks.md`, every declared DDL operation must be found in the migration files it names (raw SQL, TypeORM,
+      Alembic — Django and ActiveRecord report as unverifiable rather than contradicted), and every write effect must
+      cite the test that proves it. Use at the close of `/tasks` on any change that touches persistent data, when
+      reviewing a migration, when explaining a use case at the data level, or after implementation to detect schema
+      drift. Triggers on "data projection", "what does this do to the database", "which tables does this touch",
+      "migration review", "what rows change", "schema-projection.md", "effect-projection.md".
+    category: workflows-and-processes
   - path: skills/devops-pipeline-design/
     type: skill
     tags:
