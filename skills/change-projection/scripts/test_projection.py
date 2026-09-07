@@ -26,8 +26,38 @@ class PathFilter(unittest.TestCase):
     def test_accepts_a_directory(self):
         self.assertTrue(p.looks_like_path("skills/grievances/scripts/", "."))
 
-    def test_rejects_a_token_without_a_slash(self):
+    def test_rejects_an_image_tag(self):
         self.assertFalse(p.looks_like_path("python:3.12-alpine", "."))
+        self.assertFalse(p.looks_like_path("node:20", "."))
+
+    def test_accepts_a_conventional_root_file(self):
+        """The regression: `Makefile`, `.gitignore`, `README.md` carry no slash.
+
+        None of these exists next to the test module, so the allowlist alone
+        must carry them — a root file the change is about to create has to be
+        projected too.
+        """
+        for name in ("Makefile", ".gitignore", "README.md", "Dockerfile.dev",
+                     ".env.example", "compose.test.yml"):
+            with self.subTest(name=name):
+                self.assertTrue(p.looks_like_path(name, "."))
+
+    def test_accepts_an_existing_root_file_outside_the_allowlist(self):
+        with tempfile.TemporaryDirectory() as root:
+            open(os.path.join(root, "notes.txt"), "w").close()
+            self.assertTrue(p.looks_like_path("notes.txt", root))
+
+    def test_rejects_a_bare_directory_name(self):
+        """`in the \\`scripts\\` folder` must not plant a `scripts` file."""
+        with tempfile.TemporaryDirectory() as root:
+            os.mkdir(os.path.join(root, "scripts"))
+            self.assertFalse(p.looks_like_path("scripts", root))
+
+    def test_rejects_a_bare_filename_living_deeper(self):
+        with tempfile.TemporaryDirectory() as root:
+            os.makedirs(os.path.join(root, "src"))
+            open(os.path.join(root, "src", "helper.py"), "w").close()
+            self.assertFalse(p.looks_like_path("helper.py", root))
 
     def test_rejects_a_command_fragment(self):
         self.assertFalse(p.looks_like_path("$PWD:/repo", "."))
@@ -60,6 +90,12 @@ class TaskExtraction(unittest.TestCase):
 
     def test_ignores_a_path_outside_a_code_span(self):
         self.assertNotIn("apps/web/invisible.tsx", p.paths_from_tasks(self.TASKS, "."))
+
+    def test_a_root_file_reaches_the_projection(self):
+        """A `lint` target in the Makefile: the file lands, the target does not."""
+        line = "- [ ] T007 Add the `lint` target to `Makefile` and ignore `.tmpval` in `.gitignore`"
+        found = p.paths_from_tasks(line, ".")
+        self.assertEqual(found, {"Makefile": ["T007"], ".gitignore": ["T007"]})
 
 
 class PlanTree(unittest.TestCase):
@@ -141,6 +177,20 @@ class Rendering(unittest.TestCase):
         out = p.render(data)
         self.assertIn("app/(public)/enroll/[token]/", out)
         self.assertNotIn("└── enroll/", out)
+
+    def test_a_root_file_sits_under_the_repository_root_line(self):
+        """A root file pulls the common prefix up to `./` and lists first-level."""
+        data = {
+            "files": [
+                self.entry("Makefile", intent="a lint target"),
+                self.entry("skills/g/scripts/main.py", intent="the engine"),
+            ]
+        }
+        out = p.render(data)
+        self.assertIn("./", out)
+        self.assertIn("Makefile", out)
+        self.assertIn("a lint target", out)
+        self.assertIn("skills/g/scripts/", out)
 
     def test_a_projected_directory_keeps_its_children(self):
         """A task may edit a directory. That line is annotated *and* a parent."""
