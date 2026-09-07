@@ -58,7 +58,7 @@ still be cut.
 | File                        | Role                                                      |
 | --------------------------- | --------------------------------------------------------- |
 | `scripts/projection.py`     | The engine. `scaffold`, `render`, `check`, `verify`.      |
-| `scripts/test_projection.py`| 39 probes on the path filter, the chain collapse, brace expansion, the guide bars, the two language rules. |
+| `scripts/test_projection.py`| 45 probes on the path filter (root files included), the chain collapse, brace expansion, the guide bars, the two language rules. |
 | `specs/NNN-*/projection.md` | The artefact it writes, in the spec directory, committed. |
 
 Python 3.12, standard library only. Run it through Docker, per the repository's
@@ -228,7 +228,11 @@ after-shot — specs/015-grievance-slug-ids: 25 path(s) changed
 ```
 
 Three files nobody planned, all three real: the spec added a `.gitignore` entry
-for Python bytecode and recorded itself in the agent context. `verify` exits 1
+for Python bytecode and recorded itself in the agent context. Two of the three
+sit at the repository root, and until the path filter learned root files
+(section 8) a task naming `.gitignore` or `AGENTS.md` in backticks would still
+have left them out of the projection — drift the after-shot could report but the
+before-shot could never have prevented. `verify` exits 1
 on any drift, so a CI job or a review gate can consume it. Changes inside the
 spec's own directory are excluded by default; add `--ignore GLOB` for anything
 else that churns outside the projection's remit.
@@ -306,6 +310,13 @@ The translated line carries its own size hint: the overlay drops the English
 - **Path extraction reads inline code spans only.** A task that names a file in
   plain prose is invisible. Backtick every path in `tasks.md`; the discipline
   costs nothing and `check` reports the omission either way.
+- **A slash-less token is a path only when it is a root file.** `Makefile`,
+  `.gitignore`, `README.md`, `Dockerfile.dev`, `.env.example` and their kin pass
+  through a 34-name allowlist plus 7 prefix families; any other bare name passes
+  only if it is a regular file at the repository root today. A bare directory
+  name (`scripts`) and a filename living deeper (`helper.py`) stay out — the
+  prose "in the `scripts` folder" must not plant a `scripts` file. Image tags
+  (`python:3.12-alpine`) are rejected by the colon.
 - **The `plan.md` tree parser is best-effort.** A plan is prose and its Project
   Structure block is drawn for humans. When no tree parses, `scaffold` says so
   rather than reporting a divergence that does not exist.
@@ -327,11 +338,13 @@ leave alone.
 ## Implementation Status
 
 **Fully Implemented.** `scripts/projection.py` ships all four subcommands, with
-39 passing probes in `scripts/test_projection.py`. Exercised on this
+45 passing probes in `scripts/test_projection.py`. Exercised on this
 repository: `scaffold` and `check` on `specs/015-grievance-slug-ids`, `render`
 on the spec 071 example above, and `verify` against the spec 015 merge commit,
 which surfaced three genuinely unplanned files.
 
-Two bugs the probes now pin, both found this way: a folded directory chain read
-its dict key instead of the child's name and lost `enroll/[token]/`, and a
-projected directory sitting on the common prefix dropped its own intent line.
+Three bugs the probes now pin, all found this way: a folded directory chain read
+its dict key instead of the child's name and lost `enroll/[token]/`; a
+projected directory sitting on the common prefix dropped its own intent line;
+and the path filter demanded a slash, so `Makefile`, `.gitignore` and
+`README.md` never reached a projection at all (fixed 2026-09-07, 6 probes).

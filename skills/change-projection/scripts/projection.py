@@ -121,6 +121,50 @@ BRACE_RE = re.compile(r"\{([^{}/]+)\}")
 EXTENSION_RE = re.compile(r"\.[A-Za-z0-9]{1,8}$")
 SPEC_DIR_RE = re.compile(r"^specs/[^/]+/")
 
+#: Files that live at the repository root by convention. A token naming one of
+#: them carries no slash, so the "must contain a slash" filter rejected them
+#: and a change to the Makefile or the .gitignore was never projected. Exact
+#: names first, then the prefixes of the variant families (``Dockerfile.dev``,
+#: ``.env.example``, ``compose.test.yml``, ``README.fr.md``).
+ROOT_FILE_NAMES = {
+    "Makefile",
+    "Dockerfile",
+    "README",
+    "README.md",
+    "LICENSE",
+    "LICENSE.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".gitignore",
+    ".dockerignore",
+    ".gitattributes",
+    ".editorconfig",
+    ".env",
+    ".env.example",
+    ".nvmrc",
+    ".python-version",
+    ".tool-versions",
+    "compose.yml",
+    "compose.yaml",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "tsconfig.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "go.mod",
+    "go.sum",
+    "Cargo.toml",
+    "Cargo.lock",
+}
+ROOT_FILE_PREFIXES = ("Dockerfile.", "Makefile.", "README.", "LICENSE.", ".env.",
+                      "compose.", "docker-compose.")
+
 
 # --------------------------------------------------------------------------- #
 # Path candidates
@@ -147,15 +191,30 @@ def looks_like_path(tok: str, repo_root: str) -> bool:
         return False
     if tok.startswith(("-", "$", "#", "@", "http://", "https://", "~")):
         return False
-    if any(c in tok for c in "|<>*\"'="):
+    if any(c in tok for c in "|<>*\"'=:"):
         return False
     if "/" not in tok:
-        return False
+        return is_root_file(tok, repo_root)
     if tok.endswith("/"):
         return True
     if os.path.exists(os.path.join(repo_root, tok)):
         return True
     return bool(EXTENSION_RE.search(tok))
+
+
+def is_root_file(tok: str, repo_root: str) -> bool:
+    """Accept a slash-less token only when it is a file at the repository root.
+
+    Two routes in: the file exists there today, or its name is one a root
+    carries by convention (``Makefile``, ``.gitignore``, ``README.md``), which
+    also covers a root file the change is about to create. A bare directory
+    name (``skills``) and a bare filename that lives deeper (``helper.py``)
+    both stay out — the prose "in the `scripts` folder" must not plant a
+    ``scripts`` file in the projection.
+    """
+    if tok in ROOT_FILE_NAMES or tok.startswith(ROOT_FILE_PREFIXES):
+        return True
+    return os.path.isfile(os.path.join(repo_root, tok))
 
 
 def expand_braces(path: str) -> list[str]:
