@@ -13,7 +13,7 @@
 #
 # Agent protocol:
 #   Claude  violations -> stderr + exit 2  (Claude feeds stderr back to the model)
-#   Cursor  violations -> stdout JSON + exit 0
+#   Cursor  violations -> stdout {"additional_context": ...} + exit 0 (postToolUse)
 #   Silent  everything else -> exit 0, no output
 #
 # Env knobs (all optional):
@@ -22,7 +22,7 @@
 #   VALIDATE_MAX_RETRIES=3  Consecutive rejections on one file before muting it.
 #   VALIDATE_MUTE_TTL_S=900 How long a muted file stays muted. Default 900.
 #   VALIDATE_WORKTREE=auto  auto|skip|run — behaviour inside a linked worktree.
-#   VALIDATE_HOST           claude|cursor — force the response shape.
+#   VALIDATE_HOST           claude|cursor — force the response shape (else sniffed).
 #   VALIDATE_DEBUG=1        Verbose trace to stderr and the log file.
 #
 # CLI (for humans, not the agent):
@@ -124,9 +124,17 @@ resolve_file_path() {
 
 detect_host() {
   [[ -n "${VALIDATE_HOST:-}" ]] && { printf '%s' "$VALIDATE_HOST"; return; }
+  # Both hosts send `tool_input`, `session_id` and `hook_event_name` on their
+  # post-edit event, so none of those can tell them apart. Cursor's postToolUse
+  # carries `cursor_version` and `tool_output`; Claude's PostToolUse carries
+  # `tool_response`. A key sniffed as `"name"` cannot match text nested inside a
+  # JSON string, where the quotes arrive escaped as \"name\".
   case "$1" in
-    *'"tool_input"'*) printf 'claude' ;;
-    *)                printf 'cursor' ;;
+    *'"cursor_version"'*) printf 'cursor' ;;
+    *'"tool_response"'*)  printf 'claude' ;;
+    *'"tool_output"'*)    printf 'cursor' ;;
+    *'"tool_input"'*)     printf 'claude' ;;
+    *)                    printf 'cursor' ;;
   esac
 }
 
@@ -137,14 +145,16 @@ json_escape() {
   printf '%s' "$s"
 }
 
-# Claude reads stderr on exit 2; Cursor reads a JSON envelope on exit 0.
+# Claude reads stderr on exit 2. Cursor (postToolUse) reads `additional_context`
+# from a JSON object on stdout, exit 0: the edit already happened, so there is
+# nothing to block, and exit 2 would be read as a deny of a done action.
 emit_feedback() {
   local msg="$1"
   if [[ "$HOST" == "claude" ]]; then
     printf '%s\n' "$msg" >&2
     exit 2
   fi
-  printf '{"permission":"allow","continue":true,"agentMessage":"%s"}\n' "$(json_escape "$msg")"
+  printf '{"additional_context":"%s"}\n' "$(json_escape "$msg")"
   exit 0
 }
 

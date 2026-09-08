@@ -48,9 +48,18 @@ agent writes a file
 | `templates/cursor-hooks.json`     | Cursor registration.                | Path only          |
 
 There is no standard, cross-agent hook format: Claude reads
-`.claude/settings.json` (`PostToolUse`), Cursor reads `.cursor/hooks.json`
-(`afterFileEdit`), and their payloads differ. So the **logic** lives once in
-`.agents/hooks/`, and each agent gets a thin registration file pointing at it.
+`.claude/settings.json` (`PostToolUse`, stderr on exit 2), Cursor reads
+`.cursor/hooks.json` (`postToolUse`, `{"additional_context": …}` on stdout, exit 0),
+and their payloads differ. So the **logic** lives once in `.agents/hooks/`, and
+each agent gets a thin registration file pointing at it.
+
+On the Cursor side, `postToolUse` is the only file-edit event with an output
+channel: `afterFileEdit` has no output fields, so a violation reported there
+never reaches the agent. The runner answers `{"additional_context": …}` on exit
+0 there: the edit already happened, and exit 2 would read as a deny. Cursor's
+schema also has no per-hook `env`, so the runner tells the hosts apart from the
+payload (Cursor sends `cursor_version` and `tool_output`, Claude sends
+`tool_response`) instead of relying on `VALIDATE_HOST`.
 
 ## 2. Install
 
@@ -62,9 +71,15 @@ chmod +x .agents/hooks/validate-on-edit.sh
 
 Then paste the routing table closest to the stack (`routing/*.sh`) between the
 `BEGIN ROUTING TABLE` / `END ROUTING TABLE` markers, replacing the placeholder
-`route()`, and adapt the globs to the real workspace layout. Merge the `hooks`
-block of `templates/claude-settings.json` into `.claude/settings.json`, and copy
-`templates/cursor-hooks.json` to `.cursor/hooks.json`.
+`route()`, and adapt the globs to the real workspace layout. Keep the two
+marker lines byte-for-byte: the runner upgrade path (§8) and any tooling that
+reads the table locate it with a regex on `^# BEGIN ROUTING TABLE `; a table
+spliced outside the markers is invisible to them. Merge the `hooks` block of
+`templates/claude-settings.json` into `.claude/settings.json`, and copy
+`templates/cursor-hooks.json` to `.cursor/hooks.json` as is. That file carries
+only `version` and `hooks` on purpose: Cursor silently stopped loading it when
+it held `_comment*` keys with documentation text (observed with
+`cursor-agent 2026.09.02`), so any note about it lives here, not in the JSON.
 
 Smoke-test, in this order:
 
@@ -162,7 +177,7 @@ reported **at most once per session** and then falls silent:
 | Situation                     | Agent sees                                     | Then         |
 | ----------------------------- | ---------------------------------------------- | ------------ |
 | Lint passes                   | nothing                                        | silent       |
-| Violation                     | linter output, exit 2                          | see §6       |
+| Violation                     | linter output (Claude: stderr, exit 2; Cursor: `additional_context`) | see §6 |
 | No running container          | "start the stack (`make up`)", once            | silent       |
 | Tool missing in container     | "`ruff` is not installed in `api`", once       | silent       |
 | Budget exceeded               | "too slow for a hook, move it to CI", once     | silent       |
@@ -220,7 +235,7 @@ One clean pass resets the counter immediately.
 | `VALIDATE_MAX_RETRIES`  | `3`     | Rejections before muting a file.                 |
 | `VALIDATE_MUTE_TTL_S`   | `900`   | How long a muted file stays muted.               |
 | `VALIDATE_WORKTREE`     | `auto`  | `auto` \| `skip` \| `run` in a linked worktree.  |
-| `VALIDATE_HOST`         | sniffed | `claude` \| `cursor` response shape.             |
+| `VALIDATE_HOST`         | sniffed | `claude` \| `cursor` response shape; the sniff reads `cursor_version`/`tool_output` (Cursor) vs `tool_response` (Claude). |
 | `VALIDATE_DEBUG=1`      | `0`     | Trace to stderr as well as the log.              |
 
 Install GNU coreutils where possible (`brew install coreutils` on macOS): the
@@ -250,7 +265,9 @@ exactly this.
 
 ## 10. Known coverage gap
 
-`PostToolUse Edit|Write` and `afterFileEdit` fire on agent *file-edit tools*.
+Claude `PostToolUse Edit|Write` and Cursor `postToolUse Write` fire on agent
+*file-edit tools*. Cursor reports both its create and its search-replace edit
+tool as `Write`, so the single matcher covers both.
 Files written through the Bash tool (`cat > f.ts`, `sed -i`, code generators
 like `nest g` or `prisma generate`) never trigger the hook. Complement with a
 pre-commit hook running the same script over `git diff --name-only` if that gap
@@ -274,7 +291,10 @@ The historical design record is kept under `specs/014-lint-on-edit-hook/`.
 `--doctor`, and was exercised against a stubbed docker on all paths: clean,
 violation, container down, tool missing, budget exceeded, unrouted extension,
 the three linked-worktree cases, retry brake, mute expiry, Claude and Cursor
-response shapes, and the kill-switch. Measured hot-path overhead is ~110ms per edit with a stub
+response shapes, and the kill-switch. The Cursor path was proven end-to-end on
+2026-09-08 with `cursor-agent 2026.09.02`: a `postToolUse` hook on `Write`
+returned the linter message to the agent through `additional_context`, and the
+agent quoted it back. Measured hot-path overhead is ~110ms per edit with a stub
 container; add the real `docker exec` round-trip (~150–400ms per command) on a
 warm container. The three routing tables are starting points and **must** be
 adapted to the consumer repo's workspace layout — they are not drop-in.
