@@ -250,6 +250,23 @@ drain_budget_out() {
   rm -f "$BUDGET_OUT"
 }
 
+# `docker exec` exits 1 — not 125 — when the container is gone, stopped, or the
+# daemon is unreachable, and prints the daemon error where the linter's output
+# would be. Left as-is, a `make up-build` (new container ids) surfaces that
+# error to the agent as a lint violation and burns one retry on the brake.
+# Prints 125 when $BUDGET_OUT holds such an error, the original rc otherwise.
+normalize_exec_rc() {
+  local rc="$1"
+  (( rc == 1 )) || { printf '%s' "$rc"; return; }
+  if [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] && grep -qiE \
+       '^(Error response from daemon: .*(No such container|is not running|is restarting|is paused)|Cannot connect to the Docker daemon|error during connect)' \
+       "$BUDGET_OUT"; then
+    printf '125'
+  else
+    printf '%s' "$rc"
+  fi
+}
+
 exec_in() {
   local svc="$1"; shift
   local cache="$STATE_DIR/cid-$svc" cid="" rc=0
@@ -259,8 +276,9 @@ exec_in() {
   # Hot path: one `docker exec` on the cached container id, no lookup at all.
   if [[ -n "$cid" ]]; then
     with_budget docker exec -i "$cid" "$@"; rc=$?
+    rc="$(normalize_exec_rc "$rc")"
     if (( rc != 125 )); then drain_budget_out; return "$rc"; fi
-    log "stale cid for $svc, re-resolving"
+    log "stale cid for $svc ($(head -c 200 "$BUDGET_OUT" 2>/dev/null | tr -d '\n')), re-resolving"
     rm -f "$BUDGET_OUT" "$cache"
   fi
 
@@ -269,6 +287,14 @@ exec_in() {
   printf '%s' "$cid" >"$cache" 2>/dev/null || true
 
   with_budget docker exec -i "$cid" "$@"; rc=$?
+  rc="$(normalize_exec_rc "$rc")"
+  if (( rc == 125 )); then
+    # Resolved and already gone (restart race): do not cache it, and keep the
+    # daemon error out of the agent's view — the 125 path warns once instead.
+    log "container for $svc vanished right after lookup: $(head -c 200 "$BUDGET_OUT" 2>/dev/null | tr -d '\n')"
+    rm -f "$BUDGET_OUT" "$cache"
+    return 125
+  fi
   drain_budget_out
   return "$rc"
 }

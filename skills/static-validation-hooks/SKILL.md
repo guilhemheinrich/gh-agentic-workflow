@@ -179,6 +179,7 @@ reported **at most once per session** and then falls silent:
 | Lint passes                   | nothing                                        | silent       |
 | Violation                     | linter output (Claude: stderr, exit 2; Cursor: `additional_context`) | see §6 |
 | No running container          | "start the stack (`make up`)", once            | silent       |
+| Container recreated (`make up-build`, `down`/`up`) | nothing — the cached id is re-resolved on the next edit | silent |
 | Tool missing in container     | "`ruff` is not installed in `api`", once       | silent       |
 | Budget exceeded               | "too slow for a hook, move it to CI", once     | silent       |
 | No branch matches the file    | "no validation branch matches `.rs`", once     | silent       |
@@ -187,6 +188,15 @@ reported **at most once per session** and then falls silent:
 
 Every one of these is written to `$TMPDIR/validate-on-edit.log` regardless, and
 `--doctor` counts the warnings suppressed this session.
+
+The recreated-container row exists because `docker exec` on a vanished or stopped
+container id exits **1**, the same code a linter uses for a violation, and prints
+`Error response from daemon: No such container: …` where the linter output would
+be. The runner recognises that daemon text (`No such container`, `is not
+running`, `is restarting`, `is paused`, `Cannot connect to the Docker daemon`)
+and treats it as "no container" (125): it drops the cached id, re-resolves, and
+retries once. A genuine linter exit 1 is never rewritten — only output that
+starts with the daemon's own error prefix qualifies.
 
 ### Git worktrees
 
@@ -294,7 +304,10 @@ the three linked-worktree cases, retry brake, mute expiry, Claude and Cursor
 response shapes, and the kill-switch. The Cursor path was proven end-to-end on
 2026-09-08 with `cursor-agent 2026.09.02`: a `postToolUse` hook on `Write`
 returned the linter message to the agent through `additional_context`, and the
-agent quoted it back. Measured hot-path overhead is ~110ms per edit with a stub
+agent quoted it back. The recreated-container path (stale cached id, stopped
+container, restart race, daemon unreachable) was exercised on 2026-09-10 against
+a real Docker 29.4 daemon; a genuine linter exit 1 passed through unchanged.
+Measured hot-path overhead is ~110ms per edit with a stub
 container; add the real `docker exec` round-trip (~150–400ms per command) on a
 warm container. The three routing tables are starting points and **must** be
 adapted to the consumer repo's workspace layout — they are not drop-in.
