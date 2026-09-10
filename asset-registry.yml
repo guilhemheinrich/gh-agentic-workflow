@@ -1549,11 +1549,18 @@ assets:
       - sonarqube
       - testing
     description: >-
-      Write and maintain sonar-project.properties files and Dockerized SonarScanner setup for local SonarQube analysis.
-      Covers analysis scope (exclusions, test detection), copy-paste detection exclusions, coverage report paths, rule
-      suppression strategies, environment-driven scanner invocation, and language-specific examples. Use when creating
-      or editing sonar-project.properties, configuring SonarQube analysis scope, excluding files from scan, ignoring
-      SonarQube rules, or setting up local sonar-scanner.
+      Bind a repository to a self-hosted SonarQube Community Build once, then scan it and read the result on demand —
+      from one machine-level environment and one personal file at the repository root. Ships `scripts/sonarctl.sh`,
+      whose `bind` creates the project and its analysis token from a user-level admin token and writes `.sonar-config`,
+      whose `scan` runs the official Dockerized scanner, waits for the quality gate and prints the open issues, whose
+      `status` reads gate and issues without scanning, and whose `doctor` verifies the whole installation (env, token
+      permissions, git excludes, MCP). Explains the two-token model (user token for binding, project analysis token for
+      scanning), why `.sonar-config` is ignored through `~/.gitignore_global` and never through the repo, and how the
+      sonarqube MCP tools read issues, gate, hotspots and rules once a scan has run. Still the reference for
+      `sonar-project.properties`: analysis scope, test detection, copy-paste and coverage exclusions, rule suppression,
+      language-specific examples. Use when connecting a project to SonarQube, running or iterating on a Sonar analysis,
+      reading Sonar issues through the MCP, editing sonar-project.properties, or diagnosing a scanner that cannot
+      authenticate.
     category: quality-assurance
   - path: skills/spec-reindex/
     type: skill

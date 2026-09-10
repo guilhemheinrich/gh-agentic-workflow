@@ -1,0 +1,9 @@
+# .sonar-config — the personal binding of ONE repository to ONE SonarQube project.
+# Written by `sonarctl.sh bind`; shown here only to document the shape.
+#
+# Rules: plain KEY=VALUE, no quotes, no `export` (docker --env-file reads it
+# literally), mode 0600, listed in ~/.gitignore_global — never in the repo's own
+# .gitignore, never committed, never copied to .env or .env.example.
+SONAR_HOST_URL=https://sonarqube.example.com
+SONAR_PROJECT_KEY=my-project
+SONAR_TOKEN=sqp_0123456789abcdef0123456789abcdef01234567
