@@ -1623,6 +1623,28 @@ assets:
       - common
     tags:
       - common
+  - path: skills/test-env-targeting/
+    type: skill
+    category: quality-assurance
+    tags:
+      - e2e
+      - make
+      - playwright
+      - shell
+      - testing
+      - typescript
+      - validation
+      - vitest
+    description: >-
+      Point integration, API, e2e and load tests at local, staging or prod with one selector and one set of environment
+      files shared by every category. Covers the four layers every runner needs — `TEST_ENV` selection, committed
+      `tests/env/.env.<env>` files with a gitignored `.secret` sibling, a typed schema that fails before the first test,
+      and tag gating with a prod lock (`PROD_CONFIRM=1` plus a `@prod-safe` allowlist). Loads the environment at the
+      shell level through `with-env.sh`, so Playwright, Vitest, `go test`, k6, Hurl and Bruno read plain variables and
+      no runner carries a dotenv parser. Ships env-file templates, the Makefile entry points, TypeScript (zod,
+      Playwright, Vitest) and Go (stdlib, build tags) templates, and one reference per category. Use when adding a test
+      category to a repo, running an existing suite against staging or prod, unifying `E2E_BASE_URL` / `BASE_URL` naming
+      across a fleet, or reviewing a test config that hardcodes a target.
   - path: skills/text-clip-cloud-word/
     type: skill
     tags:
