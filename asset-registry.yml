@@ -1488,6 +1488,25 @@ assets:
       model to attack your work, picking a reviewer without knowing model names, reviewing a spec or a diff outside the
       agent that produced it, setting up an OpenRouter key, calling the client from an agent or a hook where an
       inherited stdin never reaches EOF, or debugging a gateway that answers HTTP 200 with an error body.
+  - path: skills/plain-explanation/
+    type: skill
+    tags:
+      - common
+      - documentation
+      - process
+    description: >-
+      Explain a technical problem to a human who must understand or decide — plain sentences, one analogy sustained to
+      the end, an instance after every abstraction. The terse-writing rules (lead with the point, short sentences,
+      active voice, no filler) accept two messages on the same facts and tell them apart for nobody: the one made of
+      tables of identifiers and coordinates, which a reviewer reads, and the one made of a story, which a decider reads.
+      This skill is the method that separates them: a switching rule that picks the register from the reader so the
+      human never has to ask, eight rules each with a statement and a fail test, a six-item pre-send checklist, a
+      concise annotated example and the table-register paragraph it replaces. Use for an explanation, a decision
+      request, a debrief, a phase report to a person, or whenever a human is about to receive coordinates instead of
+      meaning. Triggers on "explain this simply", "vulgarise", "reformule", "with analogies", "for a non-specialist",
+      "debrief for the team", and implicitly whenever the reader is a human who must understand or decide rather than a
+      reviewer or a tool that already holds the map.
+    category: standards
   - path: skills/s3-backend-proxy/
     type: skill
     tags:
