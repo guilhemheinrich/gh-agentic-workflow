@@ -13,6 +13,11 @@
 #    output, and linting them produces noise the agent cannot act on.
 #  - *.spec.ts IS linted. Test files are where agents drift most (unused
 #    imports, floating promises), and eslint is just as fast on them.
+#  - `--max-warnings=0` is the false-pass guard, not a strictness preference.
+#    ESLint answers a file it will not lint with a warning and exit 0 ("File
+#    ignored because outside of base path" on a wrong `strip`, "matching ignore
+#    pattern" otherwise). Measured 2026-09-17 with ESLint 9.39.4. Keep the flag
+#    on every branch, and see references/proving-the-hook-bites.md §5.
 
 route() {
   case "$REL" in
