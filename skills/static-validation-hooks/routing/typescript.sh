@@ -10,6 +10,14 @@
 #
 # `--no-install` on npx matters: without it, npx silently downloads a random
 # eslint version on a cache miss and the hook blows its budget.
+#
+# `--max-warnings=0` is not a strictness preference, it is the false-pass guard.
+# ESLint reports a file it will not lint as a WARNING and exits 0: "File ignored
+# because outside of base path" (a wrong or missing `strip`) or "File ignored
+# because of a matching ignore pattern". Measured 2026-09-17 with ESLint 9.39.4:
+# exit 0 without the flag, exit 1 with it. Never drop it. Probe a routed path
+# with `eslint --print-config <path>` — `undefined` means no config applies and
+# nothing is checked. See references/proving-the-hook-bites.md §5.
 
 route() {
   case "$REL" in

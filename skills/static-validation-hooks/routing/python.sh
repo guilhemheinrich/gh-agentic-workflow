@@ -7,6 +7,15 @@
 # Deliberately absent: mypy. Even `mypy path/to/one.py` re-reads the import
 # graph and follows it — 5-20s on a real project. It belongs in CI.
 # `ruff check --fix` covers pyflakes/pycodestyle/isort/pyupgrade in ~50ms.
+#
+# Trap — `force-exclude`. Ruff normally lints a path passed explicitly even when
+# `exclude` / `extend-exclude` covers it, which is exactly how this hook calls
+# it. With `force-exclude = true` in pyproject.toml it does the opposite: it
+# prints "All checks passed!", exits 0, and sends "warning: No Python files
+# found under the given path(s)" to stderr, which `--quiet` hides and the runner
+# ignores. Measured 2026-09-17 with ruff 0.15.21. Probe before trusting this
+# table: `ruff check --show-files <path>` must print the path.
+# See references/proving-the-hook-bites.md §4 for the canary.
 
 route() {
   case "$REL" in

@@ -5,8 +5,9 @@ description: >-
   never carry the burden of remembering to lint. One script in `.agents/hooks/`
   routes each edited file to a fast file-local linter running in the project's
   already-up compose container, and stays silent unless something is wrong.
-  Ships a generic runner plus python / typescript / nestjs routing tables and
-  the Claude and Cursor registration adapters. Use when adding lint-on-edit to
+  Ships a generic runner plus go / python / typescript / nestjs routing tables,
+  the Claude and Cursor registration adapters, and a per-language reference for
+  proving a branch actually rejects something. Use when adding lint-on-edit to
   a project, adapting the routing table to a new stack or workspace, or
   debugging a hook that is slow, noisy, or silently doing nothing.
 ---
@@ -44,8 +45,10 @@ agent writes a file
 | `routing/python.sh`               | Routing table — ruff.               | Fork it            |
 | `routing/typescript.sh`           | Routing table — eslint/biome.       | Fork it            |
 | `routing/nestjs.sh`               | Routing table — Nest api + web.     | Fork it            |
+| `routing/go.sh`                   | Routing table — gofmt + golangci-lint. | Fork it         |
 | `templates/claude-settings.json`  | Claude registration.                | Path only          |
 | `templates/cursor-hooks.json`     | Cursor registration.                | Path only          |
+| `references/proving-the-hook-bites.md` | Per-language canaries, coverage probes, silent-pass traps. | Read it |
 
 There is no standard, cross-agent hook format: Claude reads
 `.claude/settings.json` (`PostToolUse`, stderr on exit 2), Cursor reads
@@ -98,6 +101,21 @@ Smoke-test, in this order:
 `--doctor` reports docker reachability and whether each service named in the
 routing table has a running container. `--dry-run` prints the routing decision
 without executing. `--check` runs for real and prints the elapsed time.
+
+Then prove each branch actually rejects something — a canary file carrying a
+violation the repo's own config refuses:
+
+```bash
+.agents/hooks/validate-on-edit.sh --check src/zz-canary-probe.ts
+```
+
+Exit 2 means the branch bites; exit 0 on a file that violates the config means
+it does not, whatever `--doctor` says. A green check that checked nothing is
+the failure mode this hook is most prone to, and the only one no output
+reveals. The canary, the per-language coverage probes, and the measured
+silent-pass traps for Go, Python and TypeScript are in
+[references/proving-the-hook-bites.md](references/proving-the-hook-bites.md).
+Run it again after every routing-table change and every runner upgrade.
 
 ## 3. Writing the routing table
 
@@ -191,9 +209,35 @@ Every one of these is written to `$TMPDIR/validate-on-edit.log` regardless, and
 ### Git worktrees
 
 Validation **does** work in a linked worktree, as long as that worktree has its
-own stack. Container resolution is worktree-aware by construction: the compose
-project name is derived from the worktree's own directory, so `make up` run
-from the worktree resolves to *its* containers.
+own stack, and as long as the runner resolves the same project name compose
+does.
+
+**Check that name before anything else.** The runner derives it from the
+directory basename unless `COMPOSE_PROJECT_NAME` is exported. Compose resolves
+four sources in order: the exported variable, `COMPOSE_PROJECT_NAME` in the
+project's `.env`, the top-level `name:` of the compose file, then the basename.
+A repo using either middle source gets a runner pointed at a project no
+container carries: every `check` returns 125, the agent reads one "no running
+container" warning, and the hook then validates nothing in silence. Measured in
+`modelo-broker-pa` on 2026-09-09, whose `compose.yml:4` says `name: broker-pa`
+while the checkout is `modelo-broker-pa` — `GRV-validate-edit-overrides-runner-a4eb`.
+Until the runner reads all four sources, redefine `compose_project()` **inside**
+the `BEGIN/END ROUTING TABLE` markers, so the §8 upgrade path preserves it, and
+confirm with `--doctor` plus one canary (§2).
+
+A resolved name is only trustworthy when its containers were started from this
+checkout. Compose labels each one with
+`com.docker.compose.project.working_dir`; a name whose containers run from
+another directory is another tree's stack, whose bind mount holds a stale copy
+of the edited file.
+
+That ownership check is the precondition for reading the other three sources,
+not an extra precaution. Today a linked worktree is protected by accident: the
+basename resolves a project no container carries, so the hook warns instead of
+validating the wrong bytes. A runner that reads `.env` and the compose `name:`
+without checking ownership would resolve a worktree onto its main checkout's
+stack and validate the file the agent did not write. Whoever adds the one adds
+the other in the same change.
 
 Three cases, all handled by `VALIDATE_WORKTREE=auto` (the default):
 
@@ -262,6 +306,9 @@ exactly this.
 | Running tests from the hook                         | Not static, not fast, not file-local. Three strikes.                |
 | Editing the runner to add project logic             | Wrong layer. Project logic goes in the routing table.               |
 | Treating the hook as full coverage                  | The Bash tool bypasses it entirely — see below.                     |
+| A `check` that prints but cannot fail               | `gofmt -l` exits 0 while naming the file. The branch is decorative. |
+| `eslint` without `--max-warnings=0`                 | An ignored or out-of-base file warns and exits 0 — a false pass on every edit.|
+| Installing a branch without running a canary        | Nothing distinguishes "found nothing" from "checked nothing".        |
 
 ## 10. Known coverage gap
 
@@ -275,6 +322,7 @@ matters for the project.
 
 ## 11. See also
 
+- [references/proving-the-hook-bites.md](references/proving-the-hook-bites.md) — canaries, coverage probes and silent-pass traps, per language.
 - [makefile-conventions](../makefile-conventions/SKILL.md) — Docker-first Makefile baseline.
 - `rules/04-tools-and-configurations/4-static-validation.mdc` — the repo rule that mandates installing this hook.
 
