@@ -201,6 +201,29 @@ remaining_budget() {
   printf '%s' "$left"
 }
 
+# A budget kill is recognised by THIS file's own sentinel, never by exit 124:
+# a validator may legitimately choose 124 as its own signal, and claiming that
+# code for the runner is the same mistake as claiming 125 for a missing
+# container. with_budget runs inside a command substitution, so the sentinel is
+# a file the caller can read afterwards, not a variable.
+#
+# HONEST LIMIT: on the branch that delegates to an external `timeout`, the
+# utility's own 124 and a validator's 124 are indistinguishable — timeout
+# reports nothing of its own. That ambiguity is pre-existing; the sentinel is
+# synthesised there so the outcome stays the safe one (a warning, not a
+# violation attributed to the edited file), and it is exact on the watchdog
+# branch, where the runner itself did the killing.
+_BUDGET_FLAG=""
+
+budget_flag_arm() {
+  _BUDGET_FLAG="$STATE_DIR/budget-killed-$$"
+  rm -f "$_BUDGET_FLAG" 2>/dev/null || true
+}
+
+budget_flag_raise() { [[ -n "$_BUDGET_FLAG" ]] && : >"$_BUDGET_FLAG"; return 0; }
+
+budget_was_killed() { [[ -n "$_BUDGET_FLAG" && -f "$_BUDGET_FLAG" ]]; }
+
 # Output goes to a file, never to a command substitution: killing the direct
 # child does not close a pipe its own descendants still hold open, so `$( )`
 # would block for the full runtime of a grandchild and the budget would be a
@@ -208,11 +231,13 @@ remaining_budget() {
 with_budget() {
   local left; left="$(remaining_budget)"
   BUDGET_OUT="$(mktemp "${TMPDIR:-/tmp}/validate-out-XXXXXX")"
-  (( left <= 0 )) && return 124
+  (( left <= 0 )) && { budget_flag_raise; return 124; }
 
   if [[ -n "$TIMEOUT_BIN" ]]; then
     "$TIMEOUT_BIN" "$left" "$@" >"$BUDGET_OUT" 2>&1
-    return $?
+    local trc=$?
+    (( trc == 124 )) && budget_flag_raise
+    return "$trc"
   fi
 
   local sentinel="${BUDGET_OUT}.killed" rc=0 pid timer
@@ -226,7 +251,7 @@ with_budget() {
   wait "$pid" 2>/dev/null || rc=$?
   kill "$timer" 2>/dev/null || true
   wait "$timer" 2>/dev/null || true
-  [[ -f "$sentinel" ]] && { rm -f "$sentinel"; return 124; }
+  [[ -f "$sentinel" ]] && { rm -f "$sentinel"; budget_flag_raise; return 124; }
   return "$rc"
 }
 
@@ -242,12 +267,121 @@ lookup_cid() {
     --filter "label=com.docker.compose.service=$1" 2>/dev/null | head -n1
 }
 
+# ── Execution provenance ─────────────────────────────────────────────────────
+#
+# THE EXIT CODE CARRIES NO INFORMATION. Measured on Docker 29.4.0 via OrbStack,
+# macOS, 2026-09-17 (specs/016-hook-exit-code-contract/research.md §1):
+#
+#   container running, validator clean        0
+#   container running, validator found 3      3
+#   validator absent from the container     127   OCI runtime exec failed: …
+#   container stopped                         1   Error response from daemon: …
+#   container removed / never existed         1   Error response from daemon: …
+#   daemon unreachable                        1   failed to connect to the …
+#
+# `docker exec` NEVER returns 125, and the three infrastructure failures all
+# return 1 — the same code a linter returns when it found something. So the
+# runner does not infer: it carries its own evidence. A per-invocation nonce is
+# printed INSIDE the container immediately before the validator is handed
+# control. Nonce back = the call reached inside and command resolution began;
+# no nonce = the validator never started, whatever the code says.
+#
+# The nonce is NOT a prefix. Docker carries stdout and stderr separately and
+# merges them in an order that is not stable across two runs of one unchanged
+# command (research.md §2c), so detection looks for it ANYWHERE in the output.
+#
+# $0 of the wrapper shell is a second per-invocation marker: a shell prefixes
+# its own `exec` diagnostic with $0, so `<argv0>: … not found` proves the
+# SHELL said it, not the validator. Neither marker is a substring of the other.
+_NONCE=""
+_NONCE_ARGV0=""
+_NONCE_SEQ=0
+
+# `$RANDOM__` would parse as a variable named RANDOM__, hence ${RANDOM}.
+nonce_mint() {
+  _NONCE_SEQ=$(( _NONCE_SEQ + 1 ))
+  _NONCE="__voe_$$_${RANDOM}_${_NONCE_SEQ}__"
+  _NONCE_ARGV0="voe-exec-$$-${RANDOM}-${_NONCE_SEQ}"
+}
+
+# Remove EXACTLY ONE occurrence — the first — of the exact injected value. A
+# blanket removal would delete text from a validator whose own output happened
+# to carry the nonce, which loses a finding rather than duplicating one.
+strip_nonce_once() {
+  local s="$1" n="$2"
+  case "$s" in
+    *"$n"*) printf '%s%s' "${s%%"$n"*}" "${s#*"$n"}" ;;
+    *) printf '%s' "$s" ;;
+  esac
+}
+
+# Does this service's container have a POSIX shell? Probed once per service, at
+# resolution time, and cached beside the container id. A container with a
+# working validator and no shell keeps being validated under the weaker rule of
+# classify_degraded (FR-005a) rather than stopping being validated at all.
+shell_cache() { printf '%s/shell-%s' "$STATE_DIR" "$1"; }
+
+svc_has_shell() {
+  local f; f="$(shell_cache "$1")"
+  [[ -f "$f" ]] || return 0              # unknown: assume a shell, wrap as usual
+  [[ "$(cat "$f" 2>/dev/null)" != "no" ]]
+}
+
+probe_shell() {
+  local svc="$1" cid="$2" f rc=0
+  f="$(shell_cache "$svc")"
+  [[ -f "$f" ]] && return 0
+  (( $(remaining_budget) <= 0 )) && return 0   # no time: assume a shell, decide nothing
+  docker exec -i "$cid" sh -c 'exit 7' >/dev/null 2>&1; rc=$?
+  # Only 7 can come from a real shell, and only 126/127 prove there is none.
+  # Any other code (1 = daemon trouble) leaves the question open rather than
+  # poisoning the cache with a "no" the next session would inherit.
+  case "$rc" in
+    7)       printf 'yes' >"$f" 2>/dev/null || true ;;
+    126|127) printf 'no'  >"$f" 2>/dev/null || true; log "service '$svc' has no POSIX shell — degraded classification" ;;
+  esac
+  return 0
+}
+
 # exec_in SERVICE CMD... — stdout+stderr merged on stdout, container rc returned.
-# 125 = no running container (or docker unusable), 124 = budget exceeded.
+# 125 is the runner's OWN synthetic code for "no container resolved / docker
+# unusable"; `docker exec` cannot produce it. 124 = budget (see _BUDGET_FLAG).
 drain_budget_out() {
   [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] || return 0
   cat "$BUDGET_OUT"
   rm -f "$BUDGET_OUT"
+}
+
+# `exec` replaces the shell, so the validator keeps the process, its exit code,
+# its stdin and its signal behaviour. Arguments travel as positional parameters,
+# never through a re-quoted command string, so a path containing spaces
+# survives — measured on busybox ash, dash and bash.
+#
+# NO `--` BEFORE THE TOOL. An earlier draft of this wrapper injected one, to stop
+# a tool name beginning with `-` being read as an option. Measured 2026-09-17 on
+# the exact wrapper, and it is fatal:
+#
+#   alpine:3.20     busybox ash   exec -- echo hello   rc 0
+#   debian:12-slim  dash          exec -- echo hello   rc 127
+#                                 <argv0>: 1: exec: --: not found
+#   ubuntu:24.04    dash          exec -- echo hello   rc 127   (identical)
+#
+# dash does not read `--` as an end-of-options marker for `exec`; it looks for a
+# command literally named `--`. On any Debian- or Ubuntu-based image every
+# invocation would return 127 with an argv0-prefixed diagnostic, which the
+# classifier below would read as "tool not installed": one wiring warning per
+# service, then permanent silence — strictly worse than the defect this feature
+# exists to remove. A leading-dash tool name is refused at routing time instead,
+# where the branch that wrote it can be named (see check/fix).
+exec_wrapped() {
+  local svc="$1" cid="$2"; shift 2
+  if [[ -n "$_NONCE" ]] && svc_has_shell "$svc"; then
+    with_budget docker exec -i "$cid" \
+      sh -c 'printf "%s" "$1"; shift; exec "$@"' "$_NONCE_ARGV0" "$_NONCE" "$@"
+    return $?
+  fi
+  with_budget docker exec -i "$cid" "$@"
+  return $?
 }
 
 exec_in() {
@@ -258,7 +392,10 @@ exec_in() {
 
   # Hot path: one `docker exec` on the cached container id, no lookup at all.
   if [[ -n "$cid" ]]; then
-    with_budget docker exec -i "$cid" "$@"; rc=$?
+    # A cid cached by an older runner carries no shell answer; probing it here
+    # costs one call once, never per edit.
+    probe_shell "$svc" "$cid"
+    exec_wrapped "$svc" "$cid" "$@"; rc=$?
     if (( rc != 125 )); then drain_budget_out; return "$rc"; fi
     log "stale cid for $svc, re-resolving"
     rm -f "$BUDGET_OUT" "$cache"
@@ -267,8 +404,9 @@ exec_in() {
   cid="$(lookup_cid "$svc")"
   [[ -z "$cid" ]] && return 125
   printf '%s' "$cid" >"$cache" 2>/dev/null || true
+  probe_shell "$svc" "$cid"
 
-  with_budget docker exec -i "$cid" "$@"; rc=$?
+  exec_wrapped "$svc" "$cid" "$@"; rc=$?
   drain_budget_out
   return "$rc"
 }
@@ -300,51 +438,193 @@ _run() {
   exec_in "$_SVC" "$@"
 }
 
+# A tool name beginning with `-` is a ROUTING TABLE mistake, and it is refused
+# by name here rather than mis-parsed inside a container. The portable wrapper
+# has no end-of-options marker to hide behind: `--` is fatal on dash (see
+# exec_wrapped), so there is nowhere left to absorb this quietly — and absorbing
+# it quietly is what produced a shell diagnostic the classifier then read as
+# "tool not installed". Returns 0 when it refused, 1 when the name is fine.
+refuse_dash_tool() {
+  local tool="$1"
+  case "$tool" in -*) ;; *) return 1 ;; esac
+  log "routing error: tool '$tool' starts with '-' (branch matching $REL, service '${_SVC:-<none>}')"
+  warn_once "routing-${_SVC:-none}-$tool" \
+    "[validate] the ROUTING TABLE branch matching $REL runs \`$tool\`, whose name begins
+with \`-\`, so a shell inside the container would read it as an option and not as
+a command. $REL was NOT validated. Name the real binary in
+.agents/hooks/validate-on-edit.sh, or invoke it through \`sh -c '…' _ \"\$F\"\`." || true
+  return 0
+}
+
 fix() {
   _ROUTED=1
+  refuse_dash_tool "$1" && return 0
   (( DRY )) && { _run "$@" >/dev/null; return 0; }
   local out rc=0
+  nonce_mint
+  budget_flag_arm
   out="$(_run "$@")" || rc=$?
+  out="$(strip_nonce_once "$out" "$_NONCE")"
   (( rc != 0 )) && log "fix '$1' rc=$rc (non-blocking): ${out:0:200}"
+  return 0
+}
+
+# ── The decision table (plan D2) ─────────────────────────────────────────────
+#
+#   killed by the runner's own sentinel        budget warning
+#   nonce absent                               infrastructure warning
+#   nonce present, rc 0                        silence
+#   nonce present, rc 126/127, shell's own
+#     diagnostic after stripping               wiring warning
+#   nonce present, rc != 0, output remains     VIOLATION carrying that output
+#   nonce present, rc != 0, nothing remains    VIOLATION naming the code
+#
+# Emptiness is tested AFTER stripping, never before: the nonce is itself output,
+# and testing before it would make every silent validator look like it spoke.
+#
+# A validator may legitimately exit 124, 126 or 127 as its own signal, so the
+# runner claims those codes only when the accompanying evidence shows the runner
+# (or the wrapper shell) produced them. And silence is a violation, not nothing:
+# `grep -q` and `cmp -s` are legitimate routing-table entries that speak through
+# their exit code alone.
+
+# Did the WRAPPER SHELL — not the validator — refuse to run the tool? The shell
+# prefixes its `exec` diagnostic with $0, and $0 is a value this runner invented
+# for this one invocation, so a validator cannot forge it. The wording after the
+# prefix differs per shell, which is why nothing here matches on it. Measured
+# 2026-09-17, one line each:
+#   busybox ash (alpine:3.20)      <argv0>: exec: line 0: <tool>: not found
+#   dash (debian:12-slim, ubuntu)  <argv0>: 1: exec: <tool>: not found
+#   bash 3.2 (host)                <argv0>: line 0: exec: <tool>: not found
+is_shell_exec_diagnostic() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"                 # left-trim
+  case "$s" in "$_NONCE_ARGV0: "*) ;; *) return 1 ;; esac
+  case "$s" in
+    *"not found"*|*"Permission denied"*|*"permission denied"*|*"cannot execute"*) return 0 ;;
+  esac
+  return 1
+}
+
+# Docker's own failure wording. Used ONLY on the shell-less fallback path, where
+# no provenance can exist: it is exactly the text-matching rule FR-001 forbids
+# as a primary test, which is why nothing else consults it.
+is_docker_error() {
+  case "$1" in
+    *"Error response from daemon:"*) return 0 ;;
+    *"OCI runtime exec failed"*) return 0 ;;
+    *"failed to connect to the docker API"*) return 0 ;;
+    *"Cannot connect to the Docker daemon"*) return 0 ;;
+    *"permission denied while trying to connect to the Docker daemon"*) return 0 ;;
+  esac
+  return 1
+}
+
+_degraded_note() {
+  printf '%s' "Classification for \`$_SVC\` is DEGRADED: its container has no POSIX shell, so
+the runner cannot prove whether the validator ran and is matching Docker's own
+error wording instead. Add a shell to that image to restore full classification."
+}
+
+# FR-005a: no provenance available. Weaker, and the agent is told so.
+classify_degraded() {
+  local tool="$1" rc="$2" out="$3"
+  if is_docker_error "$out"; then
+    if (( rc == 126 || rc == 127 )); then
+      log "degraded: '$tool' not runnable in '$_SVC' (rc=$rc)"
+      warn_once "wiring-$_SVC-$tool" \
+        "[validate] \`$tool\` could not be run in the \`$_SVC\` container, so $REL was not
+validated. Add it to that service's dependencies, or drop it from the ROUTING
+TABLE in .agents/hooks/validate-on-edit.sh.
+$(_degraded_note)" || true
+      return 0
+    fi
+    log "degraded: docker error for '$_SVC' (rc=$rc)"
+    warn_once "nocontainer-$_SVC" \
+      "[validate] service \`$_SVC\` could not be reached, so $REL was not validated.
+Start the stack (\`make up\`) to re-enable on-edit validation.
+$(_degraded_note)" || true
+    return 0
+  fi
+  if [[ -z "${out//[$'\t\n\r ']/}" ]]; then
+    _VIOLATION="[validate] $REL — $tool (exit $rc)
+
+The validator exited $rc and printed nothing."
+    return 0
+  fi
+  _VIOLATION="[validate] $REL — $tool (exit $rc)
+
+$out"
   return 0
 }
 
 check() {
   _ROUTED=1
   [[ -n "$_VIOLATION" ]] && return 0   # fail-fast: one violation per edit is enough
-  local out rc=0 tool="$1"
+  local out rc=0 tool="$1" stripped="" ran=0
+  refuse_dash_tool "$tool" && return 0
+  nonce_mint
+  budget_flag_arm
   out="$(_run "$@")" || rc=$?
   (( DRY )) && return 0
 
-  case "$rc" in
-    0) return 0 ;;
-    124)
-      log "budget exceeded (${VALIDATE_BUDGET_S}s): $tool on $REL"
-      warn_once "budget-$_SVC-$tool" \
-        "[validate] \`$tool\` exceeded the ${VALIDATE_BUDGET_S}s budget on $REL and was killed.
-This tool is too slow for an on-edit hook — move it to the CI/verify stage and
-remove it from the ROUTING TABLE, or raise VALIDATE_BUDGET_S deliberately." || true
-      return 0 ;;
-    125)
-      log "no running container for service '$_SVC'"
-      warn_once "nocontainer-$_SVC" \
-        "[validate] service \`$_SVC\` has no running container, so $REL was not validated.
+  # 1. The runner killed it. Its own sentinel, not the exit code.
+  if budget_was_killed; then
+    log "budget exceeded (${VALIDATE_BUDGET_S}s): $tool on $REL"
+    warn_once "budget-$_SVC-$tool" \
+      "[validate] \`$tool\` did not finish inside the ${VALIDATE_BUDGET_S}s budget on $REL and was
+killed, so the file was not validated. The runner does not know why: a genuinely
+slow tool, a cold start, or a loaded machine all look the same from here. Raise
+VALIDATE_BUDGET_S, or move the tool to CI if it is slow every time." || true
+    return 0
+  fi
+
+  # 2. Success needs no provenance: no infrastructure failure measured here
+  #    returns 0, so there is nothing a nonce could add.
+  (( rc == 0 )) && return 0
+
+  # 3. No shell in that container: no provenance can exist (FR-005a).
+  if ! svc_has_shell "$_SVC"; then
+    classify_degraded "$tool" "$rc" "$out"
+    return 0
+  fi
+
+  case "$out" in *"$_NONCE"*) ran=1 ;; esac
+  stripped="$(strip_nonce_once "$out" "$_NONCE")"
+
+  # 4. The call never reached inside the container. Infrastructure, whatever the
+  #    exit code and whatever Docker wrote — none of that text reaches the agent.
+  if (( ! ran )); then
+    log "no provenance for '$tool' in service '$_SVC' (rc=$rc): ${out:0:200}"
+    warn_once "nocontainer-$_SVC" \
+      "[validate] service \`$_SVC\` has no running container, so $REL was not validated.
 Start the stack (\`make up\`) to re-enable on-edit validation." || true
-      return 0 ;;
-    126|127)
-      log "tool '$tool' not found in service '$_SVC'"
-      warn_once "wiring-$_SVC-$tool" \
-        "[validate] \`$tool\` is not installed in the \`$_SVC\` container, so $REL was not
+    return 0
+  fi
+
+  # 5. The wrapper shell itself refused to run the tool.
+  if (( rc == 126 || rc == 127 )) && is_shell_exec_diagnostic "$stripped"; then
+    log "tool '$tool' not runnable in service '$_SVC' (rc=$rc)"
+    warn_once "wiring-$_SVC-$tool" \
+      "[validate] \`$tool\` is not installed in the \`$_SVC\` container, so $REL was not
 validated. Add it to that service's dependencies, or drop it from the ROUTING
 TABLE in .agents/hooks/validate-on-edit.sh." || true
-      return 0 ;;
-    *)
-      [[ -z "${out//[$'\t\n\r ']/}" ]] && { log "$tool rc=$rc with no output, ignoring"; return 0; }
-      _VIOLATION="[validate] $REL — $tool (exit $rc)
+    return 0
+  fi
 
-$out"
-      return 0 ;;
-  esac
+  # 6. It ran and it failed. Silence is a verdict too.
+  if [[ -z "${stripped//[$'\t\n\r ']/}" ]]; then
+    log "$tool rc=$rc with no output on $REL"
+    _VIOLATION="[validate] $REL — $tool (exit $rc)
+
+The validator exited $rc and printed nothing."
+    return 0
+  fi
+
+  _VIOLATION="[validate] $REL — $tool (exit $rc)
+
+$stripped"
+  return 0
 }
 
 # ═════════════════════════════════════════════════════════════════════════════

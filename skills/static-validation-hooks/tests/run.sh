@@ -53,11 +53,28 @@
 #   bash run.sh                 run every case, stop at the first failure
 #   bash run.sh --all           run every case, report all failures
 #   bash run.sh --case NAME     run one case
+#   bash run.sh --image IMG     run the matrix on this image only
 #   bash run.sh --list          list case names
 # Exits non-zero if any case failed.
 #
-# Requirements: Docker, and the image in $VOE_IMAGE (default alpine:3.20).
-# No project stack. bash 3.2 compatible.
+# ── The image matrix, and why there is one ───────────────────────────────────
+#
+# Every case runs once per image in $VOE_IMAGES (default: alpine:3.20 and
+# debian:12-slim). The runner injects a `sh -c` wrapper into every validator
+# call, so the SHELL inside the container is part of the contract, and the two
+# shells that matter behave differently: alpine is busybox ash, Debian and
+# Ubuntu are dash. An earlier wrapper passed `--` before the tool; measured
+# 2026-09-17, that is rc 0 on ash and rc 127 on dash, which the classifier would
+# have read as "tool not installed" — one warning per service, then permanent
+# silence on every Debian-based stack.
+#
+# A single-image fixture set could not see that, and did not: the suite was
+# green while exercising one of the two shells it claimed to cover. That is the
+# same failure shape as the defect this feature exists to remove, so the matrix
+# is part of the suite rather than a nicety.
+#
+# Requirements: Docker, and the images in $VOE_IMAGES. No project stack.
+# bash 3.2 compatible.
 
 set -o pipefail
 
@@ -75,6 +92,10 @@ export VOE_REGISTRY
 
 . "$TESTS_DIR/fixtures/container.sh"
 
+# The image matrix. Every case runs once per image: the container-side shell is
+# part of the contract (see the header), and alpine is ash while debian is dash.
+VOE_IMAGES="${VOE_IMAGES:-alpine:3.20 debian:12-slim}"
+
 VOE_KEEP="${VOE_KEEP:-0}"
 
 cleanup() {
@@ -91,7 +112,11 @@ CASES="stale-container-reported-as-violation
 daemon-unreachable
 validator-exit-1-with-findings
 validator-output-looks-like-a-daemon-error
-status-only-check"
+status-only-check
+tool-absent-from-container
+leading-dash-tool-name
+validator-chooses-127
+shell-less-container"
 
 # ── Harness primitives available to every case ───────────────────────────────
 
@@ -216,7 +241,7 @@ run_one_case() {
 
   [ -f "$file" ] || { printf 'run.sh: no such case: %s\n' "$name" >&2; return 1; }
 
-  CASE_DIR="$VOE_ROOT/$name"
+  CASE_DIR="$VOE_ROOT/$IMAGE_KEY/$name"
   CASE_TMPDIR="$CASE_DIR/tmp"
   PROJECT_NAME="voe-test-$VOE_SESSION-$CASE_INDEX"
   PROJECT_DIR="$CASE_DIR/$PROJECT_NAME"
@@ -227,7 +252,7 @@ run_one_case() {
   VOE_DOCKER_HOST=""
   CASE_VERDICT="FAIL"
 
-  printf '  %s\n' "$name" >&2
+  printf '  %-44s [%s]\n' "$name" "$VOE_IMAGE" >&2
   # The case body runs in a subshell so a case cannot leak env (DOCKER_HOST,
   # exports) into the next one.
   (
@@ -240,7 +265,7 @@ run_one_case() {
 
   local observed="unexpected:case-did-not-report"
   [ -f "$CASE_DIR/observed" ] && observed="$(cat "$CASE_DIR/observed")"
-  printf '%s\t%s\t%s\n' "$name" "$rc" "$observed" >>"$VOE_ROOT/results.tsv"
+  printf '%s\t%s\t%s\t%s\n' "$VOE_IMAGE" "$name" "$rc" "$observed" >>"$VOE_ROOT/results.tsv"
   return $rc
 }
 
@@ -252,6 +277,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --all)  MODE="all" ;;
     --case) shift; ONLY="$1" ;;
+    --image) shift; VOE_IMAGES="$1" ;;
     --list) printf '%s\n' "$CASES"; exit 0 ;;
     -h|--help) sed -n '1,60p' "$0"; exit 0 ;;
     *) printf 'run.sh: unknown flag: %s\n' "$1" >&2; exit 64 ;;
@@ -260,10 +286,12 @@ while [ $# -gt 0 ]; do
 done
 
 command -v docker >/dev/null 2>&1 || { printf 'run.sh: docker not on PATH\n' >&2; exit 1; }
-docker image inspect "$VOE_IMAGE" >/dev/null 2>&1 || {
-  printf 'run.sh: pulling %s\n' "$VOE_IMAGE" >&2
-  docker pull "$VOE_IMAGE" >/dev/null 2>&1 || { printf 'run.sh: cannot pull %s\n' "$VOE_IMAGE" >&2; exit 1; }
-}
+for img in $VOE_IMAGES; do
+  docker image inspect "$img" >/dev/null 2>&1 || {
+    printf 'run.sh: pulling %s\n' "$img" >&2
+    docker pull "$img" >/dev/null 2>&1 || { printf 'run.sh: cannot pull %s\n' "$img" >&2; exit 1; }
+  }
+done
 
 : >"$VOE_ROOT/results.tsv"
 FAILED=0
@@ -272,6 +300,7 @@ CASE_INDEX=0
 START="$(date +%s)"
 
 printf 'runner  : %s\n' "$RUNNER_SRC" >&2
+printf 'images  : %s\n' "$VOE_IMAGES" >&2
 printf 'sandbox : %s\n' "$VOE_ROOT" >&2
 
 # --case also accepts a case file that is not in the list above, so a maintainer
@@ -284,17 +313,25 @@ $ONLY
 "*) ;; *) CASES="$ONLY" ;; esac
 fi
 
-for c in $CASES; do
-  CASE_INDEX=$(( CASE_INDEX + 1 ))
-  if [ -n "$ONLY" ] && [ "$ONLY" != "$c" ]; then continue; fi
-  if run_one_case "$c"; then
-    PASSED=$(( PASSED + 1 ))
-    printf '    PASS\n' >&2
-  else
-    FAILED=$(( FAILED + 1 ))
-    printf '    FAIL\n' >&2
-    [ "$MODE" = "first-failure" ] && break
-  fi
+# Every case, on every image. The shell inside the container is part of the
+# contract the runner asserts, so one image proves the contract for one shell
+# and nothing more.
+for img in $VOE_IMAGES; do
+  VOE_IMAGE="$img"
+  IMAGE_KEY="$(printf '%s' "$img" | tr -c 'A-Za-z0-9._-' '-')"
+  printf '\n%s\n' "$img" >&2
+  for c in $CASES; do
+    CASE_INDEX=$(( CASE_INDEX + 1 ))
+    if [ -n "$ONLY" ] && [ "$ONLY" != "$c" ]; then continue; fi
+    if run_one_case "$c"; then
+      PASSED=$(( PASSED + 1 ))
+      printf '    PASS\n' >&2
+    else
+      FAILED=$(( FAILED + 1 ))
+      printf '    FAIL\n' >&2
+      [ "$MODE" = "first-failure" ] && break 2
+    fi
+  done
 done
 
 if [ -n "$ONLY" ] && [ $(( PASSED + FAILED )) -eq 0 ]; then
