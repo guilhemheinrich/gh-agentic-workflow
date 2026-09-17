@@ -55,6 +55,7 @@
 ## Phase F — Ledger and port
 
 - [ ] **T028** Resolve `GRV-stale-cached-container-reported-aa46` in `specs/GRIEVANCES.md` with the implementing commit. Do not re-declare it: it is already committed on `main`. `GRV-routing-table-ships-factory-e300` was resolved by a concurrent session and is not this feature's to close.
+- [ ] **T030** Declare the pre-existing defect found in passing: `find_project_root` takes the git top-level, which git answers physically, while the hook payload may carry the symlinked spelling. The runner then skips in silence. Reproduced on a throwaway repository. Outside this feature's scope; it belongs in the ledger, not in this branch's code.
 - [ ] **T029** Port the two functions and the classifier to the `claude-flow` plugin copy, in that repository, as its own commit. Run the same suite against it. This is a release criterion for the port, not acceptance for this change.
 
 ---

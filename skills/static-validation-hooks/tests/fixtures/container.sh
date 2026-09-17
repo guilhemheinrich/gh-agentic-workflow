@@ -46,6 +46,54 @@ voe_container_start() {
   printf '%s' "$cid"
 }
 
+# voe_container_start_ex NAME PROJECT SERVICE HOST_DIR CONTAINER_DIR [EXTRA...]
+# As voe_container_start, plus arbitrary `docker run` arguments before the image
+# — a working directory, a second mount, a named volume shadowing the first.
+# The image is always $VOE_IMAGE, the current matrix row.
+voe_container_start_ex() {
+  local name="$1" project="$2" service="$3" host_dir="$4" ctr_dir="$5" cid=""
+  shift 5
+  voe_register "$name"
+  cid="$(docker run -d \
+    --name "$name" \
+    --label "com.docker.compose.project=$project" \
+    --label "com.docker.compose.service=$service" \
+    -v "$host_dir:$ctr_dir" \
+    "$@" \
+    "$VOE_IMAGE" sleep 900 2>&1)" || {
+      printf 'fixture: docker run failed: %s\n' "$cid" >&2
+      return 1
+    }
+  printf '%s' "$cid"
+}
+
+# voe_volume_create NAME — a named volume this session owns and tears down.
+# Named `voe-test-*` like every container, so a stray is findable with
+# `docker volume ls --filter name=voe-test-`, and a name outside that prefix is
+# refused rather than created.
+voe_volume_create() {
+  case "$1" in voe-test-*) ;; *) printf 'fixture: refusing volume name %s\n' "$1" >&2; return 1 ;; esac
+  docker volume create "$1" >/dev/null 2>&1 || {
+    printf 'fixture: could not create volume %s\n' "$1" >&2; return 1; }
+  printf '%s\n' "$1" >>"$VOE_VOLUMES"
+  return 0
+}
+
+# voe_volume_seed VOLUME RELATIVE_PATH CONTENT
+# Writes one file into a volume this session created, through a throwaway
+# container. A named volume mounted over a BIND destination is NOT populated
+# from that bind — measured 2026-09-17, the shadowed path was simply empty — so
+# the stale copy the shadowing case needs has to be written on purpose.
+voe_volume_seed() {
+  local vol="$1" rel="$2" content="$3"
+  grep -qx "$vol" "$VOE_VOLUMES" 2>/dev/null || {
+    printf 'fixture: refusing to write into unregistered volume %s\n' "$vol" >&2; return 1; }
+  docker run --rm -v "$vol:/seed" "$VOE_IMAGE" \
+    sh -c "mkdir -p \"/seed/\$(dirname '$rel')\"; printf '%s\n' '$content' > '/seed/$rel'" \
+    >/dev/null 2>&1 || { printf 'fixture: could not seed %s\n' "$vol" >&2; return 1; }
+  return 0
+}
+
 # voe_container_remove_shell NAME
 # Deletes every POSIX shell from a container this suite created, leaving the
 # rest of the image intact: the container's own `sleep` and a validator such as
@@ -92,17 +140,25 @@ voe_container_rm() {
   docker rm -f "$name" >/dev/null 2>&1 || true
 }
 
-# voe_teardown_all — remove every container this session registered.
+# voe_teardown_all — remove every container and volume this session registered.
 voe_teardown_all() {
   local n
-  [ -f "$VOE_REGISTRY" ] || return 0
-  while IFS= read -r n; do
-    # Unpause first: a frozen container (voe_container_pause) must not be able
-    # to make the teardown of a failing run hang or fail.
-    [ -n "$n" ] && docker unpause "$n" >/dev/null 2>&1
-    [ -n "$n" ] && docker rm -f "$n" >/dev/null 2>&1
-  done <"$VOE_REGISTRY"
-  : >"$VOE_REGISTRY"
+  if [ -f "$VOE_REGISTRY" ]; then
+    while IFS= read -r n; do
+      # Unpause first: a frozen container (voe_container_pause) must not be able
+      # to make the teardown of a failing run hang or fail.
+      [ -n "$n" ] && docker unpause "$n" >/dev/null 2>&1
+      [ -n "$n" ] && docker rm -f "$n" >/dev/null 2>&1
+    done <"$VOE_REGISTRY"
+    : >"$VOE_REGISTRY"
+  fi
+  # Volumes go after the containers that hold them, or the removal is refused.
+  if [ -n "${VOE_VOLUMES:-}" ] && [ -f "$VOE_VOLUMES" ]; then
+    while IFS= read -r n; do
+      [ -n "$n" ] && docker volume rm -f "$n" >/dev/null 2>&1
+    done <"$VOE_VOLUMES"
+    : >"$VOE_VOLUMES"
+  fi
   return 0
 }
 

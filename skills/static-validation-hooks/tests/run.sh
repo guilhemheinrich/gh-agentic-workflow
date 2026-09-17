@@ -89,8 +89,12 @@ VOE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/voe-test-$VOE_SESSION-XXXXXX")" || exit 1
 VOE_REGISTRY="$VOE_ROOT/containers.registry"
 : >"$VOE_REGISTRY"
 export VOE_REGISTRY
+VOE_VOLUMES="$VOE_ROOT/volumes.registry"
+: >"$VOE_VOLUMES"
+export VOE_VOLUMES
 
 . "$TESTS_DIR/fixtures/container.sh"
+. "$TESTS_DIR/fixtures/worktree.sh"
 
 # The image matrix. Every case runs once per image: the container-side shell is
 # part of the contract (see the header), and alpine is ash while debian is dash.
@@ -123,7 +127,15 @@ format-then-validate-shares-recovery
 daemon-not-re-resolved
 daemon-outage-then-missing-container
 budget-exhausted-before-the-call
-container-alive-but-unreachable"
+container-alive-but-unreachable
+compose-file-declares-the-name
+dotenv-declares-the-name
+declared-name-with-uppercase-and-dots
+nested-name-serialised-first
+volume-shadows-the-checkout
+worktree-shares-the-main-stack
+worktree-sharing-opt-out
+resolver-override-keeps-validating"
 
 # ── Harness primitives available to every case ───────────────────────────────
 
@@ -182,15 +194,26 @@ run_hook() {
   payload="{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Edit\","
   payload="$payload\"tool_input\":{\"file_path\":\"$file\"},\"tool_response\":{}}"
 
+  # Every case but one pins the project through the exported variable, which is
+  # the highest of Compose's four sources and therefore the one that proves
+  # nothing about the other three. A case that must exercise the Compose file,
+  # the project `.env` or the basename sets VOE_NO_CPN=1 and the variable is not
+  # passed at all. `env -u` first, so a developer's own exported value in the
+  # calling shell cannot leak into those cases and make them pass for free.
+  local cpn="COMPOSE_PROJECT_NAME=$PROJECT_NAME"
+  [ "${VOE_NO_CPN:-0}" = "1" ] && cpn="VOE_CPN_NOT_EXPORTED=1"
+
   (
     cd "$PROJECT_DIR" || exit 90
     printf '%s' "$payload" | env \
+      -u COMPOSE_PROJECT_NAME -u COMPOSE_FILE -u COMPOSE_PROFILES -u COMPOSE_ENV_FILES \
       TMPDIR="$CASE_TMPDIR" \
       VALIDATE_HOST=claude \
       VALIDATE_ON_EDIT=1 \
       VALIDATE_BUDGET_S="${VOE_BUDGET_S:-10}" \
       VALIDATE_DEBUG=0 \
-      COMPOSE_PROJECT_NAME="$PROJECT_NAME" \
+      VALIDATE_WORKTREE="${VOE_WORKTREE:-auto}" \
+      "$cpn" \
       PATH="${VOE_PATH_PREFIX:+$VOE_PATH_PREFIX:}$PATH" \
       VOE_DOCKER_LOG="${VOE_DOCKER_LOG:-}" \
       ${VOE_DOCKER_HOST:+DOCKER_HOST="$VOE_DOCKER_HOST"} \
@@ -332,6 +355,8 @@ run_one_case() {
   VOE_PATH_PREFIX=""
   VOE_DOCKER_LOG=""
   VOE_BUDGET_S=""
+  VOE_NO_CPN=0
+  VOE_WORKTREE=""
   CASE_VERDICT="FAIL"
 
   printf '  %-44s [%s]\n' "$name" "$VOE_IMAGE" >&2

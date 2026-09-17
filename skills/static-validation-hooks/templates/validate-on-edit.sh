@@ -272,10 +272,221 @@ with_budget() {
 }
 
 # ── Container resolution (cached; the hot path is a single `docker exec`) ─────
-compose_project() {
-  if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then printf '%s' "$COMPOSE_PROJECT_NAME"; return; fi
-  basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
+#
+# ── The Compose project name (plan D5, FR-011, FR-012, FR-018, FR-019) ───────
+#
+# Resolved at RESOLUTION TIME only and remembered in a file, because the runner
+# is a fresh process per edit. Three sources, highest first:
+#
+#   1. a consumer override of this resolver placed inside the ROUTING TABLE
+#      markers. It replaces the whole function body, marker included, so it
+#      wins outright — and it also waives the checkout-identity test below,
+#      because the consumer has taken over the question (FR-019).
+#   2. Compose itself: `docker compose config --format json`, TOP-LEVEL `name`.
+#   3. today's rule — COMPOSE_PROJECT_NAME exported, else the sanitised
+#      directory basename — when there is no Compose file, or Compose fails.
+#      FR-011 asks for exactly this fallback, and for the runner to say which
+#      rule it used; `--doctor` prints it.
+#
+# The exported variable is read BEFORE asking Compose, and only as an
+# optimisation: it is Compose's own highest-precedence source, so Compose would
+# return the same value 64 ms later. Every other source is Compose's business.
+#
+# Compose is ASKED rather than imitated, so the project `.env`, the `name:` key
+# and an override file are honoured without this runner tracking Compose's
+# precedence. Measured 2026-09-17, Compose v5.1.2 on Docker 29.4.0 via OrbStack:
+# `config --format json` 64 ms, `ls --format json` 74 ms — against a basename
+# that is wrong for the repository where the defect was first seen (`compose.yml`
+# declares `name: broker-pa`, the directory is `modelo-broker-pa`).
+#
+# WHAT THIS CANNOT SEE, stated rather than claimed away: a file list (`-f`) or a
+# project name (`-p`) passed on the command line when the stack was started. The
+# hook runs in a different environment from that `up`, so both are invisible to
+# it, and no measurement here changes that.
+_COMPOSE_NAME=""
+_COMPOSE_SOURCE=""
+_COMPOSE_FILES=""
+
+# Compose normalises a project name before it becomes a container label:
+# lowercased and reduced to [a-z0-9_-]. Measured 2026-09-17: `name:
+# VOE.Test.Upper` is reported by Compose as `voetestupper` — dots dropped, not
+# replaced. Applied to every source so a hand-written value matches too (FR-012).
+compose_name_normalise() {
+  printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
 }
+
+# The TOP-LEVEL "name" of a JSON document on stdin.
+#
+# NOT `extract_json_string`: that helper returns the FIRST `"name"` in the
+# document (:58-80). `docker compose config --format json` serialises its
+# top-level keys in alphabetical order, so a project whose services use a
+# `configs:` entry puts that entry's own `name` BEFORE the project's own —
+# measured 2026-09-17, Compose v5.1.2. Reusing the helper here would resolve a
+# config's name as the project, which is the same shape of defect this feature
+# exists to remove: a helper that is right on the documents it was written
+# against and silently wrong on the next one.
+#
+# Depth is tracked through strings and escapes, and only a key sitting at depth 1
+# can match. An escape inside the value is passed through verbatim; a project
+# name survives compose_name_normalise regardless.
+json_top_level_name() {
+  awk '
+    {
+      line = $0
+      n = length(line)
+      for (i = 1; i <= n; i++) {
+        c = substr(line, i, 1)
+        if (instr) {
+          if (esc) { esc = 0; buf = buf c; continue }
+          if (c == "\\") { esc = 1; buf = buf c; continue }
+          if (c == "\"") {
+            instr = 0
+            if (expectval) {
+              expectval = 0
+              if (depth == 1 && key == "name") { printf "%s", buf; exit }
+            } else { key = buf }
+            continue
+          }
+          buf = buf c
+          continue
+        }
+        if (c == "\"") { instr = 1; buf = ""; continue }
+        if (c == "{" || c == "[") { depth++; expectval = 0; continue }
+        if (c == "}" || c == "]") { depth--; expectval = 0; continue }
+        if (c == ":") { expectval = 1; continue }
+        if (c == ",") { expectval = 0; key = ""; continue }
+      }
+    }
+  '
+}
+
+# The Compose files present in the project root, absolute, one per line. Used to
+# decide whether Compose is worth asking at all, and as one half of the cache
+# fingerprint — an override file that appears must invalidate the name.
+compose_files_present() {
+  local root="${PROJECT_ROOT:-}" f
+  [[ -n "$root" ]] || return 0
+  for f in compose.yaml compose.yml docker-compose.yaml docker-compose.yml \
+           compose.override.yaml compose.override.yml \
+           docker-compose.override.yaml docker-compose.override.yml; do
+    [[ -f "$root/$f" ]] && printf '%s/%s\n' "${root%/}" "$f"
+  done
+  return 0
+}
+
+# The files COMPOSE ITSELF reports for this project (FR-011: recorded, not
+# inferred). Only a project with containers appears in `docker compose ls`, so
+# an answer here is a bonus over compose_files_present, never a replacement.
+compose_reported_files() {
+  docker compose ls --format json 2>/dev/null \
+    | tr '{' '\n' \
+    | grep -F "\"Name\":\"$1\"" \
+    | sed -n 's/.*"ConfigFiles":"\([^"]*\)".*/\1/p' \
+    | head -n1 \
+    | tr ',' '\n'
+  return 0
+}
+
+compose_union() { printf '%s\n%s\n' "$1" "$2" | grep -v '^[[:space:]]*$' | sort -u; return 0; }
+
+# The fingerprint the name cache is keyed on (plan D5): the Compose files, their
+# modification times, and the Compose-related environment. `.env` is stat'ed too
+# although it is not a Compose file — it carries COMPOSE_PROJECT_NAME, which is
+# one of the four sources, and the plan's list omitted it.
+compose_fingerprint() {
+  local files="$1" f mt out
+  out="env|${COMPOSE_PROJECT_NAME:-}|${COMPOSE_FILE:-}|${COMPOSE_PATH_SEPARATOR:-}"
+  out="$out|${COMPOSE_PROFILES:-}|${COMPOSE_ENV_FILES:-}|${DOCKER_HOST:-}|${DOCKER_CONTEXT:-}"
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    mt="$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)" || mt=""
+    out="$out|$f@${mt:-absent}"
+  done <<EOF
+$files
+${PROJECT_ROOT:-}/.env
+EOF
+  printf '%s' "$out" | cksum | tr -d ' \n'
+}
+
+compose_cache_file() { [[ -n "${STATE_DIR:-}" ]] && printf '%s/compose-name' "$STATE_DIR"; return 0; }
+
+compose_resolve() {
+  [[ -n "$_COMPOSE_NAME" ]] && return 0
+  local root="${PROJECT_ROOT:-}"
+
+  if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then
+    _COMPOSE_NAME="$(compose_name_normalise "$COMPOSE_PROJECT_NAME")"
+    _COMPOSE_SOURCE="COMPOSE_PROJECT_NAME exported in the environment"
+    return 0
+  fi
+
+  local present; present="$(compose_files_present)"
+  if [[ -z "$present" ]]; then
+    _COMPOSE_NAME="$(compose_name_normalise "$(basename "$root")")"
+    _COMPOSE_SOURCE="the directory basename (no Compose file in the project root)"
+    return 0
+  fi
+
+  local cache; cache="$(compose_cache_file)"
+  if [[ -n "$cache" && -f "$cache" ]]; then
+    local sfp sname ssrc sfiles fp
+    sfp="$(sed -n '1p' "$cache" 2>/dev/null)"
+    sname="$(sed -n '2p' "$cache" 2>/dev/null)"
+    ssrc="$(sed -n '3p' "$cache" 2>/dev/null)"
+    sfiles="$(sed -n '4,$p' "$cache" 2>/dev/null)"
+    fp="$(compose_fingerprint "$(compose_union "$sfiles" "$present")")"
+    if [[ -n "$sname" && "$fp" == "$sfp" ]]; then
+      _COMPOSE_NAME="$sname"; _COMPOSE_SOURCE="$ssrc"; _COMPOSE_FILES="$sfiles"
+      return 0
+    fi
+    log "the Compose fingerprint changed — resolving the project name again"
+  fi
+
+  local json="" name=""
+  json="$(cd "$root" 2>/dev/null && docker compose config --format json 2>/dev/null)"
+  [[ -n "$json" ]] && name="$(printf '%s' "$json" | json_top_level_name)"
+  name="$(compose_name_normalise "$name")"
+
+  if [[ -z "$name" ]]; then
+    _COMPOSE_NAME="$(compose_name_normalise "$(basename "$root")")"
+    _COMPOSE_SOURCE="the directory basename (Compose did not answer)"
+    _COMPOSE_FILES="$present"
+    return 0
+  fi
+
+  _COMPOSE_NAME="$name"
+  _COMPOSE_SOURCE="Compose itself (docker compose config, top-level name)"
+  _COMPOSE_FILES="$(compose_union "$(compose_reported_files "$name")" "$present")"
+  log "compose project '$_COMPOSE_NAME' from $_COMPOSE_SOURCE"
+  if [[ -n "$cache" ]]; then
+    { printf '%s\n%s\n%s\n%s\n' "$(compose_fingerprint "$_COMPOSE_FILES")" \
+        "$_COMPOSE_NAME" "$_COMPOSE_SOURCE" "$_COMPOSE_FILES"; } >"$cache" 2>/dev/null || true
+  fi
+  return 0
+}
+
+# A consumer redefines THIS function inside the ROUTING TABLE markers to take
+# over resolution; bash keeps the last definition, so the override needs no
+# support from the runner. The marker is how the runner notices it happened.
+compose_project() {
+  : "__voe_factory_resolver__"
+  compose_resolve
+  printf '%s' "$_COMPOSE_NAME"
+}
+
+# Positive evidence only: a `declare -f` that answers nothing is read as the
+# factory resolver, never as an override, so an unreadable definition cannot
+# silently waive the checkout-identity test.
+resolver_is_overridden() {
+  local def
+  def="$(declare -f compose_project 2>/dev/null)"
+  [[ -n "$def" ]] || return 1
+  case "$def" in *__voe_factory_resolver__*) return 1 ;; esac
+  return 0
+}
+
+compose_source() { compose_resolve; printf '%s' "${_COMPOSE_SOURCE:-unknown}"; return 0; }
+compose_files()  { compose_resolve; printf '%s' "${_COMPOSE_FILES:-}"; return 0; }
 
 # lookup_candidates SERVICE — every running container id for the service, one
 # per line, and DOCKER'S OWN exit status. The whole set is the evidence: which
@@ -318,6 +529,169 @@ cands_contain() {
   return 1
 }
 
+# ── Checkout identity (plan D6, FR-013 to FR-016) ────────────────────────────
+#
+# At RESOLUTION TIME only, never on the path that reuses a cached identifier, so
+# the per-edit cost stays zero. One `docker inspect` — 25 ms measured — carries
+# the working directory and every mount's type, source and destination.
+#
+# THE TEST STARTS FROM THE CONTAINER PATH, NOT FROM THE HOST PATH. A source-only
+# test — "is some mount source a parent of the edited file" — is wrong in both
+# directions, and that was measured rather than argued (research.md §3d): a
+# checkout bound at /app with a named volume over /app/src makes the validator
+# read the volume's stale copy, and a source-only test accepts that container.
+#
+#   1. the path the validator will be given ($F after `strip`, made absolute
+#      with the container's working directory). The mount with the DEEPEST
+#      destination that is a prefix of it is the one that serves it. A volume
+#      there is refused outright: it is not this checkout, whatever its name.
+#   2. when no mount serves that path — a relative $F whose real container path
+#      the ROUTING TABLE composed itself — the mounts are walked the other way:
+#      a bind whose source holds the edited file yields a candidate container
+#      path, and that candidate is refused when a deeper mount shadows it. The
+#      same refusal, reached from the other end, so the shadowing case is caught
+#      on both routes rather than only on the derivable one.
+#
+# CANONICALISATION IS NOT OPTIONAL, and research.md §3's note that Docker
+# "reports mount sources already resolved" does not hold on this platform:
+# measured 2026-09-17, OrbStack reports a bind source as /var/folders/… while
+# the physical path is /private/var/folders/… . Both sides go through
+# `cd … && pwd -P` before any comparison.
+_IDENTITY_REASON=""
+
+path_canon() {
+  local p="$1" d b
+  [[ -n "$p" ]] || return 1
+  if [[ -d "$p" ]]; then (cd "$p" 2>/dev/null && pwd -P); return; fi
+  d="$(dirname "$p")"; b="$(basename "$p")"
+  d="$(cd "$d" 2>/dev/null && pwd -P)" || return 1
+  [[ -n "$d" ]] || return 1
+  printf '%s/%s' "${d%/}" "$b"
+}
+
+# Is $1 the path $2 itself, or below it? String comparison only — both sides are
+# canonicalised by the caller.
+path_within() {
+  local p="$1" parent="$2"
+  [[ -n "$p" && -n "$parent" ]] || return 1
+  [[ "$p" == "$parent" ]] && return 0
+  case "$p" in "${parent%/}/"*) return 0 ;; esac
+  return 1
+}
+
+# Working directory on line 1, then one `type|source|destination` per mount.
+container_facts() {
+  docker inspect \
+    -f '{{.Config.WorkingDir}}{{range .Mounts}}{{"\n"}}{{.Type}}|{{.Source}}|{{.Destination}}{{end}}' \
+    "$1" 2>/dev/null
+}
+
+# container_reads_checkout CID HOSTFILE PATH_GIVEN_TO_THE_VALIDATOR
+container_reads_checkout() {
+  local cid="$1" hostfile="$2" given="$3"
+  local facts mounts wd cpath="" line t s d canon_file canon_src
+  local best_dest="" best_src="" best_type=""
+  _IDENTITY_REASON=""
+
+  facts="$(container_facts "$cid")"
+  [[ -n "$facts" ]] || { _IDENTITY_REASON="the container could not be inspected"; return 1; }
+  wd="$(printf '%s' "$facts" | sed -n '1p')"
+  mounts="$(printf '%s' "$facts" | sed -n '2,$p')"
+
+  canon_file="$(path_canon "$hostfile")" || canon_file="$hostfile"
+
+  case "$given" in
+    /*) cpath="$given" ;;
+    *)  cpath="${wd:-/}"; cpath="${cpath%/}/$given" ;;
+  esac
+
+  # 1. the mount with the deepest destination that serves that path.
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    t="${line%%|*}"; s="${line#*|}"; d="${s#*|}"; s="${s%%|*}"
+    path_within "$cpath" "$d" || continue
+    if [[ ${#d} -gt ${#best_dest} ]]; then best_dest="$d"; best_src="$s"; best_type="$t"; fi
+  done <<EOF
+$mounts
+EOF
+
+  if [[ -n "$best_dest" ]]; then
+    if [[ "$best_type" != "bind" ]]; then
+      _IDENTITY_REASON="$cpath is served by a $best_type mount at $best_dest, not by this checkout"
+      return 1
+    fi
+    canon_src="$(path_canon "$best_src")" || canon_src="$best_src"
+    if path_within "$canon_file" "$canon_src"; then
+      _IDENTITY_REASON="$best_src -> $best_dest serves $cpath"
+      return 0
+    fi
+    _IDENTITY_REASON="$cpath comes from $best_src, which does not hold $hostfile"
+    return 1
+  fi
+
+  # 2. no mount serves the derived path: walk the mounts the other way.
+  local m_type m_src m_dest cand shadowed line2 d2
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    m_type="${line%%|*}"; m_src="${line#*|}"; m_dest="${m_src#*|}"; m_src="${m_src%%|*}"
+    [[ "$m_type" == "bind" ]] || continue
+    canon_src="$(path_canon "$m_src")" || canon_src="$m_src"
+    path_within "$canon_file" "$canon_src" || continue
+    if [[ "$canon_file" == "$canon_src" ]]; then
+      cand="$m_dest"
+    else
+      cand="${m_dest%/}/${canon_file#"${canon_src%/}/"}"
+    fi
+    shadowed=0
+    while IFS= read -r line2; do
+      [[ -z "$line2" ]] && continue
+      d2="${line2#*|}"; d2="${d2#*|}"
+      [[ "$d2" == "$m_dest" ]] && continue
+      if path_within "$cand" "$d2" && [[ ${#d2} -gt ${#m_dest} ]]; then shadowed=1; fi
+    done <<EOF2
+$mounts
+EOF2
+    (( shadowed )) && continue
+    _IDENTITY_REASON="$m_src -> $m_dest holds $hostfile as $cand"
+    return 0
+  done <<EOF
+$mounts
+EOF
+
+  _IDENTITY_REASON="no bind mount in this container holds $hostfile"
+  return 1
+}
+
+# identity_ok SERVICE CID — may this container be used for the current edit?
+#
+# Two escapes, both required to survive (FR-015, FR-019):
+#   VALIDATE_WORKTREE=run   a consumer sharing one stack across checkouts
+#   a ROUTING TABLE override of compose_project — the consumer has taken over
+#     which stack is addressed, so the runner does not second-guess it
+identity_ok() {
+  local svc="$1" cid="$2" hostfile=""
+  [[ "$VALIDATE_WORKTREE" == "run" ]] && { log "identity check waived (VALIDATE_WORKTREE=run)"; return 0; }
+  resolver_is_overridden && { log "identity check waived (ROUTING TABLE resolver override)"; return 0; }
+  (( $(remaining_budget) <= 0 )) && return 0
+  hostfile="${PROJECT_ROOT%/}/$REL"
+  [[ -e "$hostfile" ]] || return 0
+  if container_reads_checkout "$cid" "$hostfile" "${F:-$REL}"; then
+    log "container $cid reads this checkout: $_IDENTITY_REASON"
+    return 0
+  fi
+  log "container $cid rejected for '$svc': $_IDENTITY_REASON"
+  return 1
+}
+
+# The first candidate that reads this checkout. Empty when none does.
+first_acceptable() {
+  local svc="$1" cands="$2" c
+  for c in $cands; do
+    identity_ok "$svc" "$c" && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
+
 # ── The cause of a failed execution (plan D3) ────────────────────────────────
 #
 # Four named outcomes, and the fourth is the exhaustive bucket the spec demands
@@ -326,6 +700,9 @@ cands_contain() {
 #
 #   daemon         the daemon or the client could not be reached at all
 #   nocontainer    no running container for this service
+#   foreign        containers are running, and none of them reads THIS checkout
+#                  (plan D6 — the refusal that keeps a shared stack from
+#                  validating a file the agent did not write)
 #   unclassified   the container is running and the call did not reach inside it
 #   routing        the ROUTING TABLE called a verb before `svc`
 #
@@ -546,9 +923,15 @@ exec_in() {
     fi
 
     # The container was replaced, possibly among several on a scaled service.
-    # Take the first candidate and retry exactly once. Verifying the candidate
-    # against this checkout is plan D6, Phase D, and is NOT done here.
-    cid="${cands%%$'\n'*}"
+    # Take the first candidate that reads THIS checkout (plan D6) and retry
+    # exactly once.
+    cid="$(first_acceptable "$svc" "$cands")"
+    if [[ -z "$cid" ]]; then
+      log "the replacement container(s) for '$svc' do not read this checkout"
+      rm -f "$cache" 2>/dev/null || true
+      cause_set foreign
+      return 125
+    fi
     printf '%s' "$cid" >"$cache" 2>/dev/null || true
     rm -f "$(shell_cache "$svc")" 2>/dev/null || true
     log "container for '$svc' was replaced — retrying once on $cid"
@@ -568,8 +951,14 @@ exec_in() {
     cause_set daemon
     return 125
   fi
-  cid="${cands%%$'\n'*}"
-  [[ -z "$cid" ]] && { log "no running container for '$svc'"; cause_set nocontainer; return 125; }
+  [[ -z "${cands//[$'\t\n\r ']/}" ]] && { log "no running container for '$svc'"; cause_set nocontainer; return 125; }
+  # plan D6: only a container that reads THIS checkout is cached and used.
+  cid="$(first_acceptable "$svc" "$cands")"
+  if [[ -z "$cid" ]]; then
+    log "no candidate container for '$svc' reads this checkout"
+    cause_set foreign
+    return 125
+  fi
   printf '%s' "$cid" >"$cache" 2>/dev/null || true
   probe_shell "$svc" "$cid"
 
@@ -758,6 +1147,16 @@ asks the same Docker. This is reported once for the whole session." || true
         "[validate] service \`$_SVC\` has no running container, so $REL was not validated.
 Start the stack (\`make up\`) to re-enable on-edit validation." || true
       ;;
+    foreign)
+      # plan D6. Its own key: a checkout mismatch is neither a dead daemon nor a
+      # stopped service, and telling the agent to run `make up` would be wrong.
+      warn_once "foreign-$_SVC" \
+        "[validate] the running \`$_SVC\` container does not read this checkout's copy of
+$REL, so the file was NOT validated. The path it would read is served by another
+directory or by a named volume, so a pass or a fail there would describe a file
+you did not write. Start this checkout's own stack, or set VALIDATE_WORKTREE=run
+if one stack is shared on purpose." || true
+      ;;
     routing)
       warn_once "routing-nosvc-$tool" \
         "[validate] the ROUTING TABLE branch matching $REL runs \`$tool\` before naming a
@@ -924,21 +1323,27 @@ in_linked_worktree() {
   [[ "$gd" != "$gcd" ]]
 }
 
-# Should validation run inside this linked worktree?
+# Should validation run inside this linked worktree? (FR-015, FR-016)
 #
-# The container lookup is already worktree-aware: the compose project name is
-# derived from the worktree's own directory, so a stack duplicated from the
-# worktree resolves to ITS containers, and no stack at all resolves to nothing
-# (125 -> warn once -> silence). Neither case can produce a false pass.
+# The old rule skipped exactly one shape — COMPOSE_PROJECT_NAME exported — on
+# the grounds that the name otherwise came from the worktree's OWN directory, so
+# a worktree could only ever resolve its own stack. D5 removes that ground: the
+# name now comes from the Compose file the worktree shares with its main
+# checkout, so the dangerous share is a declared `name:` with no variable
+# exported, and the old rule answers "validate" there — against the main
+# checkout's bind mount, on a file the agent did not write.
 #
-# The one case that can is COMPOSE_PROJECT_NAME exported in the environment:
-# it pins every worktree to the SAME stack as the main checkout, whose bind
-# mount holds a stale copy of the edited file. `auto` skips exactly that.
+# So the decision is no longer taken here from the environment. `auto` defers it
+# to the checkout-identity test at resolution time (plan D6): in a linked
+# worktree, validate when the resolved container reads THIS worktree, and warn
+# otherwise. The two explicit answers are unchanged and still win outright —
+# `skip` never validates, `run` validates and waives the identity test, which is
+# the opt-out FR-015 requires for a deliberately shared stack.
 worktree_decision() {
   case "$VALIDATE_WORKTREE" in
     run)  printf 'run' ;;
     skip) printf 'skip' ;;
-    *)    [[ -n "${COMPOSE_PROJECT_NAME:-}" ]] && printf 'skip' || printf 'run' ;;
+    *)    printf 'verify' ;;
   esac
 }
 
@@ -1039,10 +1444,23 @@ cli_mode() {
     --doctor)
       printf 'project   : %s\n' "$PROJECT_ROOT"
       printf 'compose   : %s\n' "$(compose_project)"
+      # FR-018: the resolution is printed, never inferred.
+      if resolver_is_overridden; then
+        printf 'name from : a ROUTING TABLE override of compose_project (it also waives the\n'
+        printf '            checkout-identity test)\n'
+      else
+        printf 'name from : %s\n' "$(compose_source)"
+      fi
+      if [[ -n "$(compose_files)" ]]; then
+        printf 'compose files:\n'
+        printf '%s\n' "$(compose_files)" | sed 's/^/  /'
+      fi
+      printf 'not visible from a hook: a file list (-f) or a project name (-p) given on the\n'
+      printf '            command line when the stack was started.\n'
       if in_linked_worktree; then
         printf 'worktree  : linked — %s (VALIDATE_WORKTREE=%s)\n' "$(worktree_decision)" "$VALIDATE_WORKTREE"
-        [[ "$(worktree_decision)" == "skip" ]] && \
-          printf '            COMPOSE_PROJECT_NAME=%s pins this worktree to the main stack.\n' "${COMPOSE_PROJECT_NAME:-}"
+        [[ "$(worktree_decision)" == "verify" ]] && \
+          printf '            each container is checked at resolution time for reading THIS worktree.\n'
       else
         printf 'worktree  : main checkout\n'
       fi
@@ -1089,7 +1507,7 @@ fi
 state_init
 
 if in_linked_worktree && [[ "$(worktree_decision)" == "skip" ]]; then
-  silent "linked worktree pinned to the main stack by COMPOSE_PROJECT_NAME (VALIDATE_WORKTREE=$VALIDATE_WORKTREE)"
+  silent "linked worktree, VALIDATE_WORKTREE=skip"
 fi
 
 if [[ "$FILE_PATH" == /* ]]; then

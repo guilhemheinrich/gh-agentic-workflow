@@ -414,3 +414,152 @@ opinion about which failures are infrastructure.
 - **A daemon that is down rather than absent.** `DOCKER_HOST` points at a socket
   that does not exist, as in Phase A. Stopping the real daemon would disturb
   other sessions on this machine.
+
+---
+
+# Phase D — twenty-four cases on two images, before and after the resolution fix
+
+**Date**: 2026-09-17
+**Runner before**: `git show HEAD:…/validate-on-edit.sh` at `21be835`, driven
+through `VOE_RUNNER=` so one suite drove both sides
+**Runner after**: the working tree, tasks T019-T022 applied
+**Images**: `alpine:3.20` (busybox ash) and `debian:12-slim` (dash)
+**Commands**:
+
+```
+VOE_RUNNER=<scratch>/head-runner.sh \
+  bash skills/static-validation-hooks/tests/run.sh --all --image alpine:3.20
+VOE_RUNNER=<scratch>/head-runner.sh \
+  bash skills/static-validation-hooks/tests/run.sh --all --image debian:12-slim
+bash skills/static-validation-hooks/tests/run.sh --all
+```
+
+**Platform**: Docker 29.4.0, Compose v5.1.2, via OrbStack, macOS 25.5.0, no
+project stack. 48 s for the forty-eight runs of the after matrix (SC-007 allows
+60 s); see "Elapsed is a property of the machine" below.
+
+| Case | Before (both images) | After (both) | Expected | |
+|---|---|---|---|---|
+| the sixteen cases of Phases A-C | as Phase C | unchanged | unchanged | 16 guards held |
+| `compose-file-declares-the-name` (new) | **warning** | silence | silence | red → green |
+| `dotenv-declares-the-name` (new) | **warning** | silence | silence | red → green |
+| `declared-name-with-uppercase-and-dots` (new) | **warning** | silence | silence | red → green |
+| `nested-name-serialised-first` (new) | **silent without validating** | silence + exec | silence | red → green |
+| `volume-shadows-the-checkout` (new) | **violation** | warning | warning | red → green |
+| `worktree-shares-the-main-stack` (new) | **warning, wrong cause** | warning, mismatch named | warning | red → green |
+| `worktree-sharing-opt-out` (new) | **warning** | silence | silence | red → green |
+| `resolver-override-keeps-validating` (new) | silence | silence | silence | guard held |
+
+17 passed / 7 failed per image before, with the same split on both images.
+48 passed / 0 failed after. The agent-visible text is byte-identical on the two
+images.
+
+## Agent-visible text for the new refusal
+
+```
+[validate] the running `voe` container does not read this checkout's copy of
+src/a.txt, so the file was NOT validated. The path it would read is served by another
+directory or by a named volume, so a pass or a fail there would describe a file
+you did not write. Start this checkout's own stack, or set VALIDATE_WORKTREE=run
+if one stack is shared on purpose.
+```
+
+Its warning key is `foreign-<service>`, distinct from `nocontainer-<service>`
+and from the session-wide `daemon`, so FR-009's rule that no key may suppress
+another still holds with a fourth cause in the table.
+
+## What the four naming cases actually pin
+
+The three source cases (`compose.yml`, the project `.env`, uppercase and dots)
+run with **no** `COMPOSE_PROJECT_NAME` at all: `run.sh` drops it from the
+environment with `env -u` when a case sets `VOE_NO_CPN=1`, so a developer's own
+exported value cannot make them pass for free. Each labels its container with a
+name the OLD rule cannot produce — the declared name, the `.env` value, the
+normalised form — so silence is only reachable by reading the source under test.
+
+`nested-name-serialised-first` is the one that guards the extractor rather than
+the sources. Measured 2026-09-17, Compose v5.1.2 serialises top-level keys in
+alphabetical order, so a project whose service uses a `configs:` entry renders
+
+```
+{ "configs": { "aaa_conf": { "name": "<the config>" } }, "name": "<the project>", … }
+```
+
+and `extract_json_string` (`validate-on-edit.sh:58-80`), which returns the FIRST
+`"name"`, would resolve the config. The case asserts both directions: a
+container carrying only the CONFIG's name must NOT be found, and one carrying
+the top-level name must validate.
+
+### The hole that case had, and how it was found
+
+Its first version asserted only `warning` then `silence`, and it **passed
+against the unfixed runner**. Step 1 burns the per-service "no running
+container" warning, so a runner that resolves neither name is silent on step 2
+through `warn_once` suppression — silence that means "said nothing", not
+"validated something". `worktree-sharing-opt-out` had the same shape of hole
+from a different cause (a path spelled through `/var` against a git root spelled
+through `/private/var`, which the runner refuses as "outside the project root").
+
+Both now count `docker exec` through the existing shim and require at least one.
+Neither hole was predicted; both were found by running the case against the old
+runner and reading the result rather than the expectation. Every case whose
+expected outcome is `silence` should be read with that suspicion: silence is the
+one outcome a runner can produce by doing nothing.
+
+## The volume-shadowing case, measured
+
+Fixture: the checkout bound at `/app`, a named volume over `/app/src`,
+`WorkingDir=/app`, the host file saying `FRESH` and the volume's copy `STALE`,
+and a validator that fails on anything but `FRESH`.
+
+```
+mount table   bind   | <checkout>                              | /app
+              volume | /var/lib/docker/volumes/…-stale/_data   | /app/src
+docker exec … cat /app/src/a.txt                               -> STALE
+before        VIOLATION "…/app/src/a.txt:1: stale copy"        <- a finding about a file the agent did not write
+after         warning naming the checkout mismatch
+```
+
+The case verifies the shadowing with its own `docker exec` before asserting
+anything, so it cannot pass against a fixture that does not carry the hazard.
+
+## Where research.md was wrong, and it matters
+
+§3 says "Docker reports mount sources already resolved". It does not, on this
+platform: measured 2026-09-17, a bind created from
+`/var/folders/…/T/voe-test-…` is reported by `docker inspect` with that exact
+spelling, while the physical path is `/private/var/folders/…`. Every existing
+fixture lives under `$TMPDIR`, so a runner comparing the two sides as strings
+would have refused all sixteen. Both sides go through `cd … && pwd -P`.
+
+## Elapsed is a property of the machine, not only of the suite
+
+The alpine "before" matrix took **631 s** and the debian one **19 s**, the same
+twenty-four cases against the same runner, minutes apart. The difference is
+contention: seven unrelated Docker workloads from other sessions were running on
+this host, and a single `docker run -d` was measured at 2 m 35 s. SC-007's 60 s
+is met on an idle machine (48 s for the full after matrix) and is not a property
+the suite can hold on a loaded one.
+
+## What this phase did NOT measure
+
+- **A real `docker compose up`.** Every fixture is still a plain `docker run`
+  carrying the two labels. What Compose is asked for here is the NAME
+  (`docker compose config`, `docker compose ls`), against real Compose files;
+  the containers that name resolves to are the suite's own.
+- **The per-edit cost of the name cache.** The cached branch stats the Compose
+  files and `.env` and runs one `cksum`; it was never timed, only shown to
+  re-resolve when a Compose file's mtime changes.
+- **`COMPOSE_FILE` and `COMPOSE_PROFILES`.** They are in the cache fingerprint,
+  so changing one re-resolves; no case sets either.
+- **A Compose file outside the project root.** `compose_files_present` looks in
+  the project root only, and `docker compose ls` fills the rest in for a project
+  that is running. A project that is NOT running and whose files live elsewhere
+  is fingerprinted on the root's candidates alone.
+- **Which candidate is chosen** on a scaled service where several read this
+  checkout. The plan's "first acceptable" is implemented; no case distinguishes
+  two acceptable siblings from each other.
+- **A container with no bind mount at all** — code baked into the image. It is
+  now refused where it used to validate against the image's copy. That is a
+  deliberate consequence of FR-013 and it has no case: the suite asserts the
+  refusals the spec names, not this one.

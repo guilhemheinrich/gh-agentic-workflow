@@ -137,6 +137,12 @@ The validator reads the volume's stale copy, and a test asking only whether some
 
 This is the measurement behind D6 starting from the container path rather than the host path. The first draft of that decision was source-only, and this probe is what refuted it.
 
+## 3e. Both sides of the path comparison need resolving — measured during implementation
+
+The plan's Phase 0 claimed Docker reports mount sources already resolved, so only the runner's own root needed canonicalising. False on macOS. A bind created under the platform temporary directory is reported by `docker inspect` with that spelling, while the physical path carries a private prefix. The two strings differ, and an identity test resolving only one side refuses every fixture on this platform.
+
+Both sides now go through a physical resolution. Recorded here because the claim was written as settled and was not measured when written.
+
 ## 4. Compose project-name precedence
 
 Compose resolves the project name from four sources, highest first:

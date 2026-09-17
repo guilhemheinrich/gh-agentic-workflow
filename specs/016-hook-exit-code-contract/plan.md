@@ -37,7 +37,7 @@ Three questions the adversarial rounds left open were answered by measurement ra
 
 1. **Which Compose file wins, and which name source.** Do not reimplement Compose's precedence. Ask Compose: `docker compose config --format json` returned `broker-pa` in 103 ms for a checkout whose directory is `modelo-broker-pa`, and `docker compose ls --format json` names the exact `ConfigFiles` it read. This also covers the override file and an explicit file list, which a hand-written rule would have to track forever.
 2. **What proves a container reads this checkout's file.** Its mounts, not the directory Compose was started from. The live broker container carries `.../modelo-broker-pa/apps/backend -> /app` while its `working_dir` label is the repository root — the two differ, which is exactly why the label fails as an identity test.
-3. **How to compare two spellings of one path.** Physically, on both sides. Docker reports mount sources already resolved; the runner resolves its own root the same way.
+3. **How to compare two spellings of one path.** Physically, on both sides — and both sides need it. The first draft claimed Docker reports mount sources already resolved; implementation measured that false on macOS, where a bind created under the temporary directory is reported with that spelling while the physical path carries a private prefix.
 
 ## Phase 1 — Design
 
@@ -197,6 +197,7 @@ Adversarial round 3 asked what this plan makes worse for some consumer. The hone
 | Risk or regression | Why it is acceptable, or what covers it |
 |---|---|
 | **A container with a validator and no POSIX shell stops working entirely** | The strongest regression in the plan. Covered by the D1 fallback: the runner probes for a shell once per service and invokes directly when there is none, with degraded classification and a warning that says so |
+| **A container with no bind mount at all is now refused** | Code baked into the image used to validate against the image's stale copy. That is a behaviour change for someone, it follows from FR-013, and it is not among the six shapes SC-006a counts |
 | **A named or synchronised volume setup can be refused** | D6 refuses a destination served by a volume on purpose: it is not this checkout. A consumer who wants it anyway keeps the worktree opt-out |
 | **Shell builtins and shebangless files become runnable through the wrapper** | Permissive rather than restrictive, and routing tables call external binaries |
 | **A persisted name cache could serve an obsolete value** | Fingerprinted on the Compose files, their modification times, and the Compose environment. A mismatch re-resolves |
