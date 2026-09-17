@@ -4,8 +4,8 @@
 # Container prerequisite: the `api` service runs with the module bind-mounted at
 # its WORKDIR, and `golangci-lint` is installed inside it.
 #
-# Four Go-specific traps this table encodes — measured 2026-09-17 in
-# modelo-broker-pa (golangci-lint 2.12.2, go 1.26.3). Full evidence and the
+# Four Go-specific traps this table encodes — measured 2026-09-17 on a Go
+# monorepo (golangci-lint 2.12.2, go 1.26.3). Full evidence and the
 # canary that proves the branch bites: references/proving-the-hook-bites.md.
 #
 #   1. golangci-lint has no single-file mode. A lone file typechecks as a
@@ -15,16 +15,16 @@
 #      never fail; it is only usable as `fix gofmt -w`.
 #   3. A build-constrained file is invisible to an untagged run: the package
 #      reports "0 issues." and exits 0 without ever compiling it. Measured on
-#      the broker's tests/integration — untagged 0 issues, `--build-tags
+#      a 120-file tagged directory — untagged 0 issues, `--build-tags
 #      integration` 23 (errcheck 8, staticcheck 12, unused 3). The tagged run
 #      costs 6.9s, over any per-edit budget, so this table SKIPS those files
 #      and says so out loud.
 #   4. A VENDORED module without `GOFLAGS=-mod=mod` fails before analysis:
 #      "inconsistent vendoring in /app", listing every module, naming no line.
-#      The agent reads a violation on the file it just wrote. Measured in
-#      modelo-broker-pa on 2026-09-16 — GRV-routing-table-ships-factory-e300;
-#      the same command with the flag returned 5 real findings. Set GOFLAGS in
-#      the compose service env, or inline it as below when you cannot.
+#      The agent reads a violation on the file it just wrote. Measured on a
+#      vendored Go monorepo, 2026-09-16; the same command with the flag
+#      returned 5 real findings. Set GOFLAGS in the compose service env, or
+#      inline it as below when you cannot.
 #
 # Deliberately absent: `go vet ./...`, `go build ./...`, `go test`. All are
 # project-wide or behavioural; they stay in `make lint` and CI.

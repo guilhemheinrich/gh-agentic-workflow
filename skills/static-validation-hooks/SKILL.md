@@ -110,8 +110,9 @@ violation the repo's own config refuses:
 ```
 
 Exit 2 means the branch bites; exit 0 on a file that violates the config means
-it does not, whatever `--doctor` says. A green check that checked nothing is
-the failure mode this hook is most prone to, and the only one no output
+it does not, whatever `--doctor` says. Read the message too: it must name the
+canary's own line, or the rejection came from something other than the file's
+content. A green check that checked nothing is the one failure no output
 reveals. The canary, the per-language coverage probes, and the measured
 silent-pass traps for Go, Python and TypeScript are in
 [references/proving-the-hook-bites.md](references/proving-the-hook-bites.md).
@@ -152,6 +153,13 @@ route() {
 
 `$REL` is the repo-relative path; `$F` is what the container sees after
 `strip`. `${F}` without `strip` equals `$REL`.
+
+`$F` is a claim about the container's filesystem, so verify it once per branch
+rather than reasoning about the mount: `docker exec <svc> test -f "<$F>" && echo
+seen`. A wrong `strip`, a service mounting only part of the repo, or a
+symlinked checkout all end the same way — a path nobody reads. The three cases
+and their measurements are in
+[references/proving-the-hook-bites.md](references/proving-the-hook-bites.md) §7.
 
 **Branch ordering is load-bearing:**
 
@@ -196,7 +204,7 @@ reported **at most once per session** and then falls silent:
 | ----------------------------- | ---------------------------------------------- | ------------ |
 | Lint passes                   | nothing                                        | silent       |
 | Violation                     | linter output (Claude: stderr, exit 2; Cursor: `additional_context`) | see §6 |
-| No running container          | "start the stack (`make up`)", once            | silent       |
+| No running container          | "start the stack", once                        | silent       |
 | Tool missing in container     | "`ruff` is not installed in `api`", once       | silent       |
 | Budget exceeded               | "too slow for a hook, move it to CI", once     | silent       |
 | No branch matches the file    | "no validation branch matches `.rs`", once     | silent       |
@@ -214,28 +222,43 @@ does.
 
 **Check that name before anything else.** The runner derives it from the
 directory basename unless `COMPOSE_PROJECT_NAME` is exported. Compose resolves
-four sources in order: the exported variable, `COMPOSE_PROJECT_NAME` in the
-project's `.env`, the top-level `name:` of the compose file, then the basename.
-A repo using either middle source gets a runner pointed at a project no
-container carries: every `check` returns 125, the agent reads one "no running
-container" warning, and the hook then validates nothing in silence. Measured in
-`modelo-broker-pa` on 2026-09-09, whose `compose.yml:4` says `name: broker-pa`
-while the checkout is `modelo-broker-pa` — `GRV-validate-edit-overrides-runner-a4eb`.
-Until the runner reads all four sources, redefine `compose_project()` **inside**
-the `BEGIN/END ROUTING TABLE` markers, so the §8 upgrade path preserves it, and
-confirm with `--doctor` plus one canary (§2).
+five sources, in this order: `-p` / `--project-name` on the command line, the
+exported `COMPOSE_PROJECT_NAME`, the same variable in the project's `.env`, the
+top-level `name:` of the compose file, then the basename. The runner reads the
+second and the fifth. A repo using any of the other three gets a runner pointed
+at a project no container carries: the lookup finds nothing, the agent reads one
+"no running container" warning, and the hook validates nothing in silence for
+the rest of the session. Measured on 2026-09-09 on a monorepo whose compose file
+declares a `name:` that differs from its checkout directory.
 
-A resolved name is only trustworthy when its containers were started from this
-checkout. Compose labels each one with
-`com.docker.compose.project.working_dir`; a name whose containers run from
-another directory is another tree's stack, whose bind mount holds a stale copy
-of the edited file.
+`-p` is the one source no file on disk records, so a stack started that way
+cannot be resolved by inspection: either export `COMPOSE_PROJECT_NAME` for the
+hook, or accept that it will report "no running container".
 
-That ownership check is the precondition for reading the other three sources,
-not an extra precaution. Today a linked worktree is protected by accident: the
-basename resolves a project no container carries, so the hook warns instead of
+Until the runner reads the file-recorded sources, redefine `compose_project()`
+**inside** the `BEGIN/END ROUTING TABLE` markers, so the §8 upgrade path
+preserves it, and confirm with `--doctor` plus one canary (§2).
+
+A resolved name is only trustworthy when the container it names serves the
+bytes just edited. That question is about the **mount**, and only the mount
+answers it: take the container path the linter will receive, find the deepest
+mount destination covering it, map it back to its source, and compare the two
+sides physically (`cd … && pwd -P` on each). A destination served by a named or
+anonymous volume carries no host source, so it cannot be verified and must be
+refused rather than assumed.
+
+Do not use `com.docker.compose.project.working_dir` as that test, tempting as
+it is. The label records the project directory as compose spelled it, not the
+source of the mount the file is read through: started with `-f real/compose.yml`
+from the parent directory, the label reads `…/real` (measured 2026-09-17). It
+also goes stale on a rename, and it can accept a container whose mount does not
+contain the edited path while refusing one whose mount does.
+
+Ownership is the precondition for reading the other three sources, not an extra
+precaution. Today a linked worktree is protected by accident: the basename
+resolves a project no container carries, so the hook warns instead of
 validating the wrong bytes. A runner that reads `.env` and the compose `name:`
-without checking ownership would resolve a worktree onto its main checkout's
+without deciding ownership would resolve a worktree onto its main checkout's
 stack and validate the file the agent did not write. Whoever adds the one adds
 the other in the same change.
 
@@ -344,5 +367,5 @@ response shapes, and the kill-switch. The Cursor path was proven end-to-end on
 returned the linter message to the agent through `additional_context`, and the
 agent quoted it back. Measured hot-path overhead is ~110ms per edit with a stub
 container; add the real `docker exec` round-trip (~150–400ms per command) on a
-warm container. The three routing tables are starting points and **must** be
+warm container. The four routing tables are starting points and **must** be
 adapted to the consumer repo's workspace layout — they are not drop-in.
