@@ -1320,6 +1320,24 @@ assets:
       - hub
     description: Modelo Hub documentation map
     category: domain-specific
+  - path: skills/integration-branch-discipline/
+    type: skill
+    tags:
+      - ci-cd
+      - devops
+      - git
+      - hooks
+      - process
+    description: >-
+      Lock a repository onto the branch its CI actually deploys - whatever it is called on that repository: develop,
+      staging, preprod, recette - so no worktree is cut from the default branch and no pull request targets it by
+      accident. Branch names are variables throughout; the roles are "integration branch" and "protected branch".
+      Detects whether a repository needs the discipline from its
+      CI files, writes a committed .branch-policy, installs a pre-push hook refusing protected targets and a
+      reference-transaction hook noticing a new deploy branch arriving by fetch, and documents the forge-side rules
+      that are the only real lock. Ships branch-policy.sh (detect, init, doctor, worktree, pr-base, drift), the hook
+      templates, an AGENTS.md block, and a per-forge server-side reference.
+    category: workflows-and-processes
   - path: skills/javascript-resizable-panel/
     type: skill
     tags:
