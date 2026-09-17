@@ -66,6 +66,27 @@ build-constrained, `warning: No Python files found under the given path(s)`
 under `force-exclude`, and `undefined` on a generated router file the flat
 config lists in `ignores`.
 
+**The diagnostic under-reports, so count its list against your table.** The
+runner collects the services to check by matching `svc` at the start of a line
+or after a semicolon. A compact branch puts the verb after the case pattern's
+closing parenthesis, where neither anchor reaches it:
+
+```bash
+*.py) svc api; check ruff check "$F" ;;     # never listed
+*.ts)
+  svc web                                    # listed
+  check eslint "$F"
+  ;;
+```
+
+Measured against the shipped extractor, 2026-09-17: the first form yields
+`web` alone, the second `api web`. Nothing reported per service — no running
+container, tool missing, degraded classification — was ever reported for the
+missing one. The list is never empty, only short, which is why it reads as
+complete. An instrument that under-reports while looking whole is the exact
+failure this page teaches you to detect, sitting inside the tool that detects
+it.
+
 ## 3. Go
 
 **Canary** (any package the branch routes):
@@ -182,11 +203,15 @@ container and a throwaway alpine container:
 | Container removed, or bogus id   | 1    | `No such container: …` |
 | Daemon unreachable               | 1    | `failed to connect to the docker API` |
 
-`125` never appears in that table: the docker CLI reserves it for its own usage
-errors. `docker exec --bogus-flag <container> echo hi` does return 125 (measured
-the same day), but a runner builds its own argv, so no edit can reach that path
-and no test should assert it. An empty container id, the nearest reachable
-shape, exits 1 with `invalid container name or ID`. The three infrastructure failures that matter all
+`125` never appears in that table, and the reason matters for what you may
+test. It is the CLI's own usage error, and it belongs to argument parsing
+rather than to any one subcommand: `run`, `exec`, `ps` and `inspect` all exit
+125 on `--nonsense-flag` (measured the same day, all four). Three of those four
+are issued on an ordinary edit. What keeps 125 out of reach is that a runner
+composes its own argument list and never passes an unknown flag — not which
+subcommand it calls. So "no edit can reach 125" is testable and "`docker exec`
+never returns 125" is false. The nearest reachable shape is an empty container
+id, which exits 1 with `invalid container name or ID`. The three infrastructure failures that matter all
 return `1`, the same code a linter returns when it rejects a file.
 A runner that keys recovery on `125` never recovers, and the daemon's error
 text reaches the agent as a violation of the file it just wrote — observed in a

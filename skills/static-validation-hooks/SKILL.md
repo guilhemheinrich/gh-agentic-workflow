@@ -99,7 +99,8 @@ Smoke-test, in this order:
 ```
 
 `--doctor` reports docker reachability and whether each service named in the
-routing table has a running container. `--dry-run` prints the routing decision
+routing table has a running container — count that list against your own
+branches before trusting it, for the reason in the reference doc §2. `--dry-run` prints the routing decision
 without executing. `--check` runs for real and prints the elapsed time.
 
 Then prove each branch actually rejects something — a canary file carrying a

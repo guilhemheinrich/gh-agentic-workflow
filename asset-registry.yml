@@ -900,6 +900,27 @@ assets:
       modified UI surface MUST be observed in a real browser before the implementation is considered complete, and every
       newly introduced interactive element MUST be exercised and its observable outcome asserted against the spec.
     category: quality-assurance
+  - path: skills/adversarial-review-convergence/
+    type: skill
+    tags:
+      - llm
+      - meta
+      - process
+      - quality
+      - verification
+    description: >-
+      Drive a multi-round adversarial review to a decision instead of to an ever-larger document. An adversarial panel
+      finds real defects and never terminates on its own: every revision adds detail, detail adds attack surface, and a
+      reviewer charged to attack will always find something. This skill is the method that bounds it — charter the panel
+      against the objective rather than the artifact, hand it the settled arbitrations and forbid relitigating them,
+      declare a clean verdict a legitimate outcome, collapse findings into root causes before revising, read the trend
+      rather than the count, and terminate on a checklist rather than on a feeling. Ships the charter template with its
+      verdict vocabulary, the round ledger that makes the trend visible, and the dispositions contract that forces one
+      verdict per finding. Transport-agnostic: run the lanes through cursor-adversarial-review or
+      openrouter-adversarial-review. Use when a spec or plan is going through more than one round of external review,
+      when round N returns more findings than round N-1, when the panel and the author are arguing instead of
+      converging, or when deciding whether a review is finished.
+    category: quality-assurance
   - path: skills/app-version-surface/
     type: skill
     tags:
