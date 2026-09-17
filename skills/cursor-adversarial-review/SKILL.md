@@ -563,6 +563,7 @@ lineages, and no shared failure mode between them.
 
 ## 13. See also
 
+- [adversarial-review-convergence](../adversarial-review-convergence/SKILL.md) — what to put in the charter and when to stop, once one review becomes three. This skill dispatches a round; that one bounds the sequence.
 - [openrouter-adversarial-review](../openrouter-adversarial-review/SKILL.md) — the same discipline through a pay-per-token gateway, with a benchmark-ranked catalogue and a price estimate. §11 compares them.
 - [static-validation-hooks](../static-validation-hooks/SKILL.md) — deterministic checks belong in a hook, not in an LLM call. Run those first; a model is for judgement, not for lint.
 - [grievances](../grievances/SKILL.md) — where a confirmed finding goes when it is out of scope for the current spec.
