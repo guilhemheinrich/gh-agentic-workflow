@@ -980,7 +980,7 @@ cause_clear() { [[ -n "$_CAUSE_FILE" ]] && rm -f "$_CAUSE_FILE" 2>/dev/null; ret
 
 # ── Execution provenance ─────────────────────────────────────────────────────
 #
-# THE EXIT CODE CARRIES NO INFORMATION. `docker exec` never returns 125, and the
+# THE EXIT CODE CARRIES NO INFORMATION. No edit can reach 125, and the
 # three infrastructure failures that do occur all return 1 — the same code a
 # linter returns when it found something. Measured on Docker 29.4.0 via
 # OrbStack, macOS 25.5.0, 2026-09-17; the full table is stated ONCE, in the
@@ -1172,7 +1172,18 @@ exec_reached_inside() {
 #   docker exec  container stopped                       1   Error response from daemon: container … is not running
 #   docker exec  container removed / never existed       1   Error response from daemon: No such container: …
 #   docker exec  daemon unreachable                      1   failed to connect to the docker API …
-#   docker run   --nonsense-flag                       125   a CLI usage error, on a command this runner never issues
+#   docker run   --nonsense-flag                       125   a CLI usage error
+#   docker exec  --bogus-flag <id>                     125   a CLI usage error
+#   docker ps    --nonsense-flag                       125   a CLI usage error
+#   docker exec  "" echo                                 1   invalid container name or ID: value is empty
+#
+# The last four rows were added 2026-09-17 after a peer review refuted an
+# earlier wording here. 125 is NOT restricted to `docker run`: every docker
+# subcommand returns it for a CLI usage error, including the three this runner
+# issues. What makes it unreachable is that the runner composes its own
+# argument list and never passes a flag the CLI does not know — so "no edit can
+# reach 125" is true where "exec never returns 125" is false, and only the
+# first is safe to test.
 #
 # What stood here before said "125 = no running container, 124 = budget
 # exceeded". Both halves were false and the first was the defect being repaired:

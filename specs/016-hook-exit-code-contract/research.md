@@ -16,8 +16,14 @@
 | Container id never existed | 1 | `Error response from daemon: No such container: <id>` |
 | Daemon unreachable | 1 | `failed to connect to the docker API at <socket> ...` |
 | `docker run --nonsense-flag` | 125 | CLI usage error |
+| `docker exec --bogus-flag <id>` | 125 | CLI usage error |
+| `docker ps --nonsense-flag` | 125 | CLI usage error |
+| `docker inspect --nonsense-flag <id>` | 125 | CLI usage error |
+| `docker exec "" echo` | 1 | `invalid container name or ID: value is empty` |
 
-**Conclusion.** `docker exec` never returns 125. Three distinct infrastructure failures return 1, which is also the exit code of a validator that found something. The current contract at `templates/validate-on-edit.sh:246` is false, and no remapping of exit codes can repair it.
+**Conclusion.** No situation the runner can reach returns 125. The reason is narrower than "`docker exec` never returns it", which this note first claimed and a peer review then refuted: **every** docker subcommand returns 125 for a CLI usage error — `run`, `exec`, `ps` and `inspect` alike, all four measured 2026-09-17. What makes the code unreachable is that the runner composes its own argument list and never passes a flag the CLI does not know. The distinction matters because a test asserting "exec never returns 125" would assert something false, while one asserting "no edit can reach 125" is true.
+
+Three distinct infrastructure failures return 1, which is also the exit code of a validator that found something. The contract at the runner's execution path was false, and no remapping of exit codes can repair it.
 
 The second session reproduced four of these rows independently on the same machine, from its own probes: bogus id → 1, created-but-not-running → 1, command exit 3 → 3, command absent → 127.
 
@@ -147,7 +153,11 @@ Both sides now go through a physical resolution. Recorded here because the claim
 
 ## 4. Compose project-name precedence
 
-Compose resolves the project name from four sources, highest first:
+Compose resolves the project name from **five** sources, highest first. The first is invisible to any hook, which is why the runner delegates rather than reimplements:
+
+0. `-p` on the `docker compose` command line when the stack was started. It overrides the file's `name:` and nothing on disk records it — measured 2026-09-17 by a peer review: a stack started with an explicit project flag carries that label while its Compose file declares another.
+
+The four a hook can see, highest first:
 
 1. `COMPOSE_PROJECT_NAME` exported in the environment
 2. `COMPOSE_PROJECT_NAME` in the project `.env`
