@@ -73,6 +73,19 @@
 # same failure shape as the defect this feature exists to remove, so the matrix
 # is part of the suite rather than a nicety.
 #
+# ── One case has a different shape: the mutation case ────────────────────────
+#
+# `mutation-provenance-becomes-infrastructure` asserts nothing about a hook run
+# of its own. It copies the runner, deletes ONE named line — the provenance test
+# in `exec_reached_inside` — and re-enters this script through $VOE_RUNNER to
+# replay two guard cases against the copy, requiring both to fail. It is the
+# only case that calls run.sh recursively, and the only one that writes
+# $CASE_DIR/observed itself instead of going through `expect_outcome`, because
+# its verdict is about the SUITE rather than about the runner's output.
+#
+# Its recursion is bounded by construction: it passes --case, never --all, and
+# sets VOE_MUTATION_DEPTH so a nested invocation of itself refuses.
+#
 # Requirements: Docker, and the images in $VOE_IMAGES. No project stack.
 # bash 3.2 compatible.
 
@@ -92,6 +105,21 @@ export VOE_REGISTRY
 VOE_VOLUMES="$VOE_ROOT/volumes.registry"
 : >"$VOE_VOLUMES"
 export VOE_VOLUMES
+
+# How many assertions this run actually evaluated. A case body runs in a
+# subshell, so the counter is a file: one byte per assertion, counted at the
+# end. It exists so the run can REPORT a measured number instead of a number
+# read off the source, where a helper call inside an untaken branch would be
+# counted and a case that returned early would not.
+#
+# A nested run (the mutation case) resets this to its own sandbox, so its
+# replays are counted there and never folded into the parent's total.
+VOE_ASSERTS="$VOE_ROOT/asserts.count"
+: >"$VOE_ASSERTS"
+export VOE_ASSERTS
+
+# voe_assert_tick — record that one assertion was evaluated.
+voe_assert_tick() { printf 'x' >>"$VOE_ASSERTS" 2>/dev/null || true; return 0; }
 
 . "$TESTS_DIR/fixtures/container.sh"
 . "$TESTS_DIR/fixtures/worktree.sh"
@@ -135,7 +163,8 @@ nested-name-serialised-first
 volume-shadows-the-checkout
 worktree-shares-the-main-stack
 worktree-sharing-opt-out
-resolver-override-keeps-validating"
+resolver-override-keeps-validating
+mutation-provenance-becomes-infrastructure"
 
 # ── Harness primitives available to every case ───────────────────────────────
 
@@ -254,6 +283,7 @@ classify_outcome() {
 # expect_outcome <expected> — assert the outcome of the last run_hook.
 expect_outcome() {
   local want="$1"
+  voe_assert_tick
   if [ "$RUN_OUTCOME" = "$want" ]; then
     CASE_VERDICT="PASS"
   else
@@ -281,6 +311,7 @@ expect_outcome() {
 # each case names the sentence it expects, and the suite just looks for it.
 expect_stderr() {
   local mode="$1" re="$2" label="${3:-$2}" hit=0
+  voe_assert_tick
   printf '%s' "$RUN_STDERR" | grep -Eq "$re" && hit=1
   if { [ "$mode" = "want" ] && [ "$hit" = "1" ]; } ||
      { [ "$mode" = "reject" ] && [ "$hit" = "0" ]; }; then
@@ -299,6 +330,7 @@ expect_stderr() {
 # runner's internals.
 expect_no_stray_temp_files() {
   local strays
+  voe_assert_tick
   strays="$(ls "$CASE_TMPDIR"/validate-out-* 2>/dev/null | wc -l | tr -d ' ')"
   [ "$strays" = "0" ] && return 0
   CASE_VERDICT="FAIL"
@@ -449,5 +481,7 @@ if [ -n "$ONLY" ] && [ $(( PASSED + FAILED )) -eq 0 ]; then
   exit 64
 fi
 
-printf '\n%s passed, %s failed, %ss elapsed\n' "$PASSED" "$FAILED" "$(( $(date +%s) - START ))" >&2
+printf '\n%s passed, %s failed, %s assertions, %ss elapsed\n' \
+  "$PASSED" "$FAILED" "$(wc -c <"$VOE_ASSERTS" | tr -d ' ')" \
+  "$(( $(date +%s) - START ))" >&2
 [ "$FAILED" -eq 0 ]

@@ -563,3 +563,91 @@ the suite can hold on a loaded one.
   now refused where it used to validate against the image's copy. That is a
   deliberate consequence of FR-013 and it has no case: the suite asserts the
   refusals the spec names, not this one.
+
+---
+
+# Phase E — twenty-five cases on two images, and the suite put to the question
+
+**Date**: 2026-09-17
+**Runner**: the working tree, tasks T024-T026 applied
+**Images**: `alpine:3.20` (busybox ash) and `debian:12-slim` (dash)
+**Command**: `bash skills/static-validation-hooks/tests/run.sh --all`
+**Platform**: Docker 29.4.0 via OrbStack, macOS 25.5.0, no project stack
+
+```
+50 passed, 0 failed, 106 assertions, 37s elapsed      (suite clock)
+                                     46.7s            (wall, `time`)
+```
+
+25 cases × 2 images. The twenty-four cases of Phases A-D are unchanged and held;
+the twenty-fifth is new.
+
+## `mutation-provenance-becomes-infrastructure` — the case that tests the suite
+
+Every other case asserts an outcome of the runner. None of them established that
+the suite would NOTICE if the classifier stopped working, and a suite whose
+guards cannot fail is a green nobody earned.
+
+```
+SITE      exec_reached_inside, the one line asking whether the nonce came back
+              case "$out" in *"$_NONCE"*) return 0 ;; esac
+OPERATOR  delete it; `return 1` remains, so every failed exec in a service with
+          a shell is an UNCONDITIONAL infrastructure verdict
+MATCHES   1 (asserted; 0 or several fails the case)
+REPLAY    validator-exit-1-with-findings              violation -> warning  CAUGHT
+          validator-output-looks-like-a-daemon-error  violation -> warning  CAUGHT
+```
+
+The site and the operator are written down in the case rather than derived, so a
+later change to the runner that MOVES that line fails the case loudly instead of
+silently mutating nothing. Both directions of that guard were probed on the same
+day: a copy with the line reworded reported `matched 0 line(s)` and failed; a
+copy with the line duplicated reported `matched 2 line(s)` and failed.
+
+The case asserts the transformation, not merely a failure. `expected violation,
+observed warning` is the harness's own verdict line; a Docker hiccup or a broken
+fixture would fail the nested run with a different message and would NOT satisfy
+the case. That is why no separate control run was added: the unmutated half of
+the pair is those same two cases, in this same matrix, a few rows above.
+
+It carries no copy of the decision table, per plan D8.
+
+## The assertion count is now measured, not read off the source
+
+`run.sh` counts every evaluated `expect_outcome` / `expect_stderr` /
+`expect_no_stray_temp_files` (and the mutation case's own checks) in a file, one
+byte each, and prints the total. A count read from the source would include
+helper calls inside branches that were never taken and would miss a case that
+returned early. 106 assertions over the 50 case-runs of the full matrix. The
+mutation case's four nested replays keep their own counter in their own sandbox
+and are not folded into that total.
+
+## Elapsed, and the machine it was measured on
+
+SC-007 allows 60 s. Measured three times on 2026-09-17, on a machine that was
+NOT idle:
+
+```
+                        suite clock   wall    load (1 min, before -> after)   unrelated containers
+pre-change baseline        37 s      46.1 s   5.53 -> 8.10                    13
+after T024/T025            38 s      47.2 s   4.26 -> 7.09                    12
+after T024/T025 (again)    37 s      46.7 s   5.13 -> 6.14                    11
+```
+
+The criterion holds with about 22 s of margin, and it holds under a load that
+Phase D's 48 s figure did not carry. **No idle measurement was taken**: the
+unrelated Docker workloads on this host belong to other sessions and were not
+stopped. Phase D's warning stands unchanged — the same twenty-four cases took
+631 s on this machine under heavy contention, so elapsed is a property of the
+host as much as of the suite, and a single number should never be read as one.
+
+## What Phase E did NOT measure
+
+- **An idle host.** See above. The three figures bracket one loaded machine on
+  one afternoon; they do not establish a floor or a ceiling.
+- **A mutation anywhere but the provenance test.** One site, one operator, as
+  plan D8 specifies. The cause table, the identity test and the name resolution
+  have no mutant; their cases are asserted, not put to the question.
+- **The nested replays' own timing.** The mutation case costs about 1.5 s per
+  image, inferred from the matrix growing 24 -> 25 cases at unchanged elapsed,
+  not timed on its own.

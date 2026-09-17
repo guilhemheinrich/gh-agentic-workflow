@@ -6,8 +6,9 @@
 # and stays silent unless something is wrong.
 #
 # Two layers live in this file:
-#   1. The RUNNER (everything above the ROUTING TABLE) — generic, copy as-is.
-#      Owns the agent protocol, container resolution, time budget, retry brake.
+#   1. The RUNNER (everything OUTSIDE the ROUTING TABLE markers, above AND
+#      below them) — generic, copy as-is. Owns the agent protocol, container
+#      resolution, time budget, retry brake, the CLI modes and the hook entry.
 #   2. The ROUTING TABLE (between the BEGIN/END markers) — project-specific.
 #      This is the only part you edit. See skills/static-validation-hooks.
 #
@@ -28,7 +29,11 @@
 # CLI (for humans, not the agent):
 #   validate-on-edit.sh --dry-run <path>   Show routing decision, run nothing.
 #   validate-on-edit.sh --check <path>     Run the real validation, print timing.
-#   validate-on-edit.sh --doctor           Check docker + services + warnings.
+#   validate-on-edit.sh --doctor           Docker, the resolved Compose project
+#                                          and where its name came from, the
+#                                          Compose files, each routed service
+#                                          and whether it is classified in the
+#                                          degraded (shell-less) mode, warnings.
 
 # No 'set -e': (( )) returns 1 on a zero result, which is not an error here.
 set -uo pipefail
@@ -508,7 +513,10 @@ lookup_candidates() {
 }
 
 # lookup_cid SERVICE — the first candidate, for the diagnostic and for callers
-# that only need "is something running". Keeps docker's status.
+# that only need "is something running". It keeps whether docker SUCCEEDED, not
+# docker's own code: a failed lookup is collapsed to 1. Nothing reads the value,
+# and the cause decision in exec_in uses lookup_candidates directly, where the
+# whole set and docker's own status are both preserved.
 lookup_cid() {
   local out=""
   out="$(lookup_candidates "$1")" || return 1
@@ -668,6 +676,12 @@ EOF
 #   VALIDATE_WORKTREE=run   a consumer sharing one stack across checkouts
 #   a ROUTING TABLE override of compose_project — the consumer has taken over
 #     which stack is addressed, so the runner does not second-guess it
+#
+# A third, silent path: with no budget left the check is SKIPPED and the
+# container accepted, because `docker inspect` is a call the edit can no longer
+# afford. That is the permissive direction, and it is deliberate — refusing on
+# an exhausted budget would turn a slow machine into a stream of checkout-
+# mismatch warnings about containers that are in fact this checkout's.
 identity_ok() {
   local svc="$1" cid="$2" hostfile=""
   [[ "$VALIDATE_WORKTREE" == "run" ]] && { log "identity check waived (VALIDATE_WORKTREE=run)"; return 0; }
@@ -694,9 +708,12 @@ first_acceptable() {
 
 # ── The cause of a failed execution (plan D3) ────────────────────────────────
 #
-# Four named outcomes, and the fourth is the exhaustive bucket the spec demands
-# (FR-006): Docker absent from the PATH and a socket permission refusal land in
-# a named cause instead of falling through to a violation.
+# Five named outcomes, and `unclassified` is the exhaustive bucket the spec
+# demands (FR-006): Docker absent from the PATH and a socket permission refusal
+# land in a named cause instead of falling through to a violation.
+#
+# It read "four" until `foreign` was added with plan D6, which is the drift this
+# comment audit exists to catch: a list that grew and a count that did not.
 #
 #   daemon         the daemon or the client could not be reached at all
 #   nocontainer    no running container for this service
@@ -723,22 +740,17 @@ cause_clear() { [[ -n "$_CAUSE_FILE" ]] && rm -f "$_CAUSE_FILE" 2>/dev/null; ret
 
 # ── Execution provenance ─────────────────────────────────────────────────────
 #
-# THE EXIT CODE CARRIES NO INFORMATION. Measured on Docker 29.4.0 via OrbStack,
-# macOS, 2026-09-17 (specs/016-hook-exit-code-contract/research.md §1):
+# THE EXIT CODE CARRIES NO INFORMATION. `docker exec` never returns 125, and the
+# three infrastructure failures that do occur all return 1 — the same code a
+# linter returns when it found something. Measured on Docker 29.4.0 via
+# OrbStack, macOS 25.5.0, 2026-09-17; the full table is stated ONCE, in the
+# exit-code contract that heads `exec_in` below, because two copies of a
+# measurement are two things free to drift apart.
 #
-#   container running, validator clean        0
-#   container running, validator found 3      3
-#   validator absent from the container     127   OCI runtime exec failed: …
-#   container stopped                         1   Error response from daemon: …
-#   container removed / never existed         1   Error response from daemon: …
-#   daemon unreachable                        1   failed to connect to the …
-#
-# `docker exec` NEVER returns 125, and the three infrastructure failures all
-# return 1 — the same code a linter returns when it found something. So the
-# runner does not infer: it carries its own evidence. A per-invocation nonce is
-# printed INSIDE the container immediately before the validator is handed
-# control. Nonce back = the call reached inside and command resolution began;
-# no nonce = the validator never started, whatever the code says.
+# So the runner does not infer: it carries its own evidence. A per-invocation
+# nonce is printed INSIDE the container immediately before the validator is
+# handed control. Nonce back = the call reached inside and command resolution
+# began; no nonce = the validator never started, whatever the code says.
 #
 # The nonce is NOT a prefix. Docker carries stdout and stderr separately and
 # merges them in an order that is not stable across two runs of one unchanged
@@ -797,9 +809,10 @@ probe_shell() {
   return 0
 }
 
-# exec_in SERVICE CMD... — stdout+stderr merged on stdout, container rc returned.
-# 125 is the runner's OWN synthetic code for "no container resolved / docker
-# unusable"; `docker exec` cannot produce it. 124 = budget (see _BUDGET_FLAG).
+# Hand the budget wrapper's output on — stdout and stderr merged, as with_budget
+# wrote them — and remove its temporary file (FR-023). Used on every path where
+# the call DID reach inside the container. The exit-code contract that output is
+# read against is stated above `exec_in`, where the invocation happens.
 drain_budget_out() {
   [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] || { BUDGET_OUT=""; return 0; }
   cat "$BUDGET_OUT"
@@ -870,6 +883,47 @@ exec_reached_inside() {
   return 1
 }
 
+# ── The exit-code contract (FR-020) ──────────────────────────────────────────
+#
+# MEASURED, never assumed. Docker 29.4.0 via OrbStack, macOS 25.5.0, 2026-09-17
+# (specs/016-hook-exit-code-contract/research.md §1). One probe per row, against
+# real containers on that host:
+#
+#   docker exec  container running, validator clean      0   —
+#   docker exec  container running, validator found 3    3   the validator's output
+#   docker exec  validator absent from the container   127   OCI runtime exec failed: … not found
+#   docker exec  container stopped                       1   Error response from daemon: container … is not running
+#   docker exec  container removed / never existed       1   Error response from daemon: No such container: …
+#   docker exec  daemon unreachable                      1   failed to connect to the docker API …
+#   docker run   --nonsense-flag                       125   a CLI usage error, on a command this runner never issues
+#
+# What stood here before said "125 = no running container, 124 = budget
+# exceeded". Both halves were false and the first was the defect being repaired:
+# `docker exec` NEVER returns 125, so the stale-container recovery keyed on it
+# could not fire, while the three infrastructure failures that do occur all
+# return 1 — the same code a validator returns when it found something. No
+# remapping of codes repairs that, and neither does matching the error text: a
+# validator's own output may legitimately carry a daemon-shaped line
+# (research.md §2b, row 2, built to break exactly that rule).
+#
+# Platform caveat, because the table above is one platform's: Docker Desktop and
+# Colima ship the same CLI binary, which is the reason to EXPECT the same codes,
+# but neither was measured. Nothing below depends on the expectation — the
+# classification rests on the nonce, not on any code in this table.
+#
+# So exec_in hands back codes that need no interpretation:
+#
+#   any code, nonce present  the VALIDATOR's own code, 124/126/127 included:
+#                            those are its signals, and the runner does not
+#                            claim them (FR-003)
+#   124, budget              recognised through _BUDGET_FLAG and never through
+#                            the code, precisely because a validator may also
+#                            exit 124 (see with_budget)
+#   125                      the runner's OWN synthetic code; `docker exec`
+#                            cannot produce it. It means "nothing ran", and WHY
+#                            is in the cause file, never in the code: daemon,
+#                            nocontainer, foreign, unclassified, routing
+#
 # exec_in SERVICE CMD...
 #
 # Cache invalidation and recovery live HERE, not in the classifier (FR-017). A
@@ -1040,8 +1094,15 @@ fix() {
 # ── The decision table (plan D2) ─────────────────────────────────────────────
 #
 #   killed by the runner's own sentinel        budget warning
+#   rc 0                                       silence — no measured
+#                                              infrastructure failure returns 0,
+#                                              so provenance adds nothing here
+#   exec_in named a cause                      the warning for THAT cause (D3):
+#                                              daemon, nocontainer, foreign,
+#                                              routing, or unclassified
+#   the service has no POSIX shell             the degraded rule of FR-005a,
+#                                              and the agent is told so
 #   nonce absent                               infrastructure warning
-#   nonce present, rc 0                        silence
 #   nonce present, rc 126/127, shell's own
 #     diagnostic after stripping               wiring warning
 #   nonce present, rc != 0, output remains     VIOLATION carrying that output
@@ -1466,12 +1527,37 @@ cli_mode() {
       fi
       printf 'timeout   : %s\n' "${TIMEOUT_BIN:-bash watchdog fallback}"
       printf 'docker    : %s\n' "$(docker version --format '{{.Server.Version}}' 2>/dev/null || printf 'UNREACHABLE')"
+      # Per service: the container, and whether its classification is the full
+      # one or the DEGRADED rule of FR-005a. A container with no POSIX shell
+      # cannot host the provenance nonce, so the runner falls back to matching
+      # Docker's own error wording — weaker, and the consumer is entitled to
+      # know which of its services is in that mode rather than discover it from
+      # a warning. The answer is the one probe_shell cached at resolution time;
+      # `--doctor` reports it and never probes, so it stays a read-only command.
       printf 'services referenced by the routing table:\n'
-      local s cid
+      local s cid shellf shellv degraded="" stopped=""
       for s in $(grep -oE '(^|;)[[:space:]]*svc[[:space:]]+[a-zA-Z0-9_.-]+' "$0" | awk '{print $NF}' | sort -u); do
         cid="$(lookup_cid "$s")"
-        printf '  %-20s %s\n' "$s" "${cid:-NOT RUNNING — run: make up}"
+        [[ -z "$cid" ]] && stopped="$stopped $s"
+        shellf="$(shell_cache "$s")"
+        shellv="not probed yet"
+        if [[ -f "$shellf" ]]; then
+          if [[ "$(cat "$shellf" 2>/dev/null)" == "no" ]]; then
+            shellv="NO — DEGRADED classification (FR-005a)"
+            degraded="$degraded $s"
+          else
+            shellv="yes"
+          fi
+        fi
+        printf '  %-20s %-14s shell: %s\n' "$s" "${cid:-NOT RUNNING}" "$shellv"
       done
+      [[ -n "$stopped" ]] && printf '  not running:%s — start the stack: make up\n' "$stopped"
+      if [[ -n "$degraded" ]]; then
+        printf 'degraded  :%s — no POSIX shell, so the runner cannot prove whether the\n' "$degraded"
+        printf '            validator ran and matches Docker error wording instead.\n'
+      else
+        printf 'degraded  : none — every probed service can host the provenance wrapper.\n'
+      fi
       printf 'suppressed warnings this session: %s\n' "$(ls "$STATE_DIR"/warn-* 2>/dev/null | wc -l | tr -d ' ')"
       printf 'log       : %s\n' "$LOG_FILE"
       ;;

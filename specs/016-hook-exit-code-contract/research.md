@@ -105,6 +105,8 @@ Run in `modelo-broker-pa` on 2026-09-17. Compose answers with the name the conta
 
 103 ms is far too expensive per edit and unremarkable once per service, which is why this call belongs on the resolution path only.
 
+**Two samples, not one number.** A later sample on the same day gave 64 ms and 74 ms for the same two calls. Both stand; the host carried 11 to 13 unrelated containers at varying load throughout. Read the figure as a range, and read the conclusion — too expensive per edit, cheap once per service — as the part that does not move.
+
 **What this call cannot recover**, and the plan must say so rather than claim completeness: a file list or a project name passed on the command line when the stack was started. The hook runs in a different environment from that `up`, so `-f` and `-p` are invisible to it. Nothing measured here changes that.
 
 ## 3c. Mount inventory of a live container — measured

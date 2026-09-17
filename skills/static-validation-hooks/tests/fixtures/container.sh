@@ -2,9 +2,11 @@
 # skills/static-validation-hooks/tests/fixtures/container.sh
 #
 # Throwaway fixtures for the black-box suite. No project stack, no compose file:
-# a plain `docker run` carrying the two labels `lookup_cid` filters on
-# (templates/validate-on-edit.sh:240-243) is indistinguishable, from the
-# runner's point of view, from a container Compose started.
+# a plain `docker run` carrying the two labels the runner filters on — see
+# `lookup_candidates` in templates/validate-on-edit.sh, named rather than cited
+# by line, because the runner has doubled in length since this suite was written
+# — is indistinguishable, from the runner's point of view, from a container
+# Compose started.
 #
 # Everything created here is named `voe-test-<session>-*` so a stray is findable
 # with `docker ps -a --filter name=voe-test-`. Containers this file starts are
