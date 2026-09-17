@@ -116,7 +116,14 @@ status-only-check
 tool-absent-from-container
 leading-dash-tool-name
 validator-chooses-127
-shell-less-container"
+shell-less-container
+stack-recreated-recovers
+scaled-service-two-containers
+format-then-validate-shares-recovery
+daemon-not-re-resolved
+daemon-outage-then-missing-container
+budget-exhausted-before-the-call
+container-alive-but-unreachable"
 
 # ── Harness primitives available to every case ───────────────────────────────
 
@@ -184,6 +191,8 @@ run_hook() {
       VALIDATE_BUDGET_S="${VOE_BUDGET_S:-10}" \
       VALIDATE_DEBUG=0 \
       COMPOSE_PROJECT_NAME="$PROJECT_NAME" \
+      PATH="${VOE_PATH_PREFIX:+$VOE_PATH_PREFIX:}$PATH" \
+      VOE_DOCKER_LOG="${VOE_DOCKER_LOG:-}" \
       ${VOE_DOCKER_HOST:+DOCKER_HOST="$VOE_DOCKER_HOST"} \
       bash "$RUNNER_COPY"
   ) >"$outf" 2>"$errf"
@@ -234,6 +243,76 @@ expect_outcome() {
   [ "$CASE_VERDICT" = "PASS" ]
 }
 
+# expect_stderr <want|reject> <extended regex> [label]
+#
+# Asserts what the agent is TOLD, on top of what class of message it got.
+#
+# This is not a back door into classification, and the distinction matters
+# enough to write down. `classify_outcome` decides violation / warning / silence
+# and must stay ignorant of Docker; this helper is used only where the
+# SPECIFICATION requires a particular cause to be named to the agent — FR-006
+# ("the runner MUST distinguish the infrastructure causes") and FR-009 (one key
+# must not suppress another). Without it a case can only see that *some*
+# warning arrived, and every cause-distinguishing requirement in the spec would
+# be asserted by nothing. It still never decides which causes are infrastructure:
+# each case names the sentence it expects, and the suite just looks for it.
+expect_stderr() {
+  local mode="$1" re="$2" label="${3:-$2}" hit=0
+  printf '%s' "$RUN_STDERR" | grep -Eq "$re" && hit=1
+  if { [ "$mode" = "want" ] && [ "$hit" = "1" ]; } ||
+     { [ "$mode" = "reject" ] && [ "$hit" = "0" ]; }; then
+    return 0
+  fi
+  CASE_VERDICT="FAIL"
+  printf '    stderr %s %s — not satisfied. stderr was:\n' "$mode" "$label" >&2
+  printf '%s\n' "$RUN_STDERR" | sed 's/^/      | /' >&2
+  printf '%s' "unexpected:stderr-$mode-failed" >"$CASE_DIR/observed"
+  return 1
+}
+
+# expect_no_stray_temp_files — FR-023. The runner's budget wrapper writes its
+# temporary output under $TMPDIR, which is this case's own directory, so a file
+# it failed to unlink is visible from outside without knowing anything about the
+# runner's internals.
+expect_no_stray_temp_files() {
+  local strays
+  strays="$(ls "$CASE_TMPDIR"/validate-out-* 2>/dev/null | wc -l | tr -d ' ')"
+  [ "$strays" = "0" ] && return 0
+  CASE_VERDICT="FAIL"
+  printf '    %s temporary output file(s) left behind in %s:\n' "$strays" "$CASE_TMPDIR" >&2
+  ls -l "$CASE_TMPDIR"/validate-out-* 2>/dev/null | sed 's/^/      | /' >&2
+  printf '%s' "unexpected:stray-temp-file" >"$CASE_DIR/observed"
+  return 1
+}
+
+# voe_docker_shim <log-file>
+# Writes a `docker` shim into this case's own directory and points
+# VOE_PATH_PREFIX and VOE_DOCKER_LOG at it, so the next run_hook counts every
+# Docker invocation the runner makes. The shim logs the subcommand and then
+# execs the real binary, so behaviour is unchanged — it only counts.
+voe_docker_shim() {
+  local logf="$1" dir="$CASE_DIR/shim"
+  mkdir -p "$dir" || return 1
+  : >"$logf"
+  {
+    printf '#!/bin/sh\n'
+    printf 'printf "%%s\\n" "$*" >> "$VOE_DOCKER_LOG" 2>/dev/null\n'
+    printf 'exec %s "$@"\n' "$VOE_DOCKER_BIN"
+  } >"$dir/docker" || return 1
+  chmod +x "$dir/docker" || return 1
+  VOE_PATH_PREFIX="$dir"
+  VOE_DOCKER_LOG="$logf"
+  return 0
+}
+
+# voe_docker_calls <log-file> <subcommand> — how many times the runner invoked
+# `docker <subcommand>` since the log was last truncated.
+voe_docker_calls() {
+  # BSD grep has no reliable \b, so the separator is the literal space the shim
+  # writes between the subcommand and its flags.
+  grep -c "^$2 " "$1" 2>/dev/null | tr -d ' \n'
+}
+
 # ── Case execution ───────────────────────────────────────────────────────────
 
 run_one_case() {
@@ -250,6 +329,9 @@ run_one_case() {
   : >"$PROJECT_DIR/Makefile"
   RUN_N=0
   VOE_DOCKER_HOST=""
+  VOE_PATH_PREFIX=""
+  VOE_DOCKER_LOG=""
+  VOE_BUDGET_S=""
   CASE_VERDICT="FAIL"
 
   printf '  %-44s [%s]\n' "$name" "$VOE_IMAGE" >&2
@@ -286,6 +368,9 @@ while [ $# -gt 0 ]; do
 done
 
 command -v docker >/dev/null 2>&1 || { printf 'run.sh: docker not on PATH\n' >&2; exit 1; }
+# Resolved once, and only so a case that counts Docker invocations can put a
+# logging shim in front of the real binary without hard-coding its location.
+VOE_DOCKER_BIN="$(command -v docker)"
 for img in $VOE_IMAGES; do
   docker image inspect "$img" >/dev/null 2>&1 || {
     printf 'run.sh: pulling %s\n' "$img" >&2

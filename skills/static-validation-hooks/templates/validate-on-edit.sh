@@ -215,23 +215,39 @@ remaining_budget() {
 # branch, where the runner itself did the killing.
 _BUDGET_FLAG=""
 
+# The sentinel carries WHICH of the two budget outcomes happened, because the
+# agent-visible sentence differs and only one of them is a kill:
+#   killed   the command started and the runner (or `timeout`) stopped it
+#   unspent  the budget was already gone before the command started, so nothing
+#            was invoked at all — telling the agent its tool "was killed" there
+#            would assert a cause the runner never established (FR-022)
 budget_flag_arm() {
   _BUDGET_FLAG="$STATE_DIR/budget-killed-$$"
   rm -f "$_BUDGET_FLAG" 2>/dev/null || true
 }
 
-budget_flag_raise() { [[ -n "$_BUDGET_FLAG" ]] && : >"$_BUDGET_FLAG"; return 0; }
+budget_flag_raise() { [[ -n "$_BUDGET_FLAG" ]] && printf '%s' "${1:-killed}" >"$_BUDGET_FLAG"; return 0; }
 
 budget_was_killed() { [[ -n "$_BUDGET_FLAG" && -f "$_BUDGET_FLAG" ]]; }
+
+budget_reason() { [[ -n "$_BUDGET_FLAG" ]] && cat "$_BUDGET_FLAG" 2>/dev/null; return 0; }
 
 # Output goes to a file, never to a command substitution: killing the direct
 # child does not close a pipe its own descendants still hold open, so `$( )`
 # would block for the full runtime of a grandchild and the budget would be a
 # lie. Returns the command's exit code, or 124 when the budget ran out.
+#
+# No time left means NOTHING is invoked and NO temporary file is created: an
+# external `timeout` reads 0 as "no limit", which would turn an exhausted budget
+# into an unbounded call, and the file the old order created on that path was
+# never unlinked — one stray per edit (FR-023).
 with_budget() {
   local left; left="$(remaining_budget)"
-  BUDGET_OUT="$(mktemp "${TMPDIR:-/tmp}/validate-out-XXXXXX")"
-  (( left <= 0 )) && { budget_flag_raise; return 124; }
+  BUDGET_OUT=""
+  (( left <= 0 )) && { budget_flag_raise unspent; return 124; }
+  BUDGET_OUT="$(mktemp "${TMPDIR:-/tmp}/validate-out-XXXXXX")" || {
+    BUDGET_OUT=""; log "cannot create the budget output file"; return 125
+  }
 
   if [[ -n "$TIMEOUT_BIN" ]]; then
     "$TIMEOUT_BIN" "$left" "$@" >"$BUDGET_OUT" 2>&1
@@ -261,11 +277,72 @@ compose_project() {
   basename "$PROJECT_ROOT" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-'
 }
 
-lookup_cid() {
+# lookup_candidates SERVICE — every running container id for the service, one
+# per line, and DOCKER'S OWN exit status. The whole set is the evidence: which
+# cause occurred is a question about the set, not about its first line (plan D3).
+#
+# `| head -n1` is gone from the query itself. Two reasons, and only the second
+# was measured. It can in principle close the pipe on docker mid-write, which
+# under `set -o pipefail` surfaces as a non-zero status indistinguishable from
+# a dead daemon — probed on 2026-09-17 with 8 containers on one label pair, ten
+# runs, rc 0 every time, so that hazard is theoretical at any plausible scale
+# (8 short ids are ~100 bytes against a 64 KB pipe buffer). What is NOT
+# theoretical is that the first line alone cannot answer whether the cached id
+# is still among the candidates, which is the question separating "the container
+# was replaced" from "it is alive and the call did not get inside it".
+lookup_candidates() {
   docker ps -q \
     --filter "label=com.docker.compose.project=$(compose_project)" \
-    --filter "label=com.docker.compose.service=$1" 2>/dev/null | head -n1
+    --filter "label=com.docker.compose.service=$1" 2>/dev/null
 }
+
+# lookup_cid SERVICE — the first candidate, for the diagnostic and for callers
+# that only need "is something running". Keeps docker's status.
+lookup_cid() {
+  local out=""
+  out="$(lookup_candidates "$1")" || return 1
+  printf '%s' "${out%%$'\n'*}"
+}
+
+# cands_contain SET ID — is ID one of the candidates? `docker ps -q` prints
+# 12-character ids while a cache written by another tool may hold the full 64,
+# so the comparison is by prefix in both directions rather than by equality.
+cands_contain() {
+  local cands="$1" id="$2" c=""
+  [[ -n "$id" ]] || return 1
+  for c in $cands; do
+    [[ "$c" == "$id" ]] && return 0
+    case "$id" in "$c"*) return 0 ;; esac
+    case "$c" in "$id"*) return 0 ;; esac
+  done
+  return 1
+}
+
+# ── The cause of a failed execution (plan D3) ────────────────────────────────
+#
+# Four named outcomes, and the fourth is the exhaustive bucket the spec demands
+# (FR-006): Docker absent from the PATH and a socket permission refusal land in
+# a named cause instead of falling through to a violation.
+#
+#   daemon         the daemon or the client could not be reached at all
+#   nocontainer    no running container for this service
+#   unclassified   the container is running and the call did not reach inside it
+#   routing        the ROUTING TABLE called a verb before `svc`
+#
+# exec_in runs inside a command substitution (`out="$(_run …)"`), so the cause
+# cannot travel back in a variable. It travels in a file, like the budget flag.
+_CAUSE_FILE=""
+
+cause_arm() {
+  _CAUSE_FILE="$STATE_DIR/cause-$$"
+  rm -f "$_CAUSE_FILE" 2>/dev/null || true
+}
+
+cause_set() { [[ -n "$_CAUSE_FILE" ]] && printf '%s' "$1" >"$_CAUSE_FILE"; return 0; }
+
+cause_get() { [[ -n "$_CAUSE_FILE" && -f "$_CAUSE_FILE" ]] && cat "$_CAUSE_FILE" 2>/dev/null; return 0; }
+
+cause_clear() { [[ -n "$_CAUSE_FILE" ]] && rm -f "$_CAUSE_FILE" 2>/dev/null; return 0; }
 
 # ── Execution provenance ─────────────────────────────────────────────────────
 #
@@ -347,9 +424,20 @@ probe_shell() {
 # 125 is the runner's OWN synthetic code for "no container resolved / docker
 # unusable"; `docker exec` cannot produce it. 124 = budget (see _BUDGET_FLAG).
 drain_budget_out() {
-  [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] || return 0
+  [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] || { BUDGET_OUT=""; return 0; }
   cat "$BUDGET_OUT"
   rm -f "$BUDGET_OUT"
+  BUDGET_OUT=""
+  return 0
+}
+
+# Throw the output away instead of handing it on — used on every path where the
+# call did not reach inside the container, so Docker's own text cannot leak to
+# the agent and no temporary file survives the edit (FR-002, FR-023).
+budget_out_discard() {
+  [[ -n "$BUDGET_OUT" ]] && rm -f "$BUDGET_OUT" 2>/dev/null
+  BUDGET_OUT=""
+  return 0
 }
 
 # `exec` replaces the shell, so the validator keeps the process, its exit code,
@@ -384,9 +472,36 @@ exec_wrapped() {
   return $?
 }
 
+# Did this invocation reach inside the container?
+#
+# With a shell, the nonce settles it and nothing else is consulted. Without one
+# (FR-005a) there is no provenance to read, so the weaker rule of
+# classify_degraded is applied here too — Docker's own error wording, with the
+# same 126/127 carve-out, so a tool the image does not carry is not mistaken for
+# a container that is gone. Deliberately the SAME rule in both places: two
+# different weak rules would disagree on the shell-less path.
+exec_reached_inside() {
+  local svc="$1" rc="$2" out=""
+  (( rc == 0 )) && return 0
+  [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] && out="$(cat "$BUDGET_OUT" 2>/dev/null)"
+  if svc_has_shell "$svc"; then
+    case "$out" in *"$_NONCE"*) return 0 ;; esac
+    return 1
+  fi
+  is_docker_error "$out" || return 0
+  (( rc == 126 || rc == 127 )) && return 0
+  return 1
+}
+
+# exec_in SERVICE CMD...
+#
+# Cache invalidation and recovery live HERE, not in the classifier (FR-017). A
+# ROUTING TABLE branch that formats before it validates runs `fix` first, and
+# `fix` discards its result by design; with the recovery in `check` that branch
+# left a dead identifier cached for the validator that follows it.
 exec_in() {
   local svc="$1"; shift
-  local cache="$STATE_DIR/cid-$svc" cid="" rc=0
+  local cache="$STATE_DIR/cid-$svc" cid="" rc=0 cands="" prc=0
 
   [[ -f "$cache" ]] && cid="$(cat "$cache" 2>/dev/null)"
 
@@ -396,19 +511,74 @@ exec_in() {
     # costs one call once, never per edit.
     probe_shell "$svc" "$cid"
     exec_wrapped "$svc" "$cid" "$@"; rc=$?
-    if (( rc != 125 )); then drain_budget_out; return "$rc"; fi
-    log "stale cid for $svc, re-resolving"
-    rm -f "$BUDGET_OUT" "$cache"
+    budget_was_killed && { drain_budget_out; return "$rc"; }
+    exec_reached_inside "$svc" "$rc" && { drain_budget_out; return "$rc"; }
+
+    # Nothing ran. Docker's text is dropped here rather than carried further.
+    budget_out_discard
+    if (( $(remaining_budget) <= 0 )); then
+      # No time for the probe. FR-010: not validated, cause unknown — never a
+      # guess, and never a violation.
+      log "no budget left to establish why '$svc' did not run"
+      cause_set unclassified
+      return 125
+    fi
+
+    # ONE label-filtered `docker ps`, read as a SET and consumed whole (plan D3).
+    cands="$(lookup_candidates "$svc")"; prc=$?
+    if (( prc != 0 )); then
+      # FR-008: a re-resolution would ask the same unreachable daemon, so it is
+      # not attempted. This is the only place that decision is taken.
+      log "docker ps failed for '$svc' — daemon unreachable or client refused"
+      cause_set daemon
+      return 125
+    fi
+    if [[ -z "${cands//[$'\t\n\r ']/}" ]]; then
+      log "no running container for '$svc' — dropping the cached id"
+      rm -f "$cache" 2>/dev/null || true
+      cause_set nocontainer
+      return 125
+    fi
+    if cands_contain "$cands" "$cid"; then
+      log "container $cid for '$svc' is running, yet the call did not reach inside it"
+      cause_set unclassified
+      return 125
+    fi
+
+    # The container was replaced, possibly among several on a scaled service.
+    # Take the first candidate and retry exactly once. Verifying the candidate
+    # against this checkout is plan D6, Phase D, and is NOT done here.
+    cid="${cands%%$'\n'*}"
+    printf '%s' "$cid" >"$cache" 2>/dev/null || true
+    rm -f "$(shell_cache "$svc")" 2>/dev/null || true
+    log "container for '$svc' was replaced — retrying once on $cid"
+    probe_shell "$svc" "$cid"
+    exec_wrapped "$svc" "$cid" "$@"; rc=$?
+    budget_was_killed && { drain_budget_out; return "$rc"; }
+    exec_reached_inside "$svc" "$rc" && { drain_budget_out; return "$rc"; }
+    budget_out_discard
+    log "the replacement container for '$svc' did not run the validator either"
+    cause_set unclassified
+    return 125
   fi
 
-  cid="$(lookup_cid "$svc")"
-  [[ -z "$cid" ]] && return 125
+  cands="$(lookup_candidates "$svc")"; prc=$?
+  if (( prc != 0 )); then
+    log "docker ps failed for '$svc' — daemon unreachable or client refused"
+    cause_set daemon
+    return 125
+  fi
+  cid="${cands%%$'\n'*}"
+  [[ -z "$cid" ]] && { log "no running container for '$svc'"; cause_set nocontainer; return 125; }
   printf '%s' "$cid" >"$cache" 2>/dev/null || true
   probe_shell "$svc" "$cid"
 
   exec_wrapped "$svc" "$cid" "$@"; rc=$?
-  drain_budget_out
-  return "$rc"
+  budget_was_killed && { drain_budget_out; return "$rc"; }
+  exec_reached_inside "$svc" "$rc" && { drain_budget_out; return "$rc"; }
+  budget_out_discard
+  cause_set unclassified
+  return 125
 }
 
 # ── Routing verbs — the vocabulary the ROUTING TABLE is written in ───────────
@@ -428,13 +598,17 @@ _run() {
   local tool="$1"
   if [[ -z "$_SVC" ]]; then
     log "routing error: '$tool' called before svc"
+    cause_set routing
     return 125
   fi
   if (( DRY )); then
     printf '  would run: docker exec <%s> %s\n' "$_SVC" "$*" >&2
     return 0
   fi
-  command -v docker >/dev/null 2>&1 || { log "docker not on PATH"; return 125; }
+  # A client that is not there is the same outage as a daemon that is not there:
+  # session-wide, no service at fault, and not worth one warning per service.
+  # FR-006 names it rather than letting it fall through to a violation.
+  command -v docker >/dev/null 2>&1 || { log "docker not on PATH"; cause_set daemon; return 125; }
   exec_in "$_SVC" "$@"
 }
 
@@ -463,9 +637,14 @@ fix() {
   local out rc=0
   nonce_mint
   budget_flag_arm
+  # Armed here too, although `fix` never reads it: an unarmed cause file would
+  # leave a previous branch's verdict in place for the `check` that follows.
+  # The RECOVERY this path performs is not optional and lives in exec_in.
+  cause_arm
   out="$(_run "$@")" || rc=$?
   out="$(strip_nonce_once "$out" "$_NONCE")"
   (( rc != 0 )) && log "fix '$1' rc=$rc (non-blocking): ${out:0:200}"
+  cause_clear
   return 0
 }
 
@@ -558,24 +737,77 @@ $out"
   return 0
 }
 
+# The warning the agent receives when nothing ran, keyed by CAUSE and not by
+# service (FR-009). A daemon or client outage is not a property of any one
+# service, so it warns once for the whole session; everything else is per
+# service. No key is a prefix or a synonym of another, so a daemon outage cannot
+# later silence a genuine missing-container warning for a service — which is the
+# suppression collision the spec calls out by name.
+warn_cause() {
+  local tool="$1" cause="$2"
+  case "$cause" in
+    daemon)
+      warn_once "daemon" \
+        "[validate] Docker could not be reached, so $REL was not validated. The daemon is
+down, the client is not on the PATH, or the socket refused it — no service is at
+fault, and the runner did not try to resolve a container, because resolution
+asks the same Docker. This is reported once for the whole session." || true
+      ;;
+    nocontainer)
+      warn_once "nocontainer-$_SVC" \
+        "[validate] service \`$_SVC\` has no running container, so $REL was not validated.
+Start the stack (\`make up\`) to re-enable on-edit validation." || true
+      ;;
+    routing)
+      warn_once "routing-nosvc-$tool" \
+        "[validate] the ROUTING TABLE branch matching $REL runs \`$tool\` before naming a
+service with \`svc\`, so $REL was not validated. Add \`svc <name>\` first in
+.agents/hooks/validate-on-edit.sh." || true
+      ;;
+    *)
+      # The exhaustive bucket (FR-006). An unforeseen cause degrades to a
+      # warning that says so, never to a violation about the edited file.
+      warn_once "unclassified-$_SVC" \
+        "[validate] \`$tool\` did not run inside the \`$_SVC\` container, so $REL was not
+validated, and the runner could not establish why: Docker answered, a container
+for that service is running, and the call still did not reach inside it. Run
+\`.agents/hooks/validate-on-edit.sh --doctor\` and check the container's health." || true
+      ;;
+  esac
+  return 0
+}
+
 check() {
   _ROUTED=1
   [[ -n "$_VIOLATION" ]] && return 0   # fail-fast: one violation per edit is enough
-  local out rc=0 tool="$1" stripped="" ran=0
+  local out rc=0 tool="$1" stripped="" ran=0 cause=""
   refuse_dash_tool "$tool" && return 0
   nonce_mint
   budget_flag_arm
+  cause_arm
   out="$(_run "$@")" || rc=$?
   (( DRY )) && return 0
+  cause="$(cause_get)"
+  cause_clear
 
-  # 1. The runner killed it. Its own sentinel, not the exit code.
+  # 1. The runner killed it, or never started it. Its own sentinel, not the exit
+  #    code — and the two are not the same sentence (FR-022).
   if budget_was_killed; then
-    log "budget exceeded (${VALIDATE_BUDGET_S}s): $tool on $REL"
-    warn_once "budget-$_SVC-$tool" \
-      "[validate] \`$tool\` did not finish inside the ${VALIDATE_BUDGET_S}s budget on $REL and was
+    if [[ "$(budget_reason)" == "unspent" ]]; then
+      log "budget already spent before '$tool' ran on $REL"
+      warn_once "budget-$_SVC-$tool" \
+        "[validate] the ${VALIDATE_BUDGET_S}s budget for this edit was already spent before \`$tool\`
+could start on $REL, so nothing was invoked and the file was not validated.
+Earlier branches of the ROUTING TABLE consumed it. Raise VALIDATE_BUDGET_S, or
+move a slower step to CI." || true
+    else
+      log "budget exceeded (${VALIDATE_BUDGET_S}s): $tool on $REL"
+      warn_once "budget-$_SVC-$tool" \
+        "[validate] \`$tool\` did not finish inside the ${VALIDATE_BUDGET_S}s budget on $REL and was
 killed, so the file was not validated. The runner does not know why: a genuinely
 slow tool, a cold start, or a loaded machine all look the same from here. Raise
 VALIDATE_BUDGET_S, or move the tool to CI if it is slow every time." || true
+    fi
     return 0
   fi
 
@@ -583,7 +815,15 @@ VALIDATE_BUDGET_S, or move the tool to CI if it is slow every time." || true
   #    returns 0, so there is nothing a nonce could add.
   (( rc == 0 )) && return 0
 
-  # 3. No shell in that container: no provenance can exist (FR-005a).
+  # 3. Nothing ran, and exec_in established WHY from one `docker ps` read as a
+  #    set (plan D3). It also did the recovery: this branch only speaks.
+  if [[ -n "$cause" ]]; then
+    log "no execution for '$tool' in service '$_SVC' (rc=$rc, cause=$cause)"
+    warn_cause "$tool" "$cause"
+    return 0
+  fi
+
+  # 4. No shell in that container: no provenance can exist (FR-005a).
   if ! svc_has_shell "$_SVC"; then
     classify_degraded "$tool" "$rc" "$out"
     return 0
@@ -592,17 +832,17 @@ VALIDATE_BUDGET_S, or move the tool to CI if it is slow every time." || true
   case "$out" in *"$_NONCE"*) ran=1 ;; esac
   stripped="$(strip_nonce_once "$out" "$_NONCE")"
 
-  # 4. The call never reached inside the container. Infrastructure, whatever the
-  #    exit code and whatever Docker wrote — none of that text reaches the agent.
+  # 5. Belt and braces: the call did not reach inside and exec_in named no
+  #    cause. Nothing should reach here — exec_in answers that question for
+  #    every path — so it degrades to the unclassified warning rather than to a
+  #    violation carrying Docker's text.
   if (( ! ran )); then
-    log "no provenance for '$tool' in service '$_SVC' (rc=$rc): ${out:0:200}"
-    warn_once "nocontainer-$_SVC" \
-      "[validate] service \`$_SVC\` has no running container, so $REL was not validated.
-Start the stack (\`make up\`) to re-enable on-edit validation." || true
+    log "no provenance and no cause for '$tool' in service '$_SVC' (rc=$rc): ${out:0:200}"
+    warn_cause "$tool" unclassified
     return 0
   fi
 
-  # 5. The wrapper shell itself refused to run the tool.
+  # 6. The wrapper shell itself refused to run the tool.
   if (( rc == 126 || rc == 127 )) && is_shell_exec_diagnostic "$stripped"; then
     log "tool '$tool' not runnable in service '$_SVC' (rc=$rc)"
     warn_once "wiring-$_SVC-$tool" \
@@ -612,7 +852,7 @@ TABLE in .agents/hooks/validate-on-edit.sh." || true
     return 0
   fi
 
-  # 6. It ran and it failed. Silence is a verdict too.
+  # 7. It ran and it failed. Silence is a verdict too.
   if [[ -z "${stripped//[$'\t\n\r ']/}" ]]; then
     log "$tool rc=$rc with no output on $REL"
     _VIOLATION="[validate] $REL — $tool (exit $rc)
@@ -746,6 +986,12 @@ validate_path() {
   is_excluded_path "$REL" && { log "excluded: $REL"; return 0; }
 
   route
+
+  # The two sentinels are how a verdict escapes a command substitution. They are
+  # per-process and re-armed per verb, so they are consumed by now; removing
+  # them here keeps the state directory to the caches it is meant to hold.
+  cause_clear
+  [[ -n "$_BUDGET_FLAG" ]] && rm -f "$_BUDGET_FLAG" 2>/dev/null
 
   if (( _SKIP )); then log "skipped by routing: $REL"; return 0; fi
 

@@ -282,3 +282,135 @@ No case leaks the nonce, and no Docker text reaches the agent as a finding.
 The nonce-absent arm still emits the Phase A "no running container" wording,
 including when the cause is a dead daemon. That is deliberate: naming the cause
 is D3, in Phase C, and this phase does not claim it.
+
+---
+
+# Phase C — fifteen cases on two images, before and after the cause decision
+
+**Date**: 2026-09-17
+**Runner before**: `git show HEAD:…/validate-on-edit.sh` at `c16f50e`, driven
+through `VOE_RUNNER=` so one suite drove both sides
+**Runner after**: the working tree, tasks T014-T017 applied
+**Images**: `alpine:3.20` (busybox ash) and `debian:12-slim` (dash)
+**Commands**:
+
+```
+VOE_RUNNER=<scratch>/head-runner.sh \
+  bash skills/static-validation-hooks/tests/run.sh --all --image alpine:3.20
+VOE_RUNNER=<scratch>/head-runner.sh \
+  bash skills/static-validation-hooks/tests/run.sh --all --image debian:12-slim
+bash skills/static-validation-hooks/tests/run.sh --all
+```
+
+**Platform**: Docker 29.4.0 via OrbStack, macOS 25.5.0, no project stack.
+21 s for thirty-two runs (SC-007 allows 60 s).
+
+| Case | Before (both images) | After (both) | Expected | |
+|---|---|---|---|---|
+| `stale-container-reported-as-violation` | warning | warning | warning | guard held |
+| `daemon-unreachable` (cause assertion added) | **warning, wrong cause** | warning, daemon named | warning | red → green |
+| `validator-exit-1-with-findings` | violation | violation | violation | guard held |
+| `validator-output-looks-like-a-daemon-error` | violation | violation | violation | guard held |
+| `status-only-check` | violation | violation | violation | guard held |
+| `tool-absent-from-container` | warning | warning | warning | guard held |
+| `leading-dash-tool-name` | warning | warning | warning | guard held |
+| `validator-chooses-127` | violation | violation | violation | guard held |
+| `shell-less-container` | violation | violation | violation | guard held |
+| `stack-recreated-recovers` (new) | **warning** | **silence** | silence | red → green |
+| `scaled-service-two-containers` (new) | **warning** | **violation** | violation | red → green |
+| `format-then-validate-shares-recovery` (new) | **warning** | **violation** | violation | red → green |
+| `daemon-not-re-resolved` (new) | **ps=0** | **ps=1** | exactly 1 | red → green |
+| `daemon-outage-then-missing-container` (new) | **one service's warning lost** | daemon once, then `voe2` | warning | red → green |
+| `budget-exhausted-before-the-call` (new) | **"did not finish … was killed"** | "already spent before" | warning | red → green |
+| `container-alive-but-unreachable` (new) | **"has no running container"** | "could not establish why" | warning | red → green |
+
+8 passed / 8 failed per image before, on both images and with the same split.
+32 passed / 0 failed after. The agent-visible text is byte-identical on the two
+images.
+
+## Agent-visible text after this phase
+
+```
+daemon-unreachable                          [validate] Docker could not be reached, so app.txt was not validated. The daemon is
+daemon-not-re-resolved                      [validate] Docker could not be reached, so app.txt was not validated. The daemon is
+daemon-outage-then-missing-container        [validate] service `voe2` has no running container, so app.txt was not validated.
+stale-container-reported-as-violation       [validate] service `voe` has no running container, so app.txt was not validated.
+budget-exhausted-before-the-call            [validate] the 0s budget for this edit was already spent before `sh`
+stack-recreated-recovers                    (silence — the file WAS validated, in the replacement container)
+scaled-service-two-containers               [validate] app.txt — sh (exit 1)   /  "/work/app.txt:1: forbidden token"
+format-then-validate-shares-recovery        [validate] app.txt — sh (exit 1)   /  "/work/app.txt:1: forbidden token"
+```
+
+The nonce-absent arm no longer says "no running container" for every cause. A
+dead daemon now says so, and says that no service is at fault.
+
+## How FR-008 is proved, and why the outcome could not prove it
+
+FR-008 says the runner must not resolve again once it has decided the daemon is
+gone. Every attempt against a dead daemon fails identically, so a runner that
+re-resolved three times would emit exactly the same warning as one that decided
+once: the requirement is invisible in the outcome and invisible in the message.
+
+`daemon-not-re-resolved` counts instead. A `docker` shim, first on `PATH`,
+appends each subcommand to a log and then `exec`s the real binary — it counts,
+it does not simulate. Measured on the failing edit, both images:
+
+```
+before   ps=0  exec=1     never establishes a cause at all
+after    ps=1  exec=1     one probe, one verdict, no re-resolution
+```
+
+The case also asserts `exec >= 1`, so "one ps" cannot be satisfied by a runner
+that did nothing, and it asserts that the shim was in front of the real binary
+on the first edit, so a mis-wired `PATH` fails the case instead of passing it by
+counting zero of everything.
+
+This reads the process tree rather than the runner's internals, which is why it
+stays black-box: no state file, no source, no log of the runner is consulted.
+
+## `expect_stderr`, and the line it must not cross
+
+Three of this phase's requirements are about the CAUSE the agent is told, not
+about the class of message it receives — FR-006 (the causes must be
+distinguished) and FR-009 (no key may suppress another). `classify_outcome`
+cannot see any of that: a daemon outage and a stopped service are both
+`warning`, by construction.
+
+`expect_stderr want|reject <regex>` was added for exactly those assertions, and
+for nothing else. It does not classify: each case names the sentence it expects
+to find or to be absent, and the harness looks for it. The suite still holds no
+opinion about which failures are infrastructure.
+
+## What this phase did NOT measure
+
+- **The `head -n1` pipe hazard.** Plan D3 says reading only the first line "can
+  end the call in a way that reads as a failed daemon". Probed on 2026-09-17
+  with 8 containers behind one label pair, ten consecutive runs: `docker ps -q |
+  head -n1` returned rc 0 every time. Eight short ids are about 100 bytes
+  against a 64 KB pipe buffer, so the SIGPIPE story needs thousands of
+  containers and is theoretical at any plausible scale. The reason the set is
+  now consumed whole is the other one: the first line cannot answer whether the
+  cached id is still among the candidates, and that question is what separates
+  "replaced" from "alive but unreachable from inside".
+- **The stray temporary file of FR-023.** The plan says `with_budget` "creates
+  it and returns 124 without unlinking". It does — and `exec_in` drains it one
+  frame up, so it never survived an edit. Measured on the runner before this
+  phase, on `budget-exhausted-before-the-call`: zero strays. Measured after,
+  across all thirty runs of the full matrix: zero strays. The assertion is a
+  guard, and the file is now simply never created when there is no time to use
+  it.
+- **A cause outside the four the table names.** `container-alive-but-unreachable`
+  reaches the exhaustive bucket through a paused container, which is a real
+  state; a cause nobody has thought of is by definition not in the suite. What
+  is asserted is that the bucket exists, degrades to a warning, and does not
+  leak Docker's wording.
+- **Which of several candidates is chosen** on a scaled service. The case pins
+  that *a* surviving sibling is used and the finding reaches the agent; the
+  plan's "first acceptable candidate" becomes testable only once acceptability
+  exists, which is plan D6 in Phase D.
+- **A real Compose stack.** Every fixture is a plain `docker run` carrying the
+  two labels, as in Phase A and B. The project-name resolution that would make a
+  Compose file matter is Phase D.
+- **A daemon that is down rather than absent.** `DOCKER_HOST` points at a socket
+  that does not exist, as in Phase A. Stopping the real daemon would disturb
+  other sessions on this machine.

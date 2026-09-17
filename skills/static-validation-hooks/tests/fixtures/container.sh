@@ -97,8 +97,37 @@ voe_teardown_all() {
   local n
   [ -f "$VOE_REGISTRY" ] || return 0
   while IFS= read -r n; do
+    # Unpause first: a frozen container (voe_container_pause) must not be able
+    # to make the teardown of a failing run hang or fail.
+    [ -n "$n" ] && docker unpause "$n" >/dev/null 2>&1
     [ -n "$n" ] && docker rm -f "$n" >/dev/null 2>&1
   done <"$VOE_REGISTRY"
   : >"$VOE_REGISTRY"
+  return 0
+}
+
+# voe_container_pause NAME
+# Freezes a container this suite created. It stays in `docker ps` — so it is
+# still a candidate behind its labels — while `docker exec` is refused by the
+# daemon: measured 2026-09-17, rc 1, `Error response from daemon: Container …
+# is paused, unpause the container before exec`. That is the one state matching
+# the fourth row of the cause table: the container is alive and the call cannot
+# get inside it.
+#
+# Verified after the fact rather than assumed, like the shell removal above.
+voe_container_pause() {
+  local name="$1"
+  grep -qx "$name" "$VOE_REGISTRY" 2>/dev/null || {
+    printf 'fixture: refusing to pause unregistered container %s\n' "$name" >&2
+    return 1
+  }
+  docker pause "$name" >/dev/null 2>&1 || {
+    printf 'fixture: could not pause %s\n' "$name" >&2
+    return 1
+  }
+  if ! docker ps -q --no-trunc | grep -q "$(docker inspect -f '{{.Id}}' "$name" 2>/dev/null)"; then
+    printf 'fixture: %s left the running set when paused\n' "$name" >&2
+    return 1
+  fi
   return 0
 }

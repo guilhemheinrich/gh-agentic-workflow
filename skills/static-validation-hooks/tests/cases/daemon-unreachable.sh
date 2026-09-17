@@ -17,9 +17,16 @@
 #
 # This case asserts the second edit only. "Stays silent on later edits" is
 # warning-suppression behaviour (warn_once), a separate assertion that belongs
-# with the cause-scoped keys of FR-009, not here.
+# with the cause-scoped keys of FR-009, and lives in
+# `daemon-outage-then-missing-container`.
 #
-# Expected after the fix: warning.
+# Expected after the fix: warning — and, since FR-006 requires the two
+# infrastructure causes to be TOLD APART, a warning naming Docker rather than a
+# stopped service. The outcome alone cannot see that difference: both causes
+# produce a warning, and the runner before this phase reached this one through
+# the wrong door, telling the agent to run `make up` against a daemon that is
+# down. That the runner also does not RE-RESOLVE on a dead daemon (FR-008) is
+# not visible from a message at all, and is counted in `daemon-not-re-resolved`.
 
 CASE_DESC="the Docker daemon becomes unreachable with a container already cached"
 CASE_EXPECT="warning"
@@ -56,5 +63,8 @@ RT
 
   printf 'clean again\n' >>"$PROJECT_DIR/app.txt"
   run_hook "$PROJECT_DIR/app.txt"
-  expect_outcome "$CASE_EXPECT"
+  expect_outcome "$CASE_EXPECT" || return 1
+  expect_stderr reject 'has no running container' 'a stopped service blamed for a dead daemon' || return 1
+  expect_stderr want 'Docker could not be reached' 'the daemon named as the cause' || return 1
+  return 0
 }
