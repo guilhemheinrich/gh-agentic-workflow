@@ -22,6 +22,8 @@
 #   VALIDATE_BUDGET_S=3     Hard wall-clock cap per command. Default 3.
 #   VALIDATE_MAX_RETRIES=3  Consecutive rejections on one file before muting it.
 #   VALIDATE_MUTE_TTL_S=900 How long a muted file stays muted. Default 900.
+#   VALIDATE_WARN_TTL_S=900 How long a once-per-session warning stays suppressed
+#                           when the host sends no session id. Default 900.
 #   VALIDATE_WORKTREE=auto  auto|skip|run — behaviour inside a linked worktree.
 #   VALIDATE_HOST           claude|cursor — force the response shape (else sniffed).
 #   VALIDATE_DEBUG=1        Verbose trace to stderr and the log file.
@@ -42,6 +44,7 @@ VALIDATE_ON_EDIT="${VALIDATE_ON_EDIT:-1}"
 VALIDATE_BUDGET_S="${VALIDATE_BUDGET_S:-3}"
 VALIDATE_MAX_RETRIES="${VALIDATE_MAX_RETRIES:-3}"
 VALIDATE_MUTE_TTL_S="${VALIDATE_MUTE_TTL_S:-900}"
+VALIDATE_WARN_TTL_S="${VALIDATE_WARN_TTL_S:-900}"
 VALIDATE_WORKTREE="${VALIDATE_WORKTREE:-auto}"
 VALIDATE_DEBUG="${VALIDATE_DEBUG:-0}"
 
@@ -164,6 +167,12 @@ emit_feedback() {
 }
 
 # ── State (bash 3.2 compatible: files, not associative arrays) ────────────────
+#
+# The host's session id, when the payload carries one. Claude sends `session_id`
+# on every PostToolUse event; a host that sends none leaves this empty and the
+# warning sentinels fall back to their time to live (see warn_once).
+_SESSION_ID=""
+
 state_key() { printf '%s' "$1" | cksum | tr -d ' \n'; }
 
 state_init() {
@@ -172,12 +181,31 @@ state_init() {
 }
 
 # Warn the agent about a given condition at most once per session.
+#
+# "Per session" is not the same thing as "per project root", and keying it on
+# the root alone — as this did — means once for the lifetime of $TMPDIR. A
+# daemon outage on Monday then suppresses a genuine one on Wednesday, after
+# Docker recovered and broke again: WARNING stays empty and the hook exits in
+# silence, which the agent cannot tell from a clean file.
+#
+# Two scopes, both needed, because neither covers the other:
+#   1. the host's own session id, when it sends one ($_SESSION_ID, taken from
+#      the hook payload). Two sessions running side by side then hold separate
+#      sentinels, which is what "once per session" says.
+#   2. a time to live, for hosts that send no session id — the same mechanism
+#      the retry brake already uses (`muted`). An expired sentinel is replaced,
+#      not re-read, so the next outage warns again.
+#
 # NOTE: `id` must be assigned before it is used — a single `local a=1 b="$a"`
 # expands every word before the assignments happen, so $a would be unbound.
 warn_once() {
-  local id="$1" msg="$2"
-  local sentinel="$STATE_DIR/warn-$(state_key "$id")"
-  [[ -f "$sentinel" ]] && { log "warn suppressed: $id"; return 1; }
+  local id="$1" msg="$2" age=""
+  local sentinel="$STATE_DIR/warn-$(state_key "${_SESSION_ID}|$id")"
+  if [[ -f "$sentinel" ]]; then
+    age="$(file_age_s "$sentinel")" || age=0
+    if (( age <= VALIDATE_WARN_TTL_S )); then log "warn suppressed: $id"; return 1; fi
+    log "warn sentinel expired after ${age}s: $id"
+  fi
   : >"$sentinel"
   WARNING="$msg"
   return 0
@@ -212,12 +240,35 @@ remaining_budget() {
 # container. with_budget runs inside a command substitution, so the sentinel is
 # a file the caller can read afterwards, not a variable.
 #
-# HONEST LIMIT: on the branch that delegates to an external `timeout`, the
-# utility's own 124 and a validator's 124 are indistinguishable — timeout
-# reports nothing of its own. That ambiguity is pre-existing; the sentinel is
-# synthesised there so the outcome stays the safe one (a warning, not a
-# violation attributed to the edited file), and it is exact on the watchdog
-# branch, where the runner itself did the killing.
+# On the branch that delegates to an external `timeout`, the utility's own 124
+# and a validator's own 124 carry the same status — timeout reports nothing of
+# its own — so the STATUS cannot separate them and a second piece of evidence is
+# needed. It is the elapsed time, and it was measured rather than assumed
+# (2026-09-17, GNU coreutils 9.11 `timeout`, Docker 29.4.0 via OrbStack):
+#
+#   timeout 3 sleep 30                          rc 124, elapsed 3.009 s
+#   timeout 1 sleep 30                          rc 124, elapsed 1.009 s
+#   timeout 3 sh -c 'exit 124'                  rc 124, elapsed 0.014 s
+#   timeout 3 docker exec … 'printf …; exit 124' rc 124, elapsed 0.058 s
+#   timeout 3 docker exec … 'sleep 30'          rc 124, elapsed 3.011 s
+#   timeout 2 docker exec … 'sleep 1.8; exit 124' rc 124, elapsed 1.850 s
+#
+# A child killed at the boundary returns AT the boundary — every measured kill
+# overshot the limit by 9 to 11 ms and none undershot it. A child that chose 124
+# returns whenever it finished. So the budget flag is raised only when the
+# elapsed time reached the limit, and a validator that printed a finding and
+# exited 124 keeps that finding instead of being reported as "was killed".
+#
+# `date +%s` is NOT the instrument: it is second-resolution, and the 0.058 s run
+# above straddled a second boundary and measured as 1. The bash `time` keyword
+# with TIMEFORMAT='%3R' gives milliseconds, is a bash 3.2 builtin, and needs no
+# external clock. Its decimal separator follows the locale, so the value is read
+# by keeping the digits and dropping everything else — '3.009' and '3,009' both
+# become 3009 ms, because %3R always prints exactly three decimals.
+#
+# HONEST LIMIT, narrowed but not closed: a validator that chooses 124 within the
+# last few milliseconds of the budget is still read as a kill. The remaining
+# window is the measurement's own overshoot, not the whole budget.
 _BUDGET_FLAG=""
 
 # The sentinel carries WHICH of the two budget outcomes happened, because the
@@ -255,9 +306,31 @@ with_budget() {
   }
 
   if [[ -n "$TIMEOUT_BIN" ]]; then
-    "$TIMEOUT_BIN" "$left" "$@" >"$BUDGET_OUT" 2>&1
-    local trc=$?
-    (( trc == 124 )) && budget_flag_raise
+    # The timing file is this call's own and is unlinked before returning on
+    # every branch, so it cannot survive the edit (FR-023).
+    local tf="${BUDGET_OUT}.elapsed" trc=0 ms=""
+    local TIMEFORMAT='%3R'
+    { time "$TIMEOUT_BIN" "$left" "$@" >"$BUDGET_OUT" 2>&1 ; } 2>"$tf"
+    trc=$?
+    ms="$(tr -cd '0-9' <"$tf" 2>/dev/null)"
+    rm -f "$tf" 2>/dev/null || true
+    if (( trc == 124 )); then
+      # No reading at all: fall back to the safe side, which is what this branch
+      # did unconditionally before.
+      if [[ -z "$ms" ]]; then
+        log "the elapsed time could not be read — treating exit 124 as a kill"
+        budget_flag_raise
+      # `10#` is not decoration: %3R pads to three decimals, so a run under
+      # 100 ms reads as `0048`, and bash takes a leading zero for octal — `((
+      # 0048 ))` is a fatal "value too great for base" on the busiest arm of
+      # this file. Caught by the suite on debian, on one run in eight.
+      elif (( 10#$ms >= left * 1000 )); then
+        log "exit 124 after ${ms}ms of a ${left}s limit — the runner's timeout killed it"
+        budget_flag_raise
+      else
+        log "exit 124 after ${ms}ms of a ${left}s limit — the validator's own code, not a kill"
+      fi
+    fi
     return "$trc"
   fi
 
@@ -273,6 +346,52 @@ with_budget() {
   kill "$timer" 2>/dev/null || true
   wait "$timer" 2>/dev/null || true
   [[ -f "$sentinel" ]] && { rm -f "$sentinel"; budget_flag_raise; return 124; }
+  return "$rc"
+}
+
+# bounded CMD... — run a RESOLUTION command under the edit's remaining budget,
+# pass its stdout on, and return its status, or 124 when the budget ran out.
+#
+# The budget is advertised as a wall-clock cap on the whole edit, and until this
+# existed it covered only the validator: `docker compose config`, `docker
+# compose ls`, `docker ps`, `docker inspect` and the shell probe all ran
+# unbounded, so a Docker endpoint that accepted the connection and then stalled
+# made a 3-second hook wait for the client's own timeout — minutes, on a TCP
+# endpoint — before deciding anything.
+#
+# Deliberately NOT with_budget: that one owns $BUDGET_OUT and the kill sentinel
+# that classify a VALIDATOR run, and a resolution probe borrowing them would
+# overwrite the evidence the current edit is being judged on. Output goes to a
+# file for the same reason with_budget does — killing a direct child does not
+# close a pipe its descendants still hold — and that file is unlinked before
+# returning on every branch (FR-023).
+#
+# With no deadline armed (the --doctor and --dry-run paths, which are human CLI
+# modes and not an edit) the command runs unbounded, as it always did.
+bounded() {
+  local left out rc=0 pid timer sentinel
+  if (( _DEADLINE == 0 )); then "$@"; return $?; fi
+  left="$(remaining_budget)"
+  (( left <= 0 )) && return 124
+  out="$(mktemp "${TMPDIR:-/tmp}/validate-probe-XXXXXX")" || return 125
+
+  if [[ -n "$TIMEOUT_BIN" ]]; then
+    "$TIMEOUT_BIN" "$left" "$@" >"$out" 2>/dev/null
+    rc=$?
+  else
+    "$@" >"$out" 2>/dev/null </dev/null &
+    pid=$!
+    sentinel="$out.killed"
+    ( sleep "$left"; kill -9 "$pid" 2>/dev/null && : >"$sentinel" ) >/dev/null 2>&1 </dev/null &
+    timer=$!
+    wait "$pid" 2>/dev/null || rc=$?
+    kill "$timer" 2>/dev/null || true
+    wait "$timer" 2>/dev/null || true
+    [[ -f "$sentinel" ]] && { rm -f "$sentinel"; rc=124; }
+  fi
+
+  cat "$out"
+  rm -f "$out" 2>/dev/null || true
   return "$rc"
 }
 
@@ -383,7 +502,7 @@ compose_files_present() {
 # inferred). Only a project with containers appears in `docker compose ls`, so
 # an answer here is a bonus over compose_files_present, never a replacement.
 compose_reported_files() {
-  docker compose ls --format json 2>/dev/null \
+  bounded docker compose ls --format json 2>/dev/null \
     | tr '{' '\n' \
     | grep -F "\"Name\":\"$1\"" \
     | sed -n 's/.*"ConfigFiles":"\([^"]*\)".*/\1/p' \
@@ -394,22 +513,81 @@ compose_reported_files() {
 
 compose_union() { printf '%s\n%s\n' "$1" "$2" | grep -v '^[[:space:]]*$' | sort -u; return 0; }
 
-# The fingerprint the name cache is keyed on (plan D5): the Compose files, their
-# modification times, and the Compose-related environment. `.env` is stat'ed too
-# although it is not a Compose file — it carries COMPOSE_PROJECT_NAME, which is
-# one of the four sources, and the plan's list omitted it.
+# The Compose files named by COMPOSE_FILE, absolute, one per line. Compose reads
+# that variable as a LIST separated by COMPOSE_PATH_SEPARATOR (':' unless the
+# consumer says otherwise), and a relative entry is resolved against the project
+# root, which is where compose_resolve runs Compose from.
+compose_declared_files() {
+  local root="${PROJECT_ROOT:-}" sep="${COMPOSE_PATH_SEPARATOR:-:}" f
+  [[ -n "${COMPOSE_FILE:-}" ]] || return 0
+  # `printf '%s\n'`, not '%s': `read` returns non-zero on a last line with no
+  # newline, so the loop would drop the only entry of a single-file list.
+  printf '%s\n' "$COMPOSE_FILE" | tr "$sep" '\n' | while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in
+      /*) printf '%s\n' "$f" ;;
+      *)  printf '%s/%s\n' "${root%/}" "$f" ;;
+    esac
+  done
+  return 0
+}
+
+# The env files Compose will read for variable interpolation: COMPOSE_ENV_FILES
+# when the consumer set it (a comma-separated list, per Compose), otherwise the
+# project `.env`.
+compose_env_files() {
+  local root="${PROJECT_ROOT:-}" f
+  if [[ -n "${COMPOSE_ENV_FILES:-}" ]]; then
+    printf '%s\n' "$COMPOSE_ENV_FILES" | tr ',' '\n' | while IFS= read -r f; do
+      [[ -z "$f" ]] && continue
+      case "$f" in
+        /*) printf '%s\n' "$f" ;;
+        *)  printf '%s/%s\n' "${root%/}" "$f" ;;
+      esac
+    done
+    return 0
+  fi
+  [[ -n "$root" ]] && printf '%s/.env\n' "${root%/}"
+  return 0
+}
+
+# The fingerprint the name cache is keyed on (plan D5): the Compose files and
+# env files by CONTENT, the values of every variable they interpolate, and the
+# Compose-related environment.
+#
+# Two inputs were missing, and each one silently pins a stale project name:
+#
+#   interpolation. A Compose file whose project is `name: ${STACK_NAME}` changes
+#   project when the variable changes, with no file touched at all. So the
+#   variable NAMES referenced by those files are read out of them, and their
+#   values join the fingerprint. Values come from the environment, which is the
+#   only place this process can read them; a value living in an env file is
+#   covered by that file's own content hash instead.
+#
+#   content, not timestamps. COMPOSE_ENV_FILES was recorded by PATH, so a
+#   rewritten env file changed nothing; and mtimes are second-resolution, so a
+#   same-second rewrite — or one that preserves the timestamp, which `cp -p` and
+#   every restore-from-archive does — was invisible. `cksum` reads the bytes.
 compose_fingerprint() {
-  local files="$1" f mt out
+  local files="$1" f h out all v
   out="env|${COMPOSE_PROJECT_NAME:-}|${COMPOSE_FILE:-}|${COMPOSE_PATH_SEPARATOR:-}"
   out="$out|${COMPOSE_PROFILES:-}|${COMPOSE_ENV_FILES:-}|${DOCKER_HOST:-}|${DOCKER_CONTEXT:-}"
+  all="$(compose_union "$files" "$(compose_env_files)")"
   while IFS= read -r f; do
     [[ -z "$f" ]] && continue
-    mt="$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null)" || mt=""
-    out="$out|$f@${mt:-absent}"
+    h=""
+    [[ -r "$f" ]] && h="$(cksum <"$f" | tr -d ' \n')"
+    out="$out|$f#${h:-absent}"
   done <<EOF
-$files
-${PROJECT_ROOT:-}/.env
+$all
 EOF
+  # `$VAR` and `${VAR…}` alike; a name is validated by the pattern that matched
+  # it, and the value is read with printenv rather than through eval.
+  for v in $(printf '%s\n' "$all" | while IFS= read -r f; do
+               [[ -n "$f" && -f "$f" ]] && grep -oE '\$\{?[A-Za-z_][A-Za-z0-9_]*' "$f" 2>/dev/null
+             done | sed 's/^\${*//' | sort -u); do
+    out="$out|$v=$(printenv "$v" 2>/dev/null)"
+  done
   printf '%s' "$out" | cksum | tr -d ' \n'
 }
 
@@ -425,7 +603,15 @@ compose_resolve() {
     return 0
   fi
 
-  local present; present="$(compose_files_present)"
+  # A Compose file the consumer named explicitly counts as much as one sitting
+  # in the project root — more, since COMPOSE_FILE overrides the root file for
+  # Compose itself. Asking only about root files returned the basename before
+  # Compose was ever consulted, so `COMPOSE_FILE=deploy/compose.yml` in a
+  # repository with no root Compose file resolved a project no container carries.
+  local present declared
+  present="$(compose_files_present)"
+  declared="$(compose_declared_files)"
+  present="$(compose_union "$present" "$declared")"
   if [[ -z "$present" ]]; then
     _COMPOSE_NAME="$(compose_name_normalise "$(basename "$root")")"
     _COMPOSE_SOURCE="the directory basename (no Compose file in the project root)"
@@ -448,7 +634,7 @@ compose_resolve() {
   fi
 
   local json="" name=""
-  json="$(cd "$root" 2>/dev/null && docker compose config --format json 2>/dev/null)"
+  json="$(cd "$root" 2>/dev/null && bounded docker compose config --format json 2>/dev/null)"
   [[ -n "$json" ]] && name="$(printf '%s' "$json" | json_top_level_name)"
   name="$(compose_name_normalise "$name")"
 
@@ -506,8 +692,12 @@ compose_files()  { compose_resolve; printf '%s' "${_COMPOSE_FILES:-}"; return 0;
 # theoretical is that the first line alone cannot answer whether the cached id
 # is still among the candidates, which is the question separating "the container
 # was replaced" from "it is alive and the call did not get inside it".
+# Bounded like every other resolution call (FR-010): a Docker endpoint that
+# accepts the connection and then stalls must not make a 3-second hook wait for
+# the client's own timeout. A budget kill surfaces here as 124, which the caller
+# reports as its own cause rather than folding into "the daemon is down".
 lookup_candidates() {
-  docker ps -q \
+  bounded docker ps -q \
     --filter "label=com.docker.compose.project=$(compose_project)" \
     --filter "label=com.docker.compose.service=$1" 2>/dev/null
 }
@@ -589,12 +779,19 @@ path_within() {
 
 # Working directory on line 1, then one `type|source|destination` per mount.
 container_facts() {
-  docker inspect \
+  bounded docker inspect \
     -f '{{.Config.WorkingDir}}{{range .Mounts}}{{"\n"}}{{.Type}}|{{.Source}}|{{.Destination}}{{end}}' \
     "$1" 2>/dev/null
 }
 
 # container_reads_checkout CID HOSTFILE PATH_GIVEN_TO_THE_VALIDATOR
+#
+# Three answers, not two, because "this container serves another checkout" and
+# "the facts could not be read" are different facts about the world and only the
+# first one was established by anything:
+#   0  the container reads this checkout
+#   1  it does not — a refusal the runner PROVED
+#   2  undecided: the inspection itself failed, so nothing was proved either way
 container_reads_checkout() {
   local cid="$1" hostfile="$2" given="$3"
   local facts mounts wd cpath="" line t s d canon_file canon_src
@@ -602,7 +799,7 @@ container_reads_checkout() {
   _IDENTITY_REASON=""
 
   facts="$(container_facts "$cid")"
-  [[ -n "$facts" ]] || { _IDENTITY_REASON="the container could not be inspected"; return 1; }
+  [[ -n "$facts" ]] || { _IDENTITY_REASON="the container could not be inspected"; return 2; }
   wd="$(printf '%s' "$facts" | sed -n '1p')"
   mounts="$(printf '%s' "$facts" | sed -n '2,$p')"
 
@@ -682,40 +879,81 @@ EOF
 # afford. That is the permissive direction, and it is deliberate — refusing on
 # an exhausted budget would turn a slow machine into a stream of checkout-
 # mismatch warnings about containers that are in fact this checkout's.
+#
+# But an acceptance is not a proof, and the two must not be confused ONE FRAME
+# UP, where the caller writes the container id into a cache that survives the
+# edit: the current edit would take the permissive answer it paid nothing for,
+# and every later edit would take the unchecked hot path on a container whose
+# identity was never established. So identity_ok also reports whether it proved
+# anything, in _IDENTITY_PROVED, and only a proof may be cached.
+#
+# The two waivers DO count as decided: a consumer that set VALIDATE_WORKTREE=run
+# or took over compose_project has answered the question itself (FR-015, FR-019),
+# which is a decision, not a skipped check.
+#
+#   return 0 + _IDENTITY_PROVED=1   accepted, and established
+#   return 0 + _IDENTITY_PROVED=0   accepted for this edit only, nothing proved
+#   return 1                        refused, and the refusal was established
+#   return 2                        undecided — the facts could not be read
+_IDENTITY_PROVED=0
+
 identity_ok() {
-  local svc="$1" cid="$2" hostfile=""
-  [[ "$VALIDATE_WORKTREE" == "run" ]] && { log "identity check waived (VALIDATE_WORKTREE=run)"; return 0; }
-  resolver_is_overridden && { log "identity check waived (ROUTING TABLE resolver override)"; return 0; }
-  (( $(remaining_budget) <= 0 )) && return 0
+  local svc="$1" cid="$2" hostfile="" rc=0
+  _IDENTITY_PROVED=0
+  [[ "$VALIDATE_WORKTREE" == "run" ]] && { log "identity check waived (VALIDATE_WORKTREE=run)"; _IDENTITY_PROVED=1; return 0; }
+  resolver_is_overridden && { log "identity check waived (ROUTING TABLE resolver override)"; _IDENTITY_PROVED=1; return 0; }
+  (( $(remaining_budget) <= 0 )) && { log "no budget left to check whether $cid reads this checkout"; return 0; }
   hostfile="${PROJECT_ROOT%/}/$REL"
-  [[ -e "$hostfile" ]] || return 0
-  if container_reads_checkout "$cid" "$hostfile" "${F:-$REL}"; then
-    log "container $cid reads this checkout: $_IDENTITY_REASON"
-    return 0
-  fi
+  [[ -e "$hostfile" ]] || { log "$hostfile is gone — nothing to test $cid against"; return 0; }
+  container_reads_checkout "$cid" "$hostfile" "${F:-$REL}"; rc=$?
+  case "$rc" in
+    0) log "container $cid reads this checkout: $_IDENTITY_REASON"; _IDENTITY_PROVED=1; return 0 ;;
+    2) log "container $cid undecided for '$svc': $_IDENTITY_REASON"; return 2 ;;
+  esac
   log "container $cid rejected for '$svc': $_IDENTITY_REASON"
   return 1
 }
 
-# The first candidate that reads this checkout. Empty when none does.
+# The first candidate that reads this checkout, printed as `<id>|<proved>`.
+# Empty when none does, and the STATUS then says which kind of "none" it was:
+#
+#   0  a candidate was accepted (its proof state is the second field)
+#   1  every candidate was refused, and every refusal was established
+#   2  at least one candidate could not be decided — the daemon answered the
+#      listing and then stopped answering, say. Calling that `foreign` would
+#      tell the agent its container belongs to another checkout, which is a
+#      fact nothing here established.
+#
+# It runs inside a command substitution, so `printf` is the only way a value
+# travels back; the status is the only way a second one does.
 first_acceptable() {
-  local svc="$1" cands="$2" c
+  local svc="$1" cands="$2" c rc=0 undecided=0
   for c in $cands; do
-    identity_ok "$svc" "$c" && { printf '%s' "$c"; return 0; }
+    identity_ok "$svc" "$c"; rc=$?
+    case "$rc" in
+      0) printf '%s|%s' "$c" "$_IDENTITY_PROVED"; return 0 ;;
+      2) undecided=1 ;;
+    esac
   done
+  (( undecided )) && return 2
   return 1
 }
 
 # ── The cause of a failed execution (plan D3) ────────────────────────────────
 #
-# Five named outcomes, and `unclassified` is the exhaustive bucket the spec
+# Six named outcomes, and `unclassified` is the exhaustive bucket the spec
 # demands (FR-006): Docker absent from the PATH and a socket permission refusal
 # land in a named cause instead of falling through to a violation.
 #
-# It read "four" until `foreign` was added with plan D6, which is the drift this
-# comment audit exists to catch: a list that grew and a count that did not.
+# It read "four" until `foreign` was added with plan D6, and "five" until `slow`
+# was added with the resolution budget — which is the drift this comment audit
+# exists to catch: a list that grew and a count that did not.
 #
 #   daemon         the daemon or the client could not be reached at all
+#   slow           Docker was reached and did not answer inside the edit's
+#                  budget. Distinct from `daemon` on purpose: "the daemon is
+#                  down" is a claim about the world, and a stalled endpoint has
+#                  not established it
 #   nocontainer    no running container for this service
 #   foreign        containers are running, and none of them reads THIS checkout
 #                  (plan D6 — the refusal that keeps a shared stack from
@@ -759,6 +997,30 @@ cause_clear() { [[ -n "$_CAUSE_FILE" ]] && rm -f "$_CAUSE_FILE" 2>/dev/null; ret
 # $0 of the wrapper shell is a second per-invocation marker: a shell prefixes
 # its own `exec` diagnostic with $0, so `<argv0>: … not found` proves the
 # SHELL said it, not the validator. Neither marker is a substring of the other.
+#
+# ── TWO RISKS ACCEPTED HERE, NOT DEFENDED AGAINST ────────────────────────────
+#
+# The nonce proves that the WRAPPER printed, not that the validator started, and
+# two things can separate the two:
+#
+#   1. a container shipping a hostile `sh`. One that returns 7 for the probe
+#      above, then prints its fourth argument — the nonce — and exits without
+#      running the validator, is accepted as provenance. Nothing in a wrapper
+#      whose own interpreter is the adversary can close that.
+#   2. a process inside the container reading this invocation's argv (the nonce
+#      is an argument, so `ps` shows it) and printing it on its own account.
+#
+# Both are ACCEPTED. The threat model of this hook is a developer's own stack —
+# containers the developer built and started, running linters the developer
+# chose — and the failure it exists to prevent is an infrastructure error read
+# as a finding about the edited file, not an adversary inside the image. An
+# attacker who controls `sh` in a routed container already controls the
+# validator's output, its exit code, and the file system it reads: the nonce is
+# the last thing that would matter. The same reasoning covers the argv reader.
+#
+# What is NOT accepted, and is why the nonce exists at all, is the accidental
+# version of the same shape: Docker's own error text arriving where a finding
+# was expected. That one happens weekly and is settled by evidence, above.
 _NONCE=""
 _NONCE_ARGV0=""
 _NONCE_SEQ=0
@@ -798,10 +1060,11 @@ probe_shell() {
   f="$(shell_cache "$svc")"
   [[ -f "$f" ]] && return 0
   (( $(remaining_budget) <= 0 )) && return 0   # no time: assume a shell, decide nothing
-  docker exec -i "$cid" sh -c 'exit 7' >/dev/null 2>&1; rc=$?
+  bounded docker exec -i "$cid" sh -c 'exit 7' >/dev/null 2>&1; rc=$?
   # Only 7 can come from a real shell, and only 126/127 prove there is none.
-  # Any other code (1 = daemon trouble) leaves the question open rather than
-  # poisoning the cache with a "no" the next session would inherit.
+  # Any other code (1 = daemon trouble, 124 = the probe outran the budget)
+  # leaves the question open rather than poisoning the cache with a "no" the
+  # next session would inherit.
   case "$rc" in
     7)       printf 'yes' >"$f" 2>/dev/null || true ;;
     126|127) printf 'no'  >"$f" 2>/dev/null || true; log "service '$svc' has no POSIX shell — degraded classification" ;;
@@ -864,22 +1127,34 @@ exec_wrapped() {
 
 # Did this invocation reach inside the container?
 #
-# With a shell, the nonce settles it and nothing else is consulted. Without one
-# (FR-005a) there is no provenance to read, so the weaker rule of
-# classify_degraded is applied here too — Docker's own error wording, with the
-# same 126/127 carve-out, so a tool the image does not carry is not mistaken for
-# a container that is gone. Deliberately the SAME rule in both places: two
-# different weak rules would disagree on the shell-less path.
+# With a shell, the nonce settles it and nothing else is consulted.
+#
+# Without one (FR-005a) there is no provenance to read, and the rule used to be
+# Docker's own error WORDING: text that did not look like a Docker message was
+# taken as proof the validator had spoken. Docker's wording is not a contract.
+# Measured 2026-09-17 on Docker 29.4.0, two failures of the client itself that
+# match no known signature:
+#
+#   DOCKER_HOST=unix://<138 bytes>   Failed to initialize: unix socket path "…" is too long
+#   an older client against this daemon   error during connect: …
+#
+# Both reached `classify_degraded`, which then handed Docker's own sentence to
+# the agent as a finding about the edited file — the exact defect this feature
+# exists to remove, walked back in through the degraded door.
+#
+# So the shell-less path no longer answers this question from text at all: with
+# no provenance and a non-zero status, it says "not established" and lets
+# exec_in ask Docker what STATE the service is in — the same probe it already
+# runs for the shell-ful path, which costs one `docker ps` and does not depend
+# on any wording. The text rule survives exactly one frame further down
+# (classify_degraded), as the LAST resort, for the case the state probe cannot
+# settle: the container is alive, reachable, and the call still failed.
 exec_reached_inside() {
   local svc="$1" rc="$2" out=""
   (( rc == 0 )) && return 0
+  svc_has_shell "$svc" || return 1
   [[ -n "$BUDGET_OUT" && -f "$BUDGET_OUT" ]] && out="$(cat "$BUDGET_OUT" 2>/dev/null)"
-  if svc_has_shell "$svc"; then
-    case "$out" in *"$_NONCE"*) return 0 ;; esac
-    return 1
-  fi
-  is_docker_error "$out" || return 0
-  (( rc == 126 || rc == 127 )) && return 0
+  case "$out" in *"$_NONCE"*) return 0 ;; esac
   return 1
 }
 
@@ -930,11 +1205,79 @@ exec_reached_inside() {
 # ROUTING TABLE branch that formats before it validates runs `fix` first, and
 # `fix` discards its result by design; with the recovery in `check` that branch
 # left a dead identifier cached for the validator that follows it.
+# ── The container cache, keyed by SERVICE AND PROJECT ────────────────────────
+#
+# A cached id used to be read back on the strength of the service name alone,
+# which quietly made the cache outrank the resolution that produced it: change
+# the Compose file's `name:`, or the exported COMPOSE_PROJECT_NAME, and every
+# later edit still executed in the OLD project's container. The Compose
+# fingerprint guards the NAME; nothing guarded the container that name produced.
+# So the project is stored beside the id and compared on every read.
+#
+# `compose_project` costs no Docker call on the hot path: the exported variable
+# short-circuits it, and otherwise the name cache answers from file contents
+# alone. Compose is asked again only when the fingerprint moved, which is
+# exactly when the answer may have changed.
+#
+# Dropping an id also drops the shell answer probed for it (FR-005a). They are
+# facts about ONE container, not about the service: a shell-less replacement
+# inheriting `shell=yes` gets wrapped in a `sh -c` it cannot run, so its working
+# validator is never attempted again — a permanent silence, one probe away.
+cid_cache_file() { printf '%s/cid-%s' "$STATE_DIR" "$1"; }
+
+cid_cache_drop() { rm -f "$(cid_cache_file "$1")" "$(shell_cache "$1")" 2>/dev/null || true; return 0; }
+
+cid_cache_write() {
+  printf '%s\n%s\n' "$(compose_project)" "$2" >"$(cid_cache_file "$1")" 2>/dev/null || true
+  return 0
+}
+
+cid_cache_read() {
+  local svc="$1" f proj id now
+  f="$(cid_cache_file "$svc")"
+  [[ -f "$f" ]] || return 1
+  proj="$(sed -n '1p' "$f" 2>/dev/null)"
+  id="$(sed -n '2p' "$f" 2>/dev/null)"
+  # A one-line file is an older runner's cache, written before the project was
+  # recorded: unverifiable, so it is dropped rather than trusted.
+  [[ -n "$id" ]] || { cid_cache_drop "$svc"; return 1; }
+  now="$(compose_project)"
+  if [[ "$proj" != "$now" ]]; then
+    log "the cached container for '$svc' was resolved under project '$proj', now '$now' — dropping it"
+    cid_cache_drop "$svc"
+    return 1
+  fi
+  printf '%s' "$id"
+  return 0
+}
+
+# The tail shared by every path where the wrapper returned non-zero, no
+# provenance came back, and Docker's own listing has just shown the container
+# alive and reachable.
+#
+# With a shell, that combination is an infrastructure verdict: the nonce says
+# the call did not get inside, and what came back is not the validator's.
+# Without one, no provenance can exist (FR-005a) and the state probe has said
+# everything it can, so the output is handed to check() for the weaker,
+# LAST-RESORT text rule of classify_degraded — which is the only place Docker's
+# wording is still consulted.
+finish_unproved() {
+  local svc="$1" rc="$2"
+  if svc_has_shell "$svc"; then
+    budget_out_discard
+    cause_set unclassified
+    return 125
+  fi
+  log "degraded: '$svc' has no POSIX shell and its container is alive — classifying by its output"
+  drain_budget_out
+  return "$rc"
+}
+
 exec_in() {
   local svc="$1"; shift
-  local cache="$STATE_DIR/cid-$svc" cid="" rc=0 cands="" prc=0
+  local cid="" rc=0 cands="" prc=0 sel="" proved=0 frc=0
 
-  [[ -f "$cache" ]] && cid="$(cat "$cache" 2>/dev/null)"
+  cid="$(cid_cache_read "$svc")" || cid=""
 
   # Hot path: one `docker exec` on the cached container id, no lookup at all.
   if [[ -n "$cid" ]]; then
@@ -945,61 +1288,94 @@ exec_in() {
     budget_was_killed && { drain_budget_out; return "$rc"; }
     exec_reached_inside "$svc" "$rc" && { drain_budget_out; return "$rc"; }
 
-    # Nothing ran. Docker's text is dropped here rather than carried further.
-    budget_out_discard
+    # Nothing is known yet. The output stays on disk until the cause is decided:
+    # every branch below either drains it to the agent or discards it, and the
+    # one branch that keeps it is the shell-less one, where it is all there is.
     if (( $(remaining_budget) <= 0 )); then
       # No time for the probe. FR-010: not validated, cause unknown — never a
       # guess, and never a violation.
       log "no budget left to establish why '$svc' did not run"
+      budget_out_discard
       cause_set unclassified
       return 125
     fi
 
     # ONE label-filtered `docker ps`, read as a SET and consumed whole (plan D3).
     cands="$(lookup_candidates "$svc")"; prc=$?
+    if (( prc == 124 )); then
+      log "docker ps for '$svc' outran the edit's budget"
+      budget_out_discard
+      cause_set slow
+      return 125
+    fi
     if (( prc != 0 )); then
       # FR-008: a re-resolution would ask the same unreachable daemon, so it is
       # not attempted. This is the only place that decision is taken.
       log "docker ps failed for '$svc' — daemon unreachable or client refused"
+      budget_out_discard
       cause_set daemon
       return 125
     fi
     if [[ -z "${cands//[$'\t\n\r ']/}" ]]; then
       log "no running container for '$svc' — dropping the cached id"
-      rm -f "$cache" 2>/dev/null || true
+      cid_cache_drop "$svc"
+      budget_out_discard
       cause_set nocontainer
       return 125
     fi
     if cands_contain "$cands" "$cid"; then
-      log "container $cid for '$svc' is running, yet the call did not reach inside it"
-      cause_set unclassified
-      return 125
+      finish_unproved "$svc" "$rc"
+      return $?
     fi
 
     # The container was replaced, possibly among several on a scaled service.
     # Take the first candidate that reads THIS checkout (plan D6) and retry
     # exactly once.
-    cid="$(first_acceptable "$svc" "$cands")"
+    sel="$(first_acceptable "$svc" "$cands")"; frc=$?
+    cid="${sel%%|*}"; proved="${sel##*|}"
     if [[ -z "$cid" ]]; then
-      log "the replacement container(s) for '$svc' do not read this checkout"
-      rm -f "$cache" 2>/dev/null || true
-      cause_set foreign
+      cid_cache_drop "$svc"
+      budget_out_discard
+      if (( frc == 2 )); then
+        log "the replacement container(s) for '$svc' could not be inspected"
+        cause_set unclassified
+      else
+        log "the replacement container(s) for '$svc' do not read this checkout"
+        cause_set foreign
+      fi
       return 125
     fi
-    printf '%s' "$cid" >"$cache" 2>/dev/null || true
-    rm -f "$(shell_cache "$svc")" 2>/dev/null || true
+    # Only a PROVED identity is written down: a check skipped for want of budget
+    # buys this edit a container, never the next edit's hot path.
+    cid_cache_drop "$svc"
+    if [[ "$proved" == "1" ]]; then cid_cache_write "$svc" "$cid"
+    else log "container $cid used for '$svc' without a proof of identity — not cached"; fi
     log "container for '$svc' was replaced — retrying once on $cid"
     probe_shell "$svc" "$cid"
     exec_wrapped "$svc" "$cid" "$@"; rc=$?
     budget_was_killed && { drain_budget_out; return "$rc"; }
     exec_reached_inside "$svc" "$rc" && { drain_budget_out; return "$rc"; }
-    budget_out_discard
     log "the replacement container for '$svc' did not run the validator either"
-    cause_set unclassified
+    finish_unproved "$svc" "$rc"
+    return $?
+  fi
+
+  # Nothing has been invoked yet on this path, so an exhausted budget is the
+  # `unspent` sentence and not the `slow` one: Docker was never asked, and
+  # saying it did not answer would assert a cause nothing established (FR-022).
+  # check() reads the sentinel before it reads any cause.
+  if (( $(remaining_budget) <= 0 )); then
+    log "the edit's budget was spent before '$svc' could be resolved"
+    budget_flag_raise unspent
     return 125
   fi
 
   cands="$(lookup_candidates "$svc")"; prc=$?
+  if (( prc == 124 )); then
+    log "docker ps for '$svc' outran the edit's budget"
+    cause_set slow
+    return 125
+  fi
   if (( prc != 0 )); then
     log "docker ps failed for '$svc' — daemon unreachable or client refused"
     cause_set daemon
@@ -1007,21 +1383,27 @@ exec_in() {
   fi
   [[ -z "${cands//[$'\t\n\r ']/}" ]] && { log "no running container for '$svc'"; cause_set nocontainer; return 125; }
   # plan D6: only a container that reads THIS checkout is cached and used.
-  cid="$(first_acceptable "$svc" "$cands")"
+  sel="$(first_acceptable "$svc" "$cands")"; frc=$?
+  cid="${sel%%|*}"; proved="${sel##*|}"
   if [[ -z "$cid" ]]; then
-    log "no candidate container for '$svc' reads this checkout"
-    cause_set foreign
+    if (( frc == 2 )); then
+      log "no candidate container for '$svc' could be inspected"
+      cause_set unclassified
+    else
+      log "no candidate container for '$svc' reads this checkout"
+      cause_set foreign
+    fi
     return 125
   fi
-  printf '%s' "$cid" >"$cache" 2>/dev/null || true
+  if [[ "$proved" == "1" ]]; then cid_cache_write "$svc" "$cid"
+  else log "container $cid used for '$svc' without a proof of identity — not cached"; fi
   probe_shell "$svc" "$cid"
 
   exec_wrapped "$svc" "$cid" "$@"; rc=$?
   budget_was_killed && { drain_budget_out; return "$rc"; }
   exec_reached_inside "$svc" "$rc" && { drain_budget_out; return "$rc"; }
-  budget_out_discard
-  cause_set unclassified
-  return 125
+  finish_unproved "$svc" "$rc"
+  return $?
 }
 
 # ── Routing verbs — the vocabulary the ROUTING TABLE is written in ───────────
@@ -1135,9 +1517,14 @@ is_shell_exec_diagnostic() {
   return 1
 }
 
-# Docker's own failure wording. Used ONLY on the shell-less fallback path, where
-# no provenance can exist: it is exactly the text-matching rule FR-001 forbids
-# as a primary test, which is why nothing else consults it.
+# Docker's own failure wording. The LAST resort on the shell-less path, reached
+# only after the state probe has said the container is alive and reachable: it
+# is exactly the text-matching rule FR-001 forbids as a primary test, which is
+# why nothing else consults it and why the probe now runs first. This list is
+# knowingly incomplete — `Failed to initialize: unix socket path … is too long`
+# and `error during connect …` are two measured members it does not carry — and
+# that is survivable ONLY because a wording it does not recognise now reaches
+# here with the container already shown alive.
 is_docker_error() {
   case "$1" in
     *"Error response from daemon:"*) return 0 ;;
@@ -1202,6 +1589,18 @@ warn_cause() {
 down, the client is not on the PATH, or the socket refused it — no service is at
 fault, and the runner did not try to resolve a container, because resolution
 asks the same Docker. This is reported once for the whole session." || true
+      ;;
+    slow)
+      # Its own key, and session-wide like `daemon`: a stalled endpoint is not a
+      # property of any one service either. It is NOT `daemon`, because nothing
+      # here established that the daemon is down — only that it did not answer
+      # in time, which a loaded machine and a cold VM also produce.
+      warn_once "slow" \
+        "[validate] Docker did not answer inside the ${VALIDATE_BUDGET_S}s budget for this edit, so
+$REL was not validated. The runner stopped waiting rather than let an on-edit
+hook stall: a loaded machine, a cold daemon or a remote endpoint all look the
+same from here. Raise VALIDATE_BUDGET_S if this recurs. Reported once for the
+whole session." || true
       ;;
     nocontainer)
       warn_once "nocontainer-$_SVC" \
@@ -1580,6 +1979,11 @@ PAYLOAD="$(cat)"
 [[ -z "${PAYLOAD//[$'\t\n\r ']/}" ]] && exit 0
 
 HOST="$(detect_host "$PAYLOAD")"
+# Read before state_init, because it keys the warning sentinels: "once per
+# session" is a lie when the key is the project root and the state lives in
+# $TMPDIR for days (see warn_once). A host that sends no session id falls back
+# to the sentinel's time to live.
+_SESSION_ID="$(extract_json_string "$PAYLOAD" "session_id")"
 FILE_PATH="$(resolve_file_path "$PAYLOAD")"
 [[ -z "$FILE_PATH" ]] && silent "no file path in payload"
 

@@ -148,17 +148,27 @@ status-only-check
 tool-absent-from-container
 leading-dash-tool-name
 validator-chooses-127
+validator-chooses-124
+validator-killed-by-the-budget
 shell-less-container
+shell-less-unknown-docker-wording
+shell-answer-dropped-with-the-container
 stack-recreated-recovers
 scaled-service-two-containers
 format-then-validate-shares-recovery
 daemon-not-re-resolved
 daemon-outage-then-missing-container
+warning-is-scoped-to-the-session
 budget-exhausted-before-the-call
+slow-docker-stays-inside-the-budget
 container-alive-but-unreachable
+identity-inspection-fails-is-not-foreign
+diagnostic-must-not-cache-an-unproved-container
 compose-file-declares-the-name
+compose-file-variable-points-elsewhere
 dotenv-declares-the-name
 declared-name-with-uppercase-and-dots
+interpolated-name-changes-the-project
 nested-name-serialised-first
 volume-shadows-the-checkout
 worktree-shares-the-main-stack
@@ -214,13 +224,19 @@ write_routing_table() {
 # run_hook <absolute-file-path>
 # Invokes the runner copy the way a PostToolUse hook does: the JSON payload on
 # stdin, cwd at the project root, stdin not a tty. Sets RUN_RC, RUN_STDERR,
-# RUN_STDOUT and RUN_OUTCOME.
+# RUN_STDOUT, RUN_OUTCOME and RUN_ELAPSED.
+#
+# The payload carries a `session_id`, as both hosts' real events do. It is
+# constant within a case unless the case changes VOE_SESSION_ID: "warn once per
+# session" is a claim about two different sessions, and a suite that never sends
+# a second one cannot see the difference between a session and a machine.
 run_hook() {
-  local file="$1" payload=""
+  local file="$1" payload="" t0 t1
   RUN_N=$(( ${RUN_N:-0} + 1 ))
   local errf="$CASE_DIR/stderr.$RUN_N" outf="$CASE_DIR/stdout.$RUN_N"
 
   payload="{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Edit\","
+  payload="$payload\"session_id\":\"${VOE_SESSION_ID:-voe-session-$CASE_INDEX}\","
   payload="$payload\"tool_input\":{\"file_path\":\"$file\"},\"tool_response\":{}}"
 
   # Every case but one pins the project through the exported variable, which is
@@ -232,6 +248,14 @@ run_hook() {
   local cpn="COMPOSE_PROJECT_NAME=$PROJECT_NAME"
   [ "${VOE_NO_CPN:-0}" = "1" ] && cpn="VOE_CPN_NOT_EXPORTED=1"
 
+  # COMPOSE_FILE is unset for every case (above) and re-set only for the one
+  # that exercises it, so a developer's own value cannot reach the runner.
+  # VOE_EXTRA_ENV carries `NAME=value` words a case needs Compose to interpolate;
+  # it is deliberately unquoted below so each word becomes one env assignment.
+  local cfile="VOE_COMPOSE_FILE_NOT_SET=1"
+  [ -n "${VOE_COMPOSE_FILE:-}" ] && cfile="COMPOSE_FILE=$VOE_COMPOSE_FILE"
+
+  t0="$(date +%s)"
   (
     cd "$PROJECT_DIR" || exit 90
     printf '%s' "$payload" | env \
@@ -243,16 +267,21 @@ run_hook() {
       VALIDATE_DEBUG=0 \
       VALIDATE_WORKTREE="${VOE_WORKTREE:-auto}" \
       "$cpn" \
+      "$cfile" \
+      ${VOE_EXTRA_ENV:-} \
       PATH="${VOE_PATH_PREFIX:+$VOE_PATH_PREFIX:}$PATH" \
       VOE_DOCKER_LOG="${VOE_DOCKER_LOG:-}" \
       ${VOE_DOCKER_HOST:+DOCKER_HOST="$VOE_DOCKER_HOST"} \
       bash "$RUNNER_COPY"
   ) >"$outf" 2>"$errf"
   RUN_RC=$?
+  t1="$(date +%s)"
+  RUN_ELAPSED=$(( t1 - t0 ))
   RUN_STDERR="$(cat "$errf")"
   RUN_STDOUT="$(cat "$outf")"
   RUN_OUTCOME="$(classify_outcome "$RUN_RC" "$errf" "$outf")"
-  printf '    run %s: rc=%s outcome=%s\n' "$RUN_N" "$RUN_RC" "$RUN_OUTCOME" >&2
+  printf '    run %s: rc=%s outcome=%s elapsed=%ss\n' \
+    "$RUN_N" "$RUN_RC" "$RUN_OUTCOME" "$RUN_ELAPSED" >&2
   return 0
 }
 
@@ -324,19 +353,39 @@ expect_stderr() {
   return 1
 }
 
-# expect_no_stray_temp_files — FR-023. The runner's budget wrapper writes its
-# temporary output under $TMPDIR, which is this case's own directory, so a file
-# it failed to unlink is visible from outside without knowing anything about the
-# runner's internals.
+# expect_no_stray_temp_files — FR-023. The runner writes its temporary files
+# under $TMPDIR, which is this case's own directory, so one it failed to unlink
+# is visible from outside without knowing anything about the runner's internals.
+# Two families: `validate-out-*` from the budget wrapper around a VALIDATOR (and
+# `validate-out-*.elapsed`, its timing file), `validate-probe-*` from the
+# bounded wrapper around a RESOLUTION call.
 expect_no_stray_temp_files() {
   local strays
   voe_assert_tick
-  strays="$(ls "$CASE_TMPDIR"/validate-out-* 2>/dev/null | wc -l | tr -d ' ')"
+  strays="$(ls "$CASE_TMPDIR"/validate-out-* "$CASE_TMPDIR"/validate-probe-* 2>/dev/null | wc -l | tr -d ' ')"
   [ "$strays" = "0" ] && return 0
   CASE_VERDICT="FAIL"
-  printf '    %s temporary output file(s) left behind in %s:\n' "$strays" "$CASE_TMPDIR" >&2
-  ls -l "$CASE_TMPDIR"/validate-out-* 2>/dev/null | sed 's/^/      | /' >&2
+  printf '    %s temporary file(s) left behind in %s:\n' "$strays" "$CASE_TMPDIR" >&2
+  ls -l "$CASE_TMPDIR"/validate-out-* "$CASE_TMPDIR"/validate-probe-* 2>/dev/null | sed 's/^/      | /' >&2
   printf '%s' "unexpected:stray-temp-file" >"$CASE_DIR/observed"
+  return 1
+}
+
+# expect_elapsed_under <seconds> — the last run_hook returned inside this many
+# wall-clock seconds.
+#
+# The only assertion in the suite about TIME rather than about a message, and it
+# exists because one requirement is about time: the budget is advertised as a
+# cap on the whole edit, and a resolution call outside it turns a 3-second hook
+# into a wait for the Docker client's own timeout. A message cannot show that;
+# the clock can.
+expect_elapsed_under() {
+  local limit="$1"
+  voe_assert_tick
+  [ "${RUN_ELAPSED:-999}" -lt "$limit" ] && return 0
+  CASE_VERDICT="FAIL"
+  printf '    the edit took %ss, expected under %ss\n' "${RUN_ELAPSED:-?}" "$limit" >&2
+  printf '%s' "unexpected:elapsed-$RUN_ELAPSED" >"$CASE_DIR/observed"
   return 1
 }
 
@@ -345,13 +394,26 @@ expect_no_stray_temp_files() {
 # VOE_PATH_PREFIX and VOE_DOCKER_LOG at it, so the next run_hook counts every
 # Docker invocation the runner makes. The shim logs the subcommand and then
 # execs the real binary, so behaviour is unchanged — it only counts.
-voe_docker_shim() {
-  local logf="$1" dir="$CASE_DIR/shim"
+voe_docker_shim() { voe_docker_shim_with "$1" ''; }
+
+# voe_docker_shim_with <log-file> <fault-script>
+# As voe_docker_shim, plus a `sh` fragment placed between the logging and the
+# exec, with the runner's own arguments in "$@". A case uses it to break ONE
+# Docker subcommand while the rest keeps working — which is the only way to
+# reach, from outside, the states where Docker answers one question and not the
+# next one: a listing that succeeds and an inspection that then fails, or an
+# endpoint that accepts the connection and stalls.
+#
+# It is a fault injector, not a mock: everything the fragment does not intercept
+# reaches the real binary untouched.
+voe_docker_shim_with() {
+  local logf="$1" fault="$2" dir="$CASE_DIR/shim"
   mkdir -p "$dir" || return 1
   : >"$logf"
   {
     printf '#!/bin/sh\n'
     printf 'printf "%%s\\n" "$*" >> "$VOE_DOCKER_LOG" 2>/dev/null\n'
+    [ -n "$fault" ] && printf '%s\n' "$fault"
     printf 'exec %s "$@"\n' "$VOE_DOCKER_BIN"
   } >"$dir/docker" || return 1
   chmod +x "$dir/docker" || return 1
@@ -389,6 +451,10 @@ run_one_case() {
   VOE_BUDGET_S=""
   VOE_NO_CPN=0
   VOE_WORKTREE=""
+  VOE_COMPOSE_FILE=""
+  VOE_EXTRA_ENV=""
+  VOE_SESSION_ID="voe-session-$CASE_INDEX"
+  RUN_ELAPSED=0
   CASE_VERDICT="FAIL"
 
   printf '  %-44s [%s]\n' "$name" "$VOE_IMAGE" >&2

@@ -51,8 +51,8 @@ CASE_EXPECT="mutant-caught"
 
 # The exact line that is deleted, and what replaces it. Leading indentation is
 # part of both, so a coincidental match elsewhere in the file cannot be hit.
-MUT_SITE='    case "$out" in *"$_NONCE"*) return 0 ;; esac'
-MUT_REPL='    : # MUTANT: provenance deleted — every failed exec reads as infrastructure'
+MUT_SITE='  case "$out" in *"$_NONCE"*) return 0 ;; esac'
+MUT_REPL='  : # MUTANT: provenance deleted — every failed exec reads as infrastructure'
 
 # The guard cases replayed against the mutant. Both pass against the real runner
 # in this same matrix; both must fail against the mutant.
