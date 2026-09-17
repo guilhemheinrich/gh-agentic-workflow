@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+# skills/static-validation-hooks/tests/run.sh
+#
+# Black-box driver for templates/validate-on-edit.sh.
+#
+# Each case: copy the runner to a temp directory, substitute a case-specific
+# routing table between the BEGIN/END ROUTING TABLE markers, invoke the copy the
+# way a hook invokes it (JSON payload on stdin, not a tty), capture the exit
+# status and stderr, and assert the agent-visible outcome.
+#
+# ── The observability mapping, derived from the runner ───────────────────────
+#
+# Line numbers are against templates/validate-on-edit.sh at 7ffd01d, the
+# unmodified runner this suite was written against.
+#
+# The runner has exactly one agent-facing exit, `emit_feedback` (:151-159). With
+# VALIDATE_HOST=claude it writes the message to stderr and exits 2 (:153-156);
+# with cursor it writes JSON to stdout and exits 0 (:157-158). Everything else
+# exits 0 with nothing on stderr (`silent` :55, the tail :598-600).
+#
+# The suite drives the claude shape, because it is the one that separates
+# "something to say" from "nothing to say" through the exit status alone.
+#
+#   silence    exit 0, stderr empty
+#              — no violation and no warning reached emit_feedback (:598-600)
+#
+#   violation  exit 2, first stderr line: "[validate] <path> — <tool> (exit N)"
+#              — the only place that shape is produced is :343-345, the
+#                assignment of _VIOLATION, emitted at :595
+#
+#   warning    exit 2, first stderr line starts "[validate] " but is NOT the
+#              violation shape
+#              — every warn_once message (:324, :331, :337, :478) opens that way
+#                and none of them carries "— <tool> (exit N)"; WARNING is
+#                emitted at :599
+#
+# HONEST LIMITATION, and a finding about the runner rather than about the suite:
+# a violation and a warning are NOT distinguishable by exit status. Both are
+# exit 2 with text on stderr, because emit_feedback is shared (:151-159). The
+# only outside discriminator is the shape of the first line. So the suite reads
+# the text — but it reads it as an ATTRIBUTION marker ("this file, this tool,
+# this exit code"), never as a classification: it does not know, and must never
+# know, which exit codes or which messages the runner considers infrastructure.
+# That is the whole point of plan D8. `--check` (:502-512) does separate the two
+# by exit status (1 vs 0), but that is a human CLI path, not the path an agent
+# sees, so the suite does not assert against it.
+#
+# Anything else — a non-zero exit that is not 2, stderr on an exit 0, an exit 2
+# whose first line is not the runner's own prefix — is reported as
+# `unexpected:<detail>` and fails the case. The suite never guesses.
+#
+# ── Usage ────────────────────────────────────────────────────────────────────
+#   bash run.sh                 run every case, stop at the first failure
+#   bash run.sh --all           run every case, report all failures
+#   bash run.sh --case NAME     run one case
+#   bash run.sh --list          list case names
+# Exits non-zero if any case failed.
+#
+# Requirements: Docker, and the image in $VOE_IMAGE (default alpine:3.20).
+# No project stack. bash 3.2 compatible.
+
+set -o pipefail
+
+TESTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+SKILL_DIR="$(cd "$TESTS_DIR/.." && pwd)"
+RUNNER_SRC="${VOE_RUNNER:-$SKILL_DIR/templates/validate-on-edit.sh}"
+
+[ -f "$RUNNER_SRC" ] || { printf 'run.sh: runner not found: %s\n' "$RUNNER_SRC" >&2; exit 1; }
+
+VOE_SESSION="$$"
+VOE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/voe-test-$VOE_SESSION-XXXXXX")" || exit 1
+VOE_REGISTRY="$VOE_ROOT/containers.registry"
+: >"$VOE_REGISTRY"
+export VOE_REGISTRY
+
+. "$TESTS_DIR/fixtures/container.sh"
+
+VOE_KEEP="${VOE_KEEP:-0}"
+
+cleanup() {
+  voe_teardown_all
+  if [ "$VOE_KEEP" = "1" ]; then
+    printf 'run.sh: sandbox kept at %s\n' "$VOE_ROOT" >&2
+  else
+    rm -rf "$VOE_ROOT" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+CASES="stale-container-reported-as-violation
+daemon-unreachable
+validator-exit-1-with-findings
+validator-output-looks-like-a-daemon-error
+status-only-check"
+
+# ── Harness primitives available to every case ───────────────────────────────
+
+# install_runner <routing-table-file>
+# Copies the runner, replacing everything strictly between the BEGIN and END
+# ROUTING TABLE marker lines with the case's routing table. Sets RUNNER_COPY.
+# Fails loudly unless exactly one BEGIN and one END marker matched: a silent
+# substitution miss would leave the factory table in place and every case would
+# pass by validating nothing.
+install_runner() {
+  local rt="$1" begin end
+  # Count the marker lines the substitution actually keys on, not every mention
+  # of the words: the banner text above the table names them too.
+  begin="$(grep -c '^# BEGIN ROUTING TABLE' "$RUNNER_SRC")"
+  end="$(grep -c 'END ROUTING TABLE ═' "$RUNNER_SRC")"
+  if [ "$begin" != "1" ] || [ "$end" != "1" ]; then
+    printf 'harness: expected exactly one BEGIN and one END marker, got %s/%s\n' \
+      "$begin" "$end" >&2
+    return 1
+  fi
+
+  RUNNER_COPY="$CASE_DIR/validate-on-edit.sh"
+  awk -v rtfile="$rt" '
+    /^# BEGIN ROUTING TABLE/ {
+      print
+      while ((getline line < rtfile) > 0) print line
+      close(rtfile)
+      skipping = 1
+      next
+    }
+    /END ROUTING TABLE ═/ { skipping = 0 }
+    !skipping { print }
+  ' "$RUNNER_SRC" >"$RUNNER_COPY" || return 1
+  chmod +x "$RUNNER_COPY"
+
+  # The copy must still parse, and must still carry both markers.
+  bash -n "$RUNNER_COPY" || { printf 'harness: routing table broke the copy\n' >&2; return 1; }
+  return 0
+}
+
+# write_routing_table — reads the routing table from stdin.
+write_routing_table() {
+  cat >"$CASE_DIR/routing-table.sh"
+  install_runner "$CASE_DIR/routing-table.sh"
+}
+
+# run_hook <absolute-file-path>
+# Invokes the runner copy the way a PostToolUse hook does: the JSON payload on
+# stdin, cwd at the project root, stdin not a tty. Sets RUN_RC, RUN_STDERR,
+# RUN_STDOUT and RUN_OUTCOME.
+run_hook() {
+  local file="$1" payload=""
+  RUN_N=$(( ${RUN_N:-0} + 1 ))
+  local errf="$CASE_DIR/stderr.$RUN_N" outf="$CASE_DIR/stdout.$RUN_N"
+
+  payload="{\"hook_event_name\":\"PostToolUse\",\"tool_name\":\"Edit\","
+  payload="$payload\"tool_input\":{\"file_path\":\"$file\"},\"tool_response\":{}}"
+
+  (
+    cd "$PROJECT_DIR" || exit 90
+    printf '%s' "$payload" | env \
+      TMPDIR="$CASE_TMPDIR" \
+      VALIDATE_HOST=claude \
+      VALIDATE_ON_EDIT=1 \
+      VALIDATE_BUDGET_S="${VOE_BUDGET_S:-10}" \
+      VALIDATE_DEBUG=0 \
+      COMPOSE_PROJECT_NAME="$PROJECT_NAME" \
+      ${VOE_DOCKER_HOST:+DOCKER_HOST="$VOE_DOCKER_HOST"} \
+      bash "$RUNNER_COPY"
+  ) >"$outf" 2>"$errf"
+  RUN_RC=$?
+  RUN_STDERR="$(cat "$errf")"
+  RUN_STDOUT="$(cat "$outf")"
+  RUN_OUTCOME="$(classify_outcome "$RUN_RC" "$errf" "$outf")"
+  printf '    run %s: rc=%s outcome=%s\n' "$RUN_N" "$RUN_RC" "$RUN_OUTCOME" >&2
+  return 0
+}
+
+# classify_outcome RC STDERR_FILE STDOUT_FILE — the mapping documented above.
+# Reads ONLY the exit status and the first line of stderr. It knows nothing
+# about docker, exit-code arms, or which failures are infrastructure.
+classify_outcome() {
+  local rc="$1" errf="$2" outf="$3" first=""
+  first="$(head -n1 "$errf" 2>/dev/null)"
+
+  if [ "$rc" -eq 0 ]; then
+    if [ -s "$errf" ]; then printf 'unexpected:exit-0-with-stderr'; else printf 'silence'; fi
+    return 0
+  fi
+  if [ "$rc" -eq 2 ]; then
+    if printf '%s' "$first" | grep -Eq '^\[validate\] .+ — .+ \(exit [0-9]+\)$'; then
+      printf 'violation'
+    elif printf '%s' "$first" | grep -q '^\[validate\] '; then
+      printf 'warning'
+    else
+      printf 'unexpected:exit-2-unrecognised-first-line'
+    fi
+    return 0
+  fi
+  printf 'unexpected:exit-%s' "$rc"
+}
+
+# expect_outcome <expected> — assert the outcome of the last run_hook.
+expect_outcome() {
+  local want="$1"
+  if [ "$RUN_OUTCOME" = "$want" ]; then
+    CASE_VERDICT="PASS"
+  else
+    CASE_VERDICT="FAIL"
+    printf '    expected %s, observed %s\n' "$want" "$RUN_OUTCOME" >&2
+  fi
+  printf '%s' "$RUN_OUTCOME" >"$CASE_DIR/observed"
+  printf '%s' "$RUN_RC" >"$CASE_DIR/observed.rc"
+  cp "$CASE_DIR/stderr.$RUN_N" "$CASE_DIR/observed.stderr" 2>/dev/null || true
+  [ "$CASE_VERDICT" = "PASS" ]
+}
+
+# ── Case execution ───────────────────────────────────────────────────────────
+
+run_one_case() {
+  local name="$1" file="$TESTS_DIR/cases/$1.sh" rc=0
+
+  [ -f "$file" ] || { printf 'run.sh: no such case: %s\n' "$name" >&2; return 1; }
+
+  CASE_DIR="$VOE_ROOT/$name"
+  CASE_TMPDIR="$CASE_DIR/tmp"
+  PROJECT_NAME="voe-test-$VOE_SESSION-$CASE_INDEX"
+  PROJECT_DIR="$CASE_DIR/$PROJECT_NAME"
+  mkdir -p "$CASE_TMPDIR" "$PROJECT_DIR" || return 1
+  # find_project_root (:388-398) stops at a Makefile when git says nothing.
+  : >"$PROJECT_DIR/Makefile"
+  RUN_N=0
+  VOE_DOCKER_HOST=""
+  CASE_VERDICT="FAIL"
+
+  printf '  %s\n' "$name" >&2
+  # The case body runs in a subshell so a case cannot leak env (DOCKER_HOST,
+  # exports) into the next one.
+  (
+    CASE_EXPECT=""
+    CASE_DESC=""
+    . "$file" || exit 91
+    case_body
+  )
+  rc=$?
+
+  local observed="unexpected:case-did-not-report"
+  [ -f "$CASE_DIR/observed" ] && observed="$(cat "$CASE_DIR/observed")"
+  printf '%s\t%s\t%s\n' "$name" "$rc" "$observed" >>"$VOE_ROOT/results.tsv"
+  return $rc
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+MODE="first-failure"
+ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --all)  MODE="all" ;;
+    --case) shift; ONLY="$1" ;;
+    --list) printf '%s\n' "$CASES"; exit 0 ;;
+    -h|--help) sed -n '1,60p' "$0"; exit 0 ;;
+    *) printf 'run.sh: unknown flag: %s\n' "$1" >&2; exit 64 ;;
+  esac
+  shift
+done
+
+command -v docker >/dev/null 2>&1 || { printf 'run.sh: docker not on PATH\n' >&2; exit 1; }
+docker image inspect "$VOE_IMAGE" >/dev/null 2>&1 || {
+  printf 'run.sh: pulling %s\n' "$VOE_IMAGE" >&2
+  docker pull "$VOE_IMAGE" >/dev/null 2>&1 || { printf 'run.sh: cannot pull %s\n' "$VOE_IMAGE" >&2; exit 1; }
+}
+
+: >"$VOE_ROOT/results.tsv"
+FAILED=0
+PASSED=0
+CASE_INDEX=0
+START="$(date +%s)"
+
+printf 'runner  : %s\n' "$RUNNER_SRC" >&2
+printf 'sandbox : %s\n' "$VOE_ROOT" >&2
+
+# --case also accepts a case file that is not in the list above, so a maintainer
+# can drop a throwaway probe into cases/ and run it without editing this file.
+if [ -n "$ONLY" ]; then
+  case "
+$CASES
+" in *"
+$ONLY
+"*) ;; *) CASES="$ONLY" ;; esac
+fi
+
+for c in $CASES; do
+  CASE_INDEX=$(( CASE_INDEX + 1 ))
+  if [ -n "$ONLY" ] && [ "$ONLY" != "$c" ]; then continue; fi
+  if run_one_case "$c"; then
+    PASSED=$(( PASSED + 1 ))
+    printf '    PASS\n' >&2
+  else
+    FAILED=$(( FAILED + 1 ))
+    printf '    FAIL\n' >&2
+    [ "$MODE" = "first-failure" ] && break
+  fi
+done
+
+if [ -n "$ONLY" ] && [ $(( PASSED + FAILED )) -eq 0 ]; then
+  printf 'run.sh: no such case: %s\n' "$ONLY" >&2
+  exit 64
+fi
+
+printf '\n%s passed, %s failed, %ss elapsed\n' "$PASSED" "$FAILED" "$(( $(date +%s) - START ))" >&2
+[ "$FAILED" -eq 0 ]

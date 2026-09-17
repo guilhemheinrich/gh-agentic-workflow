@@ -19,7 +19,7 @@
 - [ ] **T005** [RED] Case `validator-exit-1-with-findings`: a validator exiting 1 with output. Assert a violation. **Must pass today** — it is the guard that the fix must not break.
 - [ ] **T006** [RED] Case `validator-output-looks-like-a-daemon-error`: exits 1, first line `Error response from daemon: No such container: deadbeef`. Assert a violation. The adversarial case.
 - [ ] **T007** [RED] Case `status-only-check`: `grep -q` exiting 1 with no output. Assert a violation naming the code. Must fail today, where it is silence.
-- [ ] **T008** Verify Phase A: run T003-T007 only. Expected: three red, one green, one red. Record the baseline in `tests/BASELINE.md`.
+- [ ] **T008** Verify Phase A: run T003-T007 only, against the untouched runner, and record the measured outcome of each in `tests/BASELINE.md`. Do not assert the distribution in advance — T005 and T006 are guards expected to be green before and after, the other three are expected red, and a case that lands the other way is information, not a harness bug to work around.
 
 ## Phase B — Provenance and classification
 
