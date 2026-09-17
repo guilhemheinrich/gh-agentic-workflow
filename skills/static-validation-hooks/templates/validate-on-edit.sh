@@ -33,9 +33,11 @@
 #   validate-on-edit.sh --check <path>     Run the real validation, print timing.
 #   validate-on-edit.sh --doctor           Docker, the resolved Compose project
 #                                          and where its name came from, the
-#                                          Compose files, each routed service
-#                                          and whether it is classified in the
-#                                          degraded (shell-less) mode, warnings.
+#                                          Compose files, whether this project root
+#                                          has two spellings, each routed service,
+#                                          whether it is classified in the degraded
+#                                          (shell-less) mode, and whether its
+#                                          container can see the file routed to it.
 
 # No 'set -e': (( )) returns 1 on a zero result, which is not an error here.
 set -uo pipefail
@@ -1414,6 +1416,20 @@ exec_in() {
 #   skip           explicitly declare this path as not validated
 _SVC=""; _SKIP=0; _ROUTED=0; _VIOLATION=""; F=""; REL=""; WARNING=""; DRY=0
 
+# Run the ROUTING TABLE for its ROUTING DECISION only — which service, and which
+# path that service would be given — and invoke nothing. `--doctor` uses it to
+# ask the table a question the table cannot be asked directly: it maps a path to
+# a service, never a service to a path, so the only honest way to obtain a
+# representative path per service is to run the table over paths that really
+# exist and keep the first one that lands on each service.
+#
+# It is NOT `DRY`: DRY=1 still walks into `_run`, which prints `would run: …` to
+# stderr, and `fix` under DRY discards stdout only — one such line per scanned
+# file would be interleaved with the diagnostic. This flag stops before any of
+# that, leaving `svc`, `strip` and `skip` — the three verbs that carry the
+# decision — to do exactly what they do on a real edit.
+_ROUTE_PROBE=0
+
 svc()   { _SVC="$1"; _ROUTED=1; F="${F:-$REL}"; }
 strip() { F="${REL#$1}"; }
 skip()  { _SKIP=1; _ROUTED=1; }
@@ -1457,6 +1473,7 @@ a command. $REL was NOT validated. Name the real binary in
 
 fix() {
   _ROUTED=1
+  (( _ROUTE_PROBE )) && return 0
   refuse_dash_tool "$1" && return 0
   (( DRY )) && { _run "$@" >/dev/null; return 0; }
   local out rc=0
@@ -1638,6 +1655,7 @@ for that service is running, and the call still did not reach inside it. Run
 
 check() {
   _ROUTED=1
+  (( _ROUTE_PROBE )) && return 0
   [[ -n "$_VIOLATION" ]] && return 0   # fail-fast: one violation per edit is enough
   local out rc=0 tool="$1" stripped="" ran=0 cause=""
   refuse_dash_tool "$tool" && return 0
@@ -1873,6 +1891,193 @@ declare the pattern under the \`skip\` arm if it is intentionally unchecked." ||
   return 0
 }
 
+# ── Diagnostic helpers — used by `--doctor` only ─────────────────────────────
+#
+# ── 1. The two spellings of the project root ─────────────────────────────────
+#
+# `find_project_root` takes git's top-level, and git answers it PHYSICALLY, with
+# every symlink resolved. The hook payload carries whatever spelling the agent's
+# editor used, which on a checkout reached through a symlink is the unresolved
+# one. The hook entry then compares the two AS STRINGS ("$PROJECT_ROOT/"*) and,
+# finding no match, returns through `silent` — the arm reserved for files it
+# deliberately does not route. Every edit is unvalidated and the agent is told
+# nothing at all.
+#
+# That defect is DECLARED AND UNFIXED (GRV-symlinked-project-path-makes-7d96)
+# and this is not the fix. This is the thing that makes it visible, because the
+# consumer's only symptom today is silence, and silence is exactly what a
+# correctly installed hook produces on a clean file.
+#
+# Measured 2026-09-17 on this machine (macOS 25.5.0, git 2.x), a throwaway
+# repository at /tmp/…/real reached through the symlink /tmp/…/link:
+#
+#   git -C /tmp/…/link/sub rev-parse --show-toplevel  ->  /private/tmp/…/real
+#   cd /tmp/…/link/sub && pwd                         ->  /tmp/…/link/sub
+#   cd /tmp/…/link/sub && pwd -P                      ->  /private/tmp/…/real/sub
+#
+#   payload  /tmp/…/link/sub/app.txt   against root  /private/tmp/…/real
+#   -> the prefix test fails, and the runner takes the silent arm.
+#
+# Both halves of that pair come from the same place here. The RESOLVED spelling
+# is what the runner itself uses; the spelling AS REACHED is the logical cwd the
+# diagnostic was invoked from — the same kind of value an editor sends, produced
+# by whatever navigated into this directory, and the only unresolved spelling a
+# read-only command can honestly obtain. When the two lead to the same directory
+# and differ as strings, this root has two spellings and one of them is skipped.
+#
+# Prints "<resolved>TAB<as reached>"; the two fields are identical when there is
+# only one spelling, which is the common case and is reported in one line.
+doctor_root_spellings() {
+  local canon phys_cwd logi_cwd tail lroot back
+  canon="$(path_canon "$PROJECT_ROOT")" || canon="$PROJECT_ROOT"
+  phys_cwd="$(pwd -P 2>/dev/null)"
+  logi_cwd="$(pwd -L 2>/dev/null)"
+  lroot=""
+  if [[ -n "$phys_cwd" && -n "$logi_cwd" && "$phys_cwd" != "$logi_cwd" ]]; then
+    case "$phys_cwd" in
+      "$canon")
+        lroot="$logi_cwd" ;;
+      "$canon"/*)
+        tail="${phys_cwd#"$canon"}"
+        case "$logi_cwd" in *"$tail") lroot="${logi_cwd%"$tail"}" ;; esac ;;
+    esac
+  fi
+  [[ -z "$lroot" ]] && lroot="$canon"
+  # A derived spelling that does not lead back to the same directory is not a
+  # spelling of this root at all. Report one spelling rather than a claim.
+  if [[ "$lroot" != "$canon" ]]; then
+    back="$(path_canon "$lroot")" || back=""
+    [[ "$back" == "$canon" ]] || lroot="$canon"
+  fi
+  printf '%s\t%s' "$canon" "$lroot"
+}
+
+# ── 2. Can each routed service actually see the file it would be given? ──────
+#
+# The check nobody writes and everybody needs. A service whose container cannot
+# see the path the routing table hands it validates NOTHING, whatever else in
+# this diagnostic is green — a `strip` that removes the wrong prefix, a service
+# mounting only part of the repository, a routed path that never existed in the
+# image. Today the only way to learn that is to edit a file and notice that
+# nothing happened, which is indistinguishable from a clean file.
+#
+# doctor_candidate_files — repo-relative paths that really exist, bounded.
+# `git ls-files` when this is a work tree (it already excludes what git
+# ignores), `find` otherwise. The cap is what keeps `--doctor` a human CLI
+# command on a large checkout: the scan stops as soon as every routed service
+# has a representative, so the cap is only reached when some service has none.
+DOCTOR_SCAN_CAP="${DOCTOR_SCAN_CAP:-4000}"
+
+doctor_candidate_files() {
+  if git -C "$PROJECT_ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    git -C "$PROJECT_ROOT" ls-files 2>/dev/null
+    return 0
+  fi
+  ( cd "$PROJECT_ROOT" 2>/dev/null && find . -type f 2>/dev/null | sed 's|^\./||' )
+  return 0
+}
+
+# doctor_representatives SERVICES — one line per service, `svc TAB rel TAB given`.
+# `rel` is a file in this checkout that the ROUTING TABLE routes to `svc`, and
+# `given` is the path the table would hand the validator, after `strip`. A
+# service with no line has no representative, which is reported as such and
+# never guessed at.
+doctor_representatives() {
+  local wanted="$1" found="" list="" rel="" n=0
+  local _keep_REL="$REL" _keep_F="$F" _keep_SVC="$_SVC" _keep_SKIP="$_SKIP" _keep_ROUTED="$_ROUTED"
+  _ROUTE_PROBE=1
+  while IFS= read -r rel; do
+    [[ -z "$rel" ]] && continue
+    n=$(( n + 1 ))
+    (( n > DOCTOR_SCAN_CAP )) && break
+    is_excluded_path "$rel" && continue
+    [[ -f "$PROJECT_ROOT/$rel" ]] || continue
+    REL="$rel"; F="$REL"; _SVC=""; _SKIP=0; _ROUTED=0
+    route
+    [[ -n "$_SVC" ]] || continue
+    (( _SKIP )) && continue
+    case " $wanted " in *" $_SVC "*) ;; *) continue ;; esac
+    case "$found" in *"|$_SVC|"*) continue ;; esac
+    found="$found|$_SVC|"
+    list="$list$_SVC	$rel	$F
+"
+    # Every wanted service answered: stop walking the checkout.
+    local s all=1
+    for s in $wanted; do case "$found" in *"|$s|"*) ;; *) all=0 ;; esac; done
+    (( all )) && break
+  done <<EOF
+$(doctor_candidate_files)
+EOF
+  _ROUTE_PROBE=0
+  REL="$_keep_REL"; F="$_keep_F"; _SVC="$_keep_SVC"; _SKIP="$_keep_SKIP"; _ROUTED="$_keep_ROUTED"
+  printf '%s' "$list"
+}
+
+# doctor_container_path CID HOSTFILE GIVEN — the path inside CID at which this
+# checkout's HOSTFILE lives, or empty when the container's facts could not be
+# read.
+#
+# An absolute GIVEN is taken as given. A relative one is resolved from the
+# MOUNTS rather than from the prefix arithmetic the routing table performs in
+# its own `check` line, because that arithmetic is invisible from here: a branch
+# writing `check sh -c '…' _ "/work/$F"` composes the container path inside the
+# command, where no diagnostic can read it. The mounts answer the question that
+# is actually worth asking — where in this container does THIS checkout's file
+# live — and a container that cannot see that path cannot validate the file
+# under any spelling. Falling back to the working directory, for a container
+# with no bind holding the file, is the same assumption container_reads_checkout
+# already makes for a relative path.
+doctor_container_path() {
+  local cid="$1" hostfile="$2" given="$3"
+  local facts mounts wd canon_file canon_src line m_type m_src m_dest
+  local best_src="" best_dest="" cand=""
+  case "$given" in /*) printf '%s' "$given"; return 0 ;; esac
+  facts="$(container_facts "$cid")"
+  [[ -n "$facts" ]] || return 1
+  wd="$(printf '%s' "$facts" | sed -n '1p')"
+  mounts="$(printf '%s' "$facts" | sed -n '2,$p')"
+  canon_file="$(path_canon "$hostfile")" || canon_file="$hostfile"
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    m_type="${line%%|*}"; m_src="${line#*|}"; m_dest="${m_src#*|}"; m_src="${m_src%%|*}"
+    [[ "$m_type" == "bind" ]] || continue
+    canon_src="$(path_canon "$m_src")" || canon_src="$m_src"
+    path_within "$canon_file" "$canon_src" || continue
+    if [[ ${#canon_src} -gt ${#best_src} ]]; then best_src="$canon_src"; best_dest="$m_dest"; fi
+  done <<EOF
+$mounts
+EOF
+  if [[ -n "$best_src" ]]; then
+    if [[ "$canon_file" == "$best_src" ]]; then
+      cand="$best_dest"
+    else
+      cand="${best_dest%/}/${canon_file#"${best_src%/}/"}"
+    fi
+    printf '%s' "$cand"
+    return 0
+  fi
+  cand="${wd:-/}"
+  printf '%s' "${cand%/}/$given"
+  return 0
+}
+
+# doctor_file_visible CID PATH — does the container see a regular file there?
+# REPORTS, never decides: `--doctor` says what it found and changes nothing
+# about whether the hook runs. One `docker exec` per routed service.
+#
+#   0  visible
+#   1  the container answered, and the file is not there
+#   2  the call itself did not come back with an answer we can attribute
+doctor_file_visible() {
+  local cid="$1" p="$2" rc=0
+  bounded docker exec -i "$cid" test -f "$p" >/dev/null 2>&1; rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+  esac
+  return 2
+}
+
 # ── CLI modes ────────────────────────────────────────────────────────────────
 cli_mode() {
   local mode="$1" arg="${2:-}"
@@ -1903,6 +2108,24 @@ cli_mode() {
       ;;
     --doctor)
       printf 'project   : %s\n' "$PROJECT_ROOT"
+      # The two spellings of that root, when this checkout has two. A clean
+      # setup gets one line and no noise; a symlinked one gets the consequence
+      # spelled out, because its only other symptom is silence.
+      local _sp _sp_res _sp_seen
+      _sp="$(doctor_root_spellings)"
+      _sp_res="${_sp%%	*}"; _sp_seen="${_sp#*	}"
+      if [[ "$_sp_res" == "$_sp_seen" ]]; then
+        printf 'spelling  : one — the resolved root is also the root as reached from here.\n'
+      else
+        printf 'spelling  : TWO — this project root has two spellings, and they disagree.\n'
+        printf '            resolved   : %s\n' "$_sp_res"
+        printf '            as reached : %s\n' "$_sp_seen"
+        printf '            The runner uses the resolved one and compares the edited path to it\n'
+        printf '            as a string, so an edit arriving with the unresolved spelling is read\n'
+        printf '            as sitting outside the project and is SKIPPED IN SILENCE — no\n'
+        printf '            warning, no violation, indistinguishable from a clean file.\n'
+        printf '            Declared and unfixed: GRV-symlinked-project-path-makes-7d96.\n'
+      fi
       printf 'compose   : %s\n' "$(compose_project)"
       # FR-018: the resolution is printed, never inferred.
       if resolver_is_overridden; then
@@ -1934,10 +2157,12 @@ cli_mode() {
       # a warning. The answer is the one probe_shell cached at resolution time;
       # `--doctor` reports it and never probes, so it stays a read-only command.
       printf 'services referenced by the routing table:\n'
-      local s cid shellf shellv degraded="" stopped=""
-      for s in $(grep -oE '(^|;)[[:space:]]*svc[[:space:]]+[a-zA-Z0-9_.-]+' "$0" | awk '{print $NF}' | sort -u); do
+      local s cid shellf shellv degraded="" stopped="" running="" cidmap=""
+      local svcs; svcs="$(grep -oE '(^|;|\))[[:space:]]*svc[[:space:]]+[a-zA-Z0-9_.-]+' "$0" | awk '{print $NF}' | sort -u | tr '\n' ' ')"
+      for s in $svcs; do
         cid="$(lookup_cid "$s")"
-        [[ -z "$cid" ]] && stopped="$stopped $s"
+        if [[ -z "$cid" ]]; then stopped="$stopped $s"; else running="$running $s"; cidmap="$cidmap$s	$cid
+"; fi
         shellf="$(shell_cache "$s")"
         shellv="not probed yet"
         if [[ -f "$shellf" ]]; then
@@ -1957,6 +2182,71 @@ cli_mode() {
       else
         printf 'degraded  : none — every probed service can host the provenance wrapper.\n'
       fi
+
+      # ── Can each running routed service SEE the file it would be given? ────
+      #
+      # One `docker exec <cid> test -f <path>` per running routed service, over
+      # a path derived from the routing table itself: the table is run, for its
+      # decision only, over files that really exist in this checkout, and the
+      # first file landing on each service is that service's representative.
+      # Nothing is asked of the consumer and nothing is invented.
+      #
+      # A service that cannot see its file validates NOTHING, whatever else
+      # above is green. It reports; it never decides whether the hook runs.
+      if [[ -n "$running" ]]; then
+        printf 'reachability — one `docker exec <svc> test -f <path>` per running service:\n'
+        local reps rep_line rep_svc rep_rel rep_given cpath l blind="" unknown="" probed=0
+        reps="$(doctor_representatives "$running")"
+        for s in $running; do
+          rep_line=""
+          while IFS= read -r l; do
+            [[ -z "$l" ]] && continue
+            [[ "${l%%	*}" == "$s" ]] && { rep_line="$l"; break; }
+          done <<EOF
+$reps
+EOF
+          if [[ -z "$rep_line" ]]; then
+            printf '  %-20s no file in this checkout routes to this service\n' "$s"
+            continue
+          fi
+          rep_svc="${rep_line%%	*}"; rep_rel="${rep_line#*	}"; rep_given="${rep_rel#*	}"; rep_rel="${rep_rel%%	*}"
+          cid=""
+          while IFS= read -r l; do
+            [[ -z "$l" ]] && continue
+            [[ "${l%%	*}" == "$s" ]] && { cid="${l#*	}"; break; }
+          done <<EOF
+$cidmap
+EOF
+          cpath="$(doctor_container_path "$cid" "${PROJECT_ROOT%/}/$rep_rel" "$rep_given")" || cpath=""
+          if [[ -z "$cpath" ]]; then
+            printf '  %-20s %s -> ? (the container could not be inspected)\n' "$s" "$rep_rel"
+            unknown="$unknown $s"
+            continue
+          fi
+          probed=$(( probed + 1 ))
+          doctor_file_visible "$cid" "$cpath"
+          case $? in
+            0) printf '  %-20s %s -> %s  visible\n' "$s" "$rep_rel" "$cpath" ;;
+            1) printf '  %-20s %s -> %s  NOT VISIBLE\n' "$s" "$rep_rel" "$cpath"; blind="$blind $s" ;;
+            *) printf '  %-20s %s -> %s  no answer from the container\n' "$s" "$rep_rel" "$cpath"
+               unknown="$unknown $s" ;;
+          esac
+        done
+        if [[ -n "$blind" ]]; then
+          printf 'blind     :%s — the container is running and cannot see the file the routing\n' "$blind"
+          printf '            table would hand it, so that service validates nothing. A wrong\n'
+          printf '            `strip`, a mount covering only part of the repository, or a path\n'
+          printf '            that never existed in the container.\n'
+        elif (( probed > 0 )); then
+          printf 'blind     : none — every probed service can see the file routed to it.\n'
+        fi
+        [[ -n "$unknown" ]] && \
+          printf 'undecided :%s — the probe itself did not come back with an answer.\n' "$unknown"
+        printf '            The path is where THIS checkout'"'"'s file lives in the container,\n'
+        printf '            derived from its mounts: a branch composing the path inside its own\n'
+        printf '            `check` line is invisible from here, and is not read back.\n'
+      fi
+
       printf 'suppressed warnings this session: %s\n' "$(ls "$STATE_DIR"/warn-* 2>/dev/null | wc -l | tr -d ' ')"
       printf 'log       : %s\n' "$LOG_FILE"
       ;;

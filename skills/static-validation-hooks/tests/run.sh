@@ -49,6 +49,18 @@
 # whose first line is not the runner's own prefix — is reported as
 # `unexpected:<detail>` and fails the case. The suite never guesses.
 #
+# ── The second contract: `--doctor`, which is outside the mapping above ──────
+#
+# `--doctor` is a HUMAN CLI path. It reports what it found on stdout and exits 0
+# whatever that was, because it must never decide whether the hook runs, so the
+# mapping above would label every doctor run `silence` and assert nothing.
+# `run_doctor` / `expect_doctor` drive and read it instead, and a doctor case is
+# recorded as `doctor-ok` rather than as one of the three agent outcomes.
+#
+# That path was covered by nothing until the doctor cases were added, which is
+# exactly why it was worth covering: it is the one surface the agent never sees,
+# so a regression in it is invisible to every other case in this file.
+#
 # ── Usage ────────────────────────────────────────────────────────────────────
 #   bash run.sh                 run every case, stop at the first failure
 #   bash run.sh --all           run every case, report all failures
@@ -174,6 +186,8 @@ volume-shadows-the-checkout
 worktree-shares-the-main-stack
 worktree-sharing-opt-out
 resolver-override-keeps-validating
+doctor-names-both-spellings-of-the-root
+doctor-probes-each-service-for-its-file
 mutation-provenance-becomes-infrastructure"
 
 # ── Harness primitives available to every case ───────────────────────────────
@@ -283,6 +297,107 @@ run_hook() {
   printf '    run %s: rc=%s outcome=%s elapsed=%ss\n' \
     "$RUN_N" "$RUN_RC" "$RUN_OUTCOME" "$RUN_ELAPSED" >&2
   return 0
+}
+
+# run_doctor — invoke the runner copy the way a HUMAN does: `--doctor`, no
+# payload, stdin closed. Sets DOC_RC, DOC_OUT and DOC_ELAPSED.
+#
+# It deliberately does NOT go through classify_outcome. That classifier reads
+# the AGENT-facing exit contract — silence / warning / violation — and `--doctor`
+# is outside it by design: it reports what it found on stdout and exits 0
+# whatever that was, because it must never decide whether the hook runs. Passing
+# a doctor run through the classifier would label every one of them `silence`
+# and assert nothing. So the diagnostic is asserted on its text, with
+# expect_doctor, and the two contracts stay separate.
+#
+# Until this existed no case drove `--doctor` at all — it is the one path an
+# agent never sees, so the suite never looked at it, and a regression in it
+# would have been invisible to every other case in this file.
+#
+# VOE_DOCTOR_CWD is the directory the command is run FROM, defaulting to
+# $PROJECT_DIR. A case sets it to reach one project root through a different
+# spelling, which is the whole subject of the root-spelling case: a diagnostic
+# about the path cannot be driven from only one path.
+run_doctor() {
+  local t0 t1 cwd="${VOE_DOCTOR_CWD:-$PROJECT_DIR}"
+  RUN_N=$(( ${RUN_N:-0} + 1 ))
+  local errf="$CASE_DIR/doctor-stderr.$RUN_N" outf="$CASE_DIR/doctor-stdout.$RUN_N"
+
+  local cpn="COMPOSE_PROJECT_NAME=$PROJECT_NAME"
+  [ "${VOE_NO_CPN:-0}" = "1" ] && cpn="VOE_CPN_NOT_EXPORTED=1"
+  local cfile="VOE_COMPOSE_FILE_NOT_SET=1"
+  [ -n "${VOE_COMPOSE_FILE:-}" ] && cfile="COMPOSE_FILE=$VOE_COMPOSE_FILE"
+
+  t0="$(date +%s)"
+  (
+    cd "$cwd" || exit 90
+    env \
+      -u COMPOSE_PROJECT_NAME -u COMPOSE_FILE -u COMPOSE_PROFILES -u COMPOSE_ENV_FILES \
+      TMPDIR="$CASE_TMPDIR" \
+      VALIDATE_HOST=claude \
+      VALIDATE_ON_EDIT=1 \
+      VALIDATE_BUDGET_S="${VOE_BUDGET_S:-10}" \
+      VALIDATE_DEBUG=0 \
+      VALIDATE_WORKTREE="${VOE_WORKTREE:-auto}" \
+      "$cpn" \
+      "$cfile" \
+      ${VOE_EXTRA_ENV:-} \
+      PATH="${VOE_PATH_PREFIX:+$VOE_PATH_PREFIX:}$PATH" \
+      VOE_DOCKER_LOG="${VOE_DOCKER_LOG:-}" \
+      ${VOE_DOCKER_HOST:+DOCKER_HOST="$VOE_DOCKER_HOST"} \
+      bash "$RUNNER_COPY" --doctor </dev/null
+  ) >"$outf" 2>"$errf"
+  DOC_RC=$?
+  t1="$(date +%s)"
+  DOC_ELAPSED=$(( t1 - t0 ))
+  DOC_OUT="$(cat "$outf")"
+  printf '    doctor %s: rc=%s lines=%s elapsed=%ss (cwd %s)\n' \
+    "$RUN_N" "$DOC_RC" "$(printf '%s\n' "$DOC_OUT" | wc -l | tr -d ' ')" \
+    "$DOC_ELAPSED" "$cwd" >&2
+  return 0
+}
+
+# expect_doctor <want|reject> <extended regex> [label]
+#
+# Assert what the diagnostic TELLS A HUMAN. Unlike expect_stderr, there is no
+# class to fall back on here: `--doctor` has exactly one outcome, so the text is
+# the only observable, and a case that asserted nothing about the text would
+# assert that the command exits 0 — which it does even when it prints nothing.
+#
+# The regexes a case writes are sentences the SPECIFICATION requires the
+# diagnostic to produce. The helper never decides what those are.
+expect_doctor() {
+  local mode="$1" re="$2" label="${3:-$2}" hit=0
+  voe_assert_tick
+  printf '%s' "$DOC_OUT" | grep -Eq "$re" && hit=1
+  if { [ "$mode" = "want" ] && [ "$hit" = "1" ]; } ||
+     { [ "$mode" = "reject" ] && [ "$hit" = "0" ]; }; then
+    CASE_VERDICT="PASS"
+    printf 'doctor-ok' >"$CASE_DIR/observed"
+    return 0
+  fi
+  CASE_VERDICT="FAIL"
+  printf '    doctor %s %s — not satisfied. --doctor printed:\n' "$mode" "$label" >&2
+  printf '%s\n' "$DOC_OUT" | sed 's/^/      | /' >&2
+  printf '%s' "unexpected:doctor-$mode-failed" >"$CASE_DIR/observed"
+  return 1
+}
+
+# expect_equal <expected> <observed> <label> — an assertion about a COUNT rather
+# than about a message. Used for the one claim `--doctor` makes that no sentence
+# can carry: how many Docker calls it costs. A diagnostic that probed once per
+# file it scanned instead of once per service would print exactly the same text.
+expect_equal() {
+  local want="$1" got="$2" label="$3"
+  voe_assert_tick
+  if [ "$want" = "$got" ]; then
+    CASE_VERDICT="PASS"
+    return 0
+  fi
+  CASE_VERDICT="FAIL"
+  printf '    %s: expected %s, observed %s\n' "$label" "$want" "$got" >&2
+  printf '%s' "unexpected:count-$label-$got" >"$CASE_DIR/observed"
+  return 1
 }
 
 # classify_outcome RC STDERR_FILE STDOUT_FILE — the mapping documented above.
@@ -454,7 +569,11 @@ run_one_case() {
   VOE_COMPOSE_FILE=""
   VOE_EXTRA_ENV=""
   VOE_SESSION_ID="voe-session-$CASE_INDEX"
+  VOE_DOCTOR_CWD=""
   RUN_ELAPSED=0
+  DOC_OUT=""
+  DOC_RC=0
+  DOC_ELAPSED=0
   CASE_VERDICT="FAIL"
 
   printf '  %-44s [%s]\n' "$name" "$VOE_IMAGE" >&2
