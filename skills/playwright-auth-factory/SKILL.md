@@ -16,10 +16,10 @@ description: >-
   to fill a password field, when adding a second environment or a second role to
   a suite, or when a storageState loads but the app still shows logged out.
 tags:
+  - auth
   - e2e
   - playwright
-  - authentication
-  - node
+  - security
 ---
 
 # Playwright auth factory

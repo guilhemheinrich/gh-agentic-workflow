@@ -37,6 +37,7 @@ x-tag-descriptions:
   interaction: "[NEW] interaction"
   keycloak: Keycloak identity and access management
   kubernetes: Kubernetes, Helm, orchestration
+  linear: Linear issue tracker, projects and issues
   lint: Linting, static analysis, code quality
   lit: Lit web components framework
   llm: LLM provider APIs, prompts, cross-model review
@@ -1329,14 +1330,18 @@ assets:
       - hooks
       - process
     description: >-
-      Lock a repository onto the branch its CI actually deploys - whatever it is called on that repository: develop,
-      staging, preprod, recette - so no worktree is cut from the default branch and no pull request targets it by
-      accident. Branch names are variables throughout; the roles are "integration branch" and "protected branch".
-      Detects whether a repository needs the discipline from its
-      CI files, writes a committed .branch-policy, installs a pre-push hook refusing protected targets and a
-      reference-transaction hook noticing a new deploy branch arriving by fetch, and documents the forge-side rules
-      that are the only real lock. Ships branch-policy.sh (detect, init, doctor, worktree, pr-base, drift), the hook
-      templates, an AGENTS.md block, and a per-forge server-side reference.
+      Lock a repository onto the branch its CI actually deploys — whatever that branch is called on it: `develop`,
+      `staging`, `preprod`, `recette` — so no worktree is cut from the default branch and no pull request targets it by
+      accident. Branch names are variables throughout: the roles are "integration branch" and "protected branch", and
+      `develop` / `staging` are only the two most frequent values. Covers the detection question first (which
+      repositories need this, and how you tell from the CI files rather than from folklore), then the enforcement: a
+      committed `.branch-policy`, a `pre-push` hook that refuses a protected target and names a branch cut from the
+      wrong base, a `reference-transaction` hook that notices a new deploy branch arriving by fetch, and the forge-side
+      rules that are the only real lock. Ships `branch-policy.sh` (detect · init · doctor · worktree · pr-base · drift),
+      the two hook templates, an AGENTS.md block, and a per-forge reference for the server-side settings. Use when a
+      repository has a deploy branch distinct from its default branch, when an agent or a human opened a pull request
+      against the default branch, when onboarding a repository whose merge rules live only in someone's head, or when a
+      hotfix needs a named exception.
     category: workflows-and-processes
   - path: skills/javascript-resizable-panel/
     type: skill
@@ -1368,6 +1373,24 @@ assets:
       Diagnose and resolve Kubernetes infrastructure issues using kubectl via Docker. Covers pod diagnostics, ConfigMap
       modifications, rollout management, and DevOps report generation for out-of-scope actions.
     category: tools-and-configurations
+  - path: skills/linear-tracker/
+    type: skill
+    tags:
+      - linear
+      - mcp
+      - process
+      - workflow
+    description: >-
+      Use Linear as the tracker a repository publishes findings to, through the Linear MCP. Covers the per-repository
+      configuration that names a team and a project (`.linear.json`), the mapping from a grievance record to a Linear
+      issue and the two mappings that silently corrupt data if taken literally, the publish contract this skill answers
+      on behalf of the `grievances` skill, and read-only triage across a workspace. `publish` is a verb of the
+      `grievances` skill; this skill is one backend that answers it, and it never writes a ledger. Use when wiring a
+      repository to a Linear project, when a finding must leave a repository and become an issue someone can own, when
+      auditing which findings are already tracked, or when deciding what a tracker can and cannot hold. Triggers on
+      "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding", "which project does this repo
+      belong to".
+    category: workflows-and-processes
   - path: skills/lit-web-components/
     type: skill
     tags:
@@ -1546,6 +1569,25 @@ assets:
       "debrief for the team", and implicitly whenever the reader is a human who must understand or decide rather than a
       reviewer or a tool that already holds the map.
     category: standards
+  - path: skills/playwright-auth-factory/
+    type: skill
+    tags:
+      - auth
+      - e2e
+      - playwright
+      - security
+    description: >-
+      Build the authentication script a Playwright suite needs, so no test — and no agent — ever types a credential into
+      a login form. A script reads a per-environment secrets file, obtains a session out of band, and writes a
+      Playwright `storageState` the browser starts from; the secret goes from disk to the network without passing
+      through a prompt, a transcript, or a page object. Ships a runnable Node template (`scripts/auth-state.mjs`, Node
+      20.12+, `util.parseEnv`) covering environment selection by `ENVIRONMENT=<name>`, mode-600 enforcement, session
+      reuse, atomic writes and redacted reporting, plus three recipes for the ways a session is actually obtained — a
+      credential endpoint, a JWT in localStorage, an existing cookie jar — and the browser-once recipe for logins that
+      cannot be scripted at all (MFA, CAPTCHA, consent). Use when writing or reviewing E2E authentication setup, when an
+      agent refuses to fill a password field, when adding a second environment or a second role to a suite, or when a
+      storageState loads but the app still shows logged out.
+    category: quality-assurance
   - path: skills/s3-backend-proxy/
     type: skill
     tags:
