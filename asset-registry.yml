@@ -917,6 +917,17 @@ assets:
       modified UI surface MUST be observed in a real browser before the implementation is considered complete, and every
       newly introduced interactive element MUST be exercised and its observable outcome asserted against the spec.
     category: quality-assurance
+  - path: skills/ai-igniter-setup/
+    type: skill
+    tags:
+      - devtools
+      - docker
+      - worktree
+    description: >-
+      Set up AI Igniter (ScreamZ/ai-igniter) in a project to manage isolated worktree-aware dev environments with
+      automatic port allocation, managed .env sections, and Docker-based services (PostgreSQL, S3, custom). Use when
+      onboarding a project for parallel-branch development or Claude Code worktrees.
+    category: developer-experience
   - path: skills/adversarial-review-convergence/
     type: skill
     tags:
