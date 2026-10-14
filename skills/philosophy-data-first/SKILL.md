@@ -59,10 +59,9 @@ it — this skill only adds what is specific to this philosophy.
 
    Defaults to propose: **Drizzle** (TypeScript), SQLAlchemy 2.x Core/ORM +
    Alembic (Python), sqlc (Go), Ecto (Elixir). Prefer an ORM that lets the
-   orchestrator enqueue inside its transaction — with pg-boss, check that the
-   installed version accepts a custom `db` executor or a Drizzle adapter for
-   `send()`; otherwise wrap the ORM transaction client yourself. Whatever the
-   ORM cannot express is written in SQL in the migration.
+   orchestrator enqueue inside its transaction — for Drizzle + pg-boss
+   (>= 12.17.0, `fromDrizzle` adapter) follow the `drizzle-pg-boss` skill.
+   Whatever the ORM cannot express is written in SQL in the migration.
 4. **Write** the content of [references/data-first.md](references/data-first.md)
    into `PHILOSOPHY.md` following `project-philosophy` (amend, don't overwrite;
    fill *Décisions d'implémentation* with the choices from steps 2–3, or leave
@@ -92,6 +91,7 @@ Cite and use these alongside the philosophy:
 | `data-projection` | Report what a use case does to the data (schema view + effect view) before writing it |
 | `sql-migration-guidelines` | Database-first migrations: constraints, FKs, comments, timestamps, triggers, ORM-generated SQL review |
 | `model-tenant-agency-user-db` | Multi-tenant ownership, RLS and scoping when the domain needs it |
+| `drizzle-pg-boss` | Enqueue jobs in the same Drizzle transaction, idempotent workers |
 | `fp-ts-validation` | Validate inputs at the boundary before the transaction |
 
 ## Anti-patterns
