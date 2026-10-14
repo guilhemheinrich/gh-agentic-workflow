@@ -77,6 +77,7 @@
         "npm",
         "nuxt",
         "performance",
+        "philosophy",
         "playwright",
         "prisma",
         "process",
@@ -270,7 +271,8 @@
         "templates-and-models",
         "quality-assurance",
         "domain-specific",
-        "other"
+        "other",
+        "philosophy"
       ],
       "patternProperties": {
         ".*": {
@@ -292,7 +294,8 @@
         "templates-and-models",
         "quality-assurance",
         "domain-specific",
-        "other"
+        "other",
+        "philosophy"
       ]
     },
     "bundle": {
@@ -353,6 +356,7 @@
         "npm",
         "nuxt",
         "performance",
+        "philosophy",
         "playwright",
         "prisma",
         "process",
