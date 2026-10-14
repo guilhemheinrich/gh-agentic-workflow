@@ -1149,6 +1149,16 @@ assets:
     category: standards
     bundles:
       - common
+  - path: skills/drizzle-pg-boss/
+    type: skill
+    tags:
+      - backend
+      - sql
+      - typescript
+    description: >-
+      Enqueue pg-boss jobs atomically inside a Drizzle ORM transaction on PostgreSQL with the built-in `fromDrizzle`
+      adapter (pg-boss >= 12.17.0), and write idempotent workers that run their own Drizzle transaction.
+    category: frameworks-and-libraries
   - path: skills/e2e-playwright/
     type: skill
     tags:
