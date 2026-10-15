@@ -63,6 +63,9 @@ once under `.agents/`, each host gets a pointer.
 - In a linked git worktree the hook validates only if that worktree has its own
   stack; when `COMPOSE_PROJECT_NAME` pins it to the main checkout's stack it
   skips, because linting the main checkout's stale copy is a false pass.
+- In a Claude Code cloud session the clone has no dependencies and usually no
+  running stack: without the skill's `SessionStart` install hook
+  (`.claude/hooks/session-start.sh`), the hook warns once and validates nothing.
 
 ## See also
 
