@@ -2,7 +2,7 @@
 description: >-
   Root Makefile invariants: mandatory targets, env-driven configuration, PHONY
   targets, and Docker-first execution. Templates live in a skill.
-globs: 'Makefile,**/Makefile'
+globs: 'Makefile,**/Makefile,Taskfile.yml,**/Taskfile.yml'
 alwaysApply: false
 tags:
   - docker
@@ -12,6 +12,11 @@ tags:
 # Makefile — desired properties
 
 ## Desired state
+
+These properties apply to the project's task runner, whether it is a
+**Makefile** or a **Taskfile.yml** (Task). A project uses exactly one of them.
+With Task: P1 uses `dotenv: ['.env']` and `${VAR:-default}`, P5 does not
+apply, and every task carries a `desc:` so that `task --list` is the help.
 
 A project root **Makefile** MUST expose a consistent interface for local development and CI-aligned workflows. Values that vary by developer or environment MUST NOT be hardcoded in targets.
 
@@ -32,7 +37,7 @@ A project root **Makefile** MUST expose a consistent interface for local develop
 
 ## Skill References
 
-- Full templates and example recipes: [makefile-conventions](../../skills/makefile-conventions/SKILL.md)
+- Full templates and example recipes: [makefile-conventions](../../skills/makefile-conventions/SKILL.md) (Task variant: [taskfile.md](../../skills/makefile-conventions/taskfile.md))
 
 ## Enforcement
 
