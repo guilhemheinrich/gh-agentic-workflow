@@ -21,6 +21,9 @@ interface RegistryDoc {
   version: string;
   assets: AssetEntry[];
   "x-tag-descriptions": Record<string, string>;
+  // Other top-level sections (x-bundle-descriptions, x-category-descriptions…):
+  // not managed here, but required by the schema — written back untouched.
+  [section: string]: unknown;
 }
 
 interface AssetEntry {
@@ -252,9 +255,11 @@ function writeSchema(schema: SchemaRoot): void {
 
 function writeRegistry(doc: RegistryDoc): void {
   const assets = [...doc.assets].sort((a, b) => a.path.localeCompare(b.path));
+  const { version, assets: _assets, "x-tag-descriptions": tags, ...sections } = doc;
   const payload = {
-    version: doc.version,
-    "x-tag-descriptions": sortedRecord(doc["x-tag-descriptions"]),
+    version,
+    "x-tag-descriptions": sortedRecord(tags),
+    ...sections,
     assets,
   };
   const header = "# yaml-language-server: $schema=./asset-registry.schema.json\n";
