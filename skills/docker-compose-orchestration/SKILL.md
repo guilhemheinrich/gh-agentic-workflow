@@ -2,7 +2,10 @@
 name: docker-compose-orchestration
 description: >-
   Container orchestration with Docker Compose for multi-container applications,
-  networking, volumes, and production deployment
+  networking, volumes, and production deployment. Enforces the secrets rule: no
+  configuration value or secret in compose files (not even as a default or in
+  an example) — everything comes from an unversioned .env via ${VAR:?}, with a
+  versioned .env.example holding fake values.
 tags:
   - docker
   - docker-compose
@@ -28,6 +31,64 @@ Use this skill when:
 - Monitoring application health and implementing health checks
 - Migrating from single containers to multi-service architectures
 - Testing distributed systems locally
+
+## Secrets and Configuration — Mandatory Rule
+
+**No configuration value and no secret is ever written in a compose file** —
+not even as a default (`${VAR:-value}`) and not even in an example.
+
+| File | Versioned | Content |
+|---|---|---|
+| `compose.yml` | yes | topology (services, networks, volumes) and image versions only; every value is an interpolation `${VAR:?message}` |
+| `.env` | **no** (`.gitignore`) | the real values for this machine |
+| `.env.example` | yes | every variable `compose.yml` needs, with **fake** values (`changeme` for secrets) |
+
+```yaml
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER missing in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD missing in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB missing in .env}
+    ports:
+      - "${POSTGRES_PORT:?POSTGRES_PORT missing in .env}:5432"
+  api:
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+```
+
+```dotenv
+# .env.example — versioned, fake values only
+POSTGRES_USER=app
+POSTGRES_PASSWORD=changeme
+POSTGRES_DB=app
+POSTGRES_PORT=5432
+```
+
+Rules:
+
+- **`${VAR:?message}`, never `${VAR:-default}`**: a missing variable stops
+  `docker compose` with an explicit message instead of silently starting with a
+  value baked into the repository. The first occurrence carries the message;
+  later occurrences of the same variable can be plain `${VAR}`.
+- **The setup task creates `.env`** from `.env.example` and replaces every
+  `changeme` with a random secret (e.g. `openssl rand -hex 24`), only when
+  `.env` does not exist yet. See `makefile-conventions` (`setup` / `env`).
+- **Credentials inside URIs** are interpolated too:
+  `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}`.
+- **Examples, docs and skills follow the same rule.** Any literal value after
+  a `*_PASSWORD` / `*_SECRET` key, after `--requirepass`, or between `:` and
+  `@` in a connection URI is flagged as a hardcoded secret by scanners
+  (GitGuardian, GitHub secret scanning, gitleaks) as soon as it is copied into
+  a repository — the tool cannot tell a "generic example" from a leak. Every
+  example in this skill therefore uses `${VAR:?}`; `.env.example` files use the
+  placeholder `changeme`.
+- Databases apply credentials only when their volume is created: after
+  changing a secret in `.env`, remove the volume (`down -v`) and start again.
+- Published host ports also come from `.env` (see `compose-env-ports`). Some
+  examples below still show literal ports for brevity: in a real compose file
+  they are `"${SERVICE_PORT:?}:<container-port>"`.
 
 ## Core Concepts
 
@@ -227,9 +288,9 @@ services:
       - /app/node_modules
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:password@db:5432/myapp
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/myapp
       - REDIS_URL=redis://cache:6379
-      - JWT_SECRET=dev-secret
+      - JWT_SECRET=${JWT_SECRET:?}
     env_file:
       - ./backend/.env.local
     networks:
@@ -251,7 +312,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_DB=myapp
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -484,7 +545,7 @@ services:
     environment:
       - NODE_ENV=development
       - DEBUG=app:*
-      - DATABASE_URL=postgresql://postgres:dev@db:5432/dev_db
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/dev_db
     networks:
       - dev-network
     depends_on:
@@ -496,7 +557,7 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      - POSTGRES_PASSWORD=dev
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_DB=dev_db
     ports:
       - "5432:5432"
@@ -509,7 +570,7 @@ services:
     image: dpage/pgadmin4:latest
     environment:
       - PGADMIN_DEFAULT_EMAIL=admin@dev.local
-      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:?}
     ports:
       - "5050:80"
     networks:
@@ -868,7 +929,7 @@ services:
     ports:
       - "5432:5432"     # Expose for local tools
     environment:
-      - POSTGRES_PASSWORD=dev
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
     volumes:
       - ./init-dev.sql:/docker-entrypoint-initdb.d/init.sql
 ```
@@ -1083,10 +1144,10 @@ services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
       MYSQL_DATABASE: myapp
       MYSQL_USER: user
-      MYSQL_PASSWORD: password
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
     volumes:
       - mysql-data:/var/lib/mysql
     networks:
@@ -1113,7 +1174,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_db
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/django_db
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
@@ -1124,7 +1185,7 @@ services:
     environment:
       POSTGRES_DB: django_db
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
@@ -1139,7 +1200,7 @@ services:
     volumes:
       - .:/code
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_db
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/django_db
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
@@ -1151,7 +1212,7 @@ services:
     volumes:
       - .:/code
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/django_db
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/django_db
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       - db
@@ -1190,7 +1251,7 @@ services:
       - /app/node_modules
     environment:
       - MONGODB_URI=mongodb://mongo:27017/myapp
-      - JWT_SECRET=dev-secret
+      - JWT_SECRET=${JWT_SECRET:?}
     depends_on:
       - mongo
     networks:
@@ -1205,7 +1266,7 @@ services:
       - mongo-config:/data/configdb
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=secret
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:?}
     networks:
       - app-network
 
@@ -1245,7 +1306,7 @@ services:
     environment:
       - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/springdb?useSSL=false
       - SPRING_DATASOURCE_USERNAME=root
-      - SPRING_DATASOURCE_PASSWORD=secret
+      - SPRING_DATASOURCE_PASSWORD=${SPRING_DATASOURCE_PASSWORD:?}
       - SPRING_JPA_HIBERNATE_DDL_AUTO=update
     depends_on:
       db:
@@ -1256,7 +1317,7 @@ services:
   db:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
       MYSQL_DATABASE: springdb
     volumes:
       - mysql-data:/var/lib/mysql
@@ -1297,7 +1358,7 @@ services:
     environment:
       WORDPRESS_DB_HOST: db:3306
       WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?}
       WORDPRESS_DB_NAME: wordpress
     volumes:
       - wordpress-data:/var/www/html
@@ -1311,8 +1372,8 @@ services:
     environment:
       MYSQL_DATABASE: wordpress
       MYSQL_USER: wordpress
-      MYSQL_PASSWORD: wordpress
-      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
     volumes:
       - db-data:/var/lib/mysql
     networks:
@@ -1325,7 +1386,7 @@ services:
     environment:
       PMA_HOST: db
       PMA_USER: root
-      PMA_PASSWORD: rootpassword
+      PMA_PASSWORD: ${PMA_PASSWORD:?}
     depends_on:
       - db
     networks:
@@ -1516,7 +1577,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?}
       - GF_INSTALL_PLUGINS=grafana-piechart-panel
     volumes:
       - grafana-data:/var/lib/grafana
@@ -1564,7 +1625,7 @@ services:
       - "15672:15672" # Management UI
     environment:
       RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: secret
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -1579,7 +1640,7 @@ services:
   producer:
     build: ./services/producer
     environment:
-      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672
+      RABBITMQ_URL: amqp://admin:${RABBITMQ_DEFAULT_PASS:?}@rabbitmq:5672
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -1589,7 +1650,7 @@ services:
   consumer-1:
     build: ./services/consumer
     environment:
-      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672
+      RABBITMQ_URL: amqp://admin:${RABBITMQ_DEFAULT_PASS:?}@rabbitmq:5672
       WORKER_ID: 1
     depends_on:
       rabbitmq:
@@ -1602,7 +1663,7 @@ services:
   consumer-2:
     build: ./services/consumer
     environment:
-      RABBITMQ_URL: amqp://admin:secret@rabbitmq:5672
+      RABBITMQ_URL: amqp://admin:${RABBITMQ_DEFAULT_PASS:?}@rabbitmq:5672
       WORKER_ID: 2
     depends_on:
       rabbitmq:
@@ -1682,7 +1743,7 @@ services:
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?}
     volumes:
       - minio-data:/data
     networks:
@@ -1698,7 +1759,7 @@ services:
     environment:
       POSTGRES_DB: myapp
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -1710,7 +1771,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_DB: myapp
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: secret
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       MINIO_ENDPOINT: minio:9000
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -1806,7 +1867,7 @@ services:
     environment:
       POSTGRES_DB: keycloak
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
@@ -1819,9 +1880,9 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: password
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:?}
       KEYCLOAK_ADMIN: admin
-      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?}
     command: start-dev
     ports:
       - "8080:8080"
@@ -1877,7 +1938,7 @@ services:
     environment:
       SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
       SONAR_JDBC_USERNAME: sonar
-      SONAR_JDBC_PASSWORD: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD:?}
     volumes:
       - sonarqube-conf:/opt/sonarqube/conf
       - sonarqube-data:/opt/sonarqube/data
@@ -1893,7 +1954,7 @@ services:
     container_name: sonarqube-db
     environment:
       POSTGRES_USER: sonar
-      POSTGRES_PASSWORD: sonar
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       POSTGRES_DB: sonar
     volumes:
       - postgresql-data:/var/lib/postgresql/data
@@ -1919,7 +1980,7 @@ volumes:
 2. **Health Checks**: Always define health checks for critical services
 3. **Resource Limits**: Set CPU and memory limits in production
 4. **Restart Policies**: Use appropriate restart policies
-5. **Environment Variables**: Use `.env` files for sensitive data
+5. **Environment Variables**: every value comes from `.env` via `${VAR:?}` — see [Secrets and Configuration](#secrets-and-configuration--mandatory-rule)
 6. **Named Volumes**: Use named volumes for data persistence
 7. **Network Isolation**: Separate frontend/backend networks
 8. **Logging Configuration**: Set up proper log rotation
@@ -1939,7 +2000,7 @@ volumes:
 2. **Non-Root Users**: Run containers as non-root users
 3. **Read-Only Filesystems**: Mount volumes as read-only when possible
 4. **Network Segmentation**: Use multiple networks for isolation
-5. **Environment Isolation**: Never commit sensitive `.env` files
+5. **Environment Isolation**: Never commit `.env`; commit `.env.example` with fake values only
 6. **Image Scanning**: Scan images for vulnerabilities
 7. **Minimal Base Images**: Use Alpine or distroless images
 

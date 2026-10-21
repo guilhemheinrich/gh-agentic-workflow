@@ -1088,7 +1088,8 @@ assets:
       - docker-compose
     description: >-
       Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production
-      deployment
+      deployment. Enforces the secrets rule: no configuration value or secret in compose files (not even as a default or
+      in an example), everything from an unversioned .env via ${VAR:?}, fake values in .env.example.
     category: tools-and-configurations
   - path: skills/docker-containerization/
     type: skill

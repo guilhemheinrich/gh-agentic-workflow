@@ -56,7 +56,7 @@ services:
     environment:
       - NODE_ENV=development
       - MONGODB_URI=mongodb://mongo:27017/mernapp
-      - JWT_SECRET=dev-secret-key
+      - JWT_SECRET=${JWT_SECRET:?}
       - PORT=5000
     networks:
       - mern-network
@@ -73,7 +73,7 @@ services:
       - "27017:27017"
     environment:
       - MONGO_INITDB_ROOT_USERNAME=admin
-      - MONGO_INITDB_ROOT_PASSWORD=secret
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD:?}
       - MONGO_INITDB_DATABASE=mernapp
     volumes:
       - mongo-data:/data/db
@@ -96,10 +96,10 @@ services:
       - "8081:8081"
     environment:
       - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=secret
-      - ME_CONFIG_MONGODB_URL=mongodb://admin:secret@mongo:27017/
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_INITDB_ROOT_PASSWORD:?}
+      - ME_CONFIG_MONGODB_URL=mongodb://admin:${MONGO_INITDB_ROOT_PASSWORD:?}@mongo:27017/
       - ME_CONFIG_BASICAUTH_USERNAME=admin
-      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=${ME_CONFIG_BASICAUTH_PASSWORD:?}
     networks:
       - mern-network
     depends_on:
@@ -156,10 +156,10 @@ services:
     ports:
       - "3306:3306"
     environment:
-      - MYSQL_ROOT_PASSWORD=root_secret
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?}
       - MYSQL_DATABASE=lampdb
       - MYSQL_USER=lampuser
-      - MYSQL_PASSWORD=lamppass
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?}
     volumes:
       - mysql-data:/var/lib/mysql
       - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
@@ -184,7 +184,7 @@ services:
       - PMA_HOST=mysql
       - PMA_PORT=3306
       - PMA_USER=root
-      - PMA_PASSWORD=root_secret
+      - PMA_PASSWORD=${PMA_PASSWORD:?}
       - UPLOAD_LIMIT=64M
     networks:
       - lamp-network
@@ -234,10 +234,10 @@ services:
       - /app/.next
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/nextjs_db
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/nextjs_db
       - REDIS_URL=redis://redis:6379
       - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=dev-secret
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:?}
     networks:
       - nextjs-network
     depends_on:
@@ -256,7 +256,7 @@ services:
       - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_DB=nextjs_db
     volumes:
       - postgres-data:/var/lib/postgresql/data
@@ -280,7 +280,7 @@ services:
       - redis-data:/data
     networks:
       - nextjs-network
-    command: redis-server --appendonly yes --requirepass redis_password
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?}
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -296,7 +296,7 @@ services:
       - "5050:80"
     environment:
       - PGADMIN_DEFAULT_EMAIL=admin@admin.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD:?}
       - PGADMIN_CONFIG_SERVER_MODE=False
     volumes:
       - pgadmin-data:/var/lib/pgadmin
@@ -313,7 +313,7 @@ services:
     ports:
       - "8082:8081"
     environment:
-      - REDIS_HOSTS=local:redis:6379:0:redis_password
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD:?}
     networks:
       - nextjs-network
     depends_on:
@@ -351,7 +351,7 @@ services:
     environment:
       - DEBUG=True
       - SECRET_KEY=django-insecure-dev-key
-      - DATABASE_URL=postgresql://django:django@postgres:5432/django_db
+      - DATABASE_URL=postgresql://django:${POSTGRES_PASSWORD:?}@postgres:5432/django_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
@@ -371,7 +371,7 @@ services:
     environment:
       - POSTGRES_DB=django_db
       - POSTGRES_USER=django
-      - POSTGRES_PASSWORD=django
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
     networks:
       - django-network
     healthcheck:
@@ -404,7 +404,7 @@ services:
     volumes:
       - .:/code
     environment:
-      - DATABASE_URL=postgresql://django:django@postgres:5432/django_db
+      - DATABASE_URL=postgresql://django:${POSTGRES_PASSWORD:?}@postgres:5432/django_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
@@ -425,7 +425,7 @@ services:
     volumes:
       - .:/code
     environment:
-      - DATABASE_URL=postgresql://django:django@postgres:5432/django_db
+      - DATABASE_URL=postgresql://django:${POSTGRES_PASSWORD:?}@postgres:5432/django_db
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
     networks:
@@ -496,7 +496,7 @@ services:
     container_name: postgres-primary
     environment:
       - POSTGRES_USER=replicator
-      - POSTGRES_PASSWORD=replicator_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
       - POSTGRES_DB=myapp
       - POSTGRES_HOST_AUTH_METHOD=md5
       - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
@@ -517,8 +517,8 @@ services:
     container_name: postgres-standby
     environment:
       - POSTGRES_USER=replicator
-      - POSTGRES_PASSWORD=replicator_password
-      - PGPASSWORD=replicator_password
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?}
+      - PGPASSWORD=${PGPASSWORD:?}
     volumes:
       - postgres-standby-data:/var/lib/postgresql/data
       - ./postgres/standby/postgresql.conf:/etc/postgresql/postgresql.conf
@@ -609,10 +609,10 @@ services:
     image: mysql:8.0
     container_name: mysql-master
     environment:
-      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?}
       - MYSQL_DATABASE=myapp
       - MYSQL_USER=repl_user
-      - MYSQL_PASSWORD=repl_password
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:?}
     volumes:
       - mysql-master-data:/var/lib/mysql
       - ./mysql/master/my.cnf:/etc/mysql/conf.d/my.cnf:ro
@@ -628,7 +628,7 @@ services:
     image: mysql:8.0
     container_name: mysql-slave
     environment:
-      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:?}
       - MYSQL_DATABASE=myapp
     volumes:
       - mysql-slave-data:/var/lib/mysql
@@ -777,7 +777,7 @@ services:
     environment:
       - RABBITMQ_ERLANG_COOKIE=secret_cookie
       - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=admin
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:?}
     volumes:
       - rabbitmq1-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -795,7 +795,7 @@ services:
     environment:
       - RABBITMQ_ERLANG_COOKIE=secret_cookie
       - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=admin
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:?}
     volumes:
       - rabbitmq2-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -815,7 +815,7 @@ services:
     environment:
       - RABBITMQ_ERLANG_COOKIE=secret_cookie
       - RABBITMQ_DEFAULT_USER=admin
-      - RABBITMQ_DEFAULT_PASS=admin
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_DEFAULT_PASS:?}
     volumes:
       - rabbitmq3-data:/var/lib/rabbitmq
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
@@ -1034,7 +1034,7 @@ services:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD:?}
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-piechart-panel
       - GF_SERVER_ROOT_URL=http://localhost:3000
     volumes:
@@ -1085,7 +1085,7 @@ services:
     image: prometheuscommunity/postgres-exporter:latest
     container_name: postgres-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://postgres:password@postgres:5432/myapp?sslmode=disable"
+      DATA_SOURCE_NAME: "postgresql://postgres:${POSTGRES_PASSWORD:?}@postgres:5432/myapp?sslmode=disable"
     ports:
       - "9187:9187"
     networks:
@@ -1255,7 +1255,7 @@ services:
     environment:
       POSTGRES_DB: gitlabhq_production
       POSTGRES_USER: gitlab
-      POSTGRES_PASSWORD: gitlab
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
     volumes:
       - gitlab-postgres-data:/var/lib/postgresql/data
     networks:
