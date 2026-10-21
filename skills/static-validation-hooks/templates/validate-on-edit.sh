@@ -22,6 +22,14 @@
 #   VALIDATE_MAX_RETRIES=3  Consecutive rejections on one file before muting it.
 #   VALIDATE_MUTE_TTL_S=900 How long a muted file stays muted. Default 900.
 #   VALIDATE_WORKTREE=auto  auto|skip|run — behaviour inside a linked worktree.
+#   VALIDATE_EXEC=auto      auto|docker|host — where commands run. auto = host in a
+#                           Claude Code cloud session (CLAUDE_CODE_REMOTE=true, no
+#                           Docker there), docker everywhere else.
+#   VALIDATE_NO_FIX=1       Report only: `fix` verbs are skipped and `fixing` is
+#                           false (pre-commit — fixing the working tree would leave
+#                           the index wrong).
+#   VALIDATE_UP_CMD         Command named in "start the stack" hints. Default:
+#                           `task up` with a Taskfile, else `make up`.
 #   VALIDATE_HOST           claude|cursor — force the response shape (else sniffed).
 #   VALIDATE_DEBUG=1        Verbose trace to stderr and the log file.
 #
@@ -38,6 +46,8 @@ VALIDATE_BUDGET_S="${VALIDATE_BUDGET_S:-3}"
 VALIDATE_MAX_RETRIES="${VALIDATE_MAX_RETRIES:-3}"
 VALIDATE_MUTE_TTL_S="${VALIDATE_MUTE_TTL_S:-900}"
 VALIDATE_WORKTREE="${VALIDATE_WORKTREE:-auto}"
+VALIDATE_EXEC="${VALIDATE_EXEC:-auto}"
+VALIDATE_NO_FIX="${VALIDATE_NO_FIX:-0}"
 VALIDATE_DEBUG="${VALIDATE_DEBUG:-0}"
 
 LOG_FILE="${TMPDIR:-/tmp}/validate-on-edit.log"
@@ -230,6 +240,28 @@ with_budget() {
   return "$rc"
 }
 
+# ── Execution mode ───────────────────────────────────────────────────────────
+# docker: `docker exec` in the already-running compose service (the default).
+# host:   run from the repo root (or the `strip`ped workspace) on this machine,
+#         for environments with no Docker but host-installed tooling — a Claude
+#         Code cloud session whose SessionStart hook installed the dependencies.
+exec_mode() {
+  case "$VALIDATE_EXEC" in
+    docker|host) printf '%s' "$VALIDATE_EXEC" ;;
+    *) [[ "${CLAUDE_CODE_REMOTE:-}" == "true" ]] && printf 'host' || printf 'docker' ;;
+  esac
+}
+
+# The command that starts the stack, as this project spells it.
+up_hint() {
+  if [[ -n "${VALIDATE_UP_CMD:-}" ]]; then printf '%s' "$VALIDATE_UP_CMD"; return; fi
+  local t
+  for t in Taskfile.yml Taskfile.yaml taskfile.yml taskfile.yaml; do
+    [[ -f "${PROJECT_ROOT:-.}/$t" ]] && { printf 'task up'; return; }
+  done
+  printf 'make up'
+}
+
 # ── Container resolution (cached; the hot path is a single `docker exec`) ─────
 compose_project() {
   if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then printf '%s' "$COMPOSE_PROJECT_NAME"; return; fi
@@ -276,14 +308,27 @@ exec_in() {
 # ── Routing verbs — the vocabulary the ROUTING TABLE is written in ───────────
 #   svc NAME       target compose service (required, first)
 #   strip PREFIX   drop a path prefix so the container sees its own relative path
+#                  (host mode runs the command from that prefix instead)
 #   fix  CMD...    best-effort auto-fix; failures never reach the agent
 #   check CMD...   validation; a non-zero exit becomes agent feedback
 #   skip           explicitly declare this path as not validated
-_SVC=""; _SKIP=0; _ROUTED=0; _VIOLATION=""; F=""; REL=""; WARNING=""; DRY=0
+#   fixing         predicate: false under VALIDATE_NO_FIX=1, for a `check` whose
+#                  linter fixes in place (`if fixing; then check eslint --fix …`)
+_SVC=""; _STRIP=""; _SKIP=0; _ROUTED=0; _VIOLATION=""; F=""; REL=""; WARNING=""; DRY=0
 
-svc()   { _SVC="$1"; _ROUTED=1; F="${F:-$REL}"; }
-strip() { F="${REL#$1}"; }
-skip()  { _SKIP=1; _ROUTED=1; }
+svc()    { _SVC="$1"; _ROUTED=1; F="${F:-$REL}"; }
+strip()  { _STRIP="$1"; F="${REL#$1}"; }
+skip()   { _SKIP=1; _ROUTED=1; }
+fixing() { [[ "$VALIDATE_NO_FIX" != "1" ]]; }
+
+# Host mode: run from the directory the container would use as its WORKDIR.
+# 125 when that directory is missing, so a wrong `strip` reads as unwired, not clean.
+run_on_host() {
+  local dir="$PROJECT_ROOT${_STRIP:+/${_STRIP%/}}" rc=0
+  with_budget bash -c 'cd "$1" 2>/dev/null || exit 125; shift; exec "$@"' validate-host "$dir" "$@" || rc=$?
+  drain_budget_out
+  return "$rc"
+}
 
 # Shared by fix/check. Echoes output, returns the container exit code.
 _run() {
@@ -291,6 +336,14 @@ _run() {
   if [[ -z "$_SVC" ]]; then
     log "routing error: '$tool' called before svc"
     return 125
+  fi
+  if [[ "$(exec_mode)" == "host" ]]; then
+    if (( DRY )); then
+      printf '  would run on host in ./%s: %s\n' "${_STRIP:-}" "$*" >&2
+      return 0
+    fi
+    run_on_host "$@"
+    return
   fi
   if (( DRY )); then
     printf '  would run: docker exec <%s> %s\n' "$_SVC" "$*" >&2
@@ -302,6 +355,7 @@ _run() {
 
 fix() {
   _ROUTED=1
+  fixing || return 0
   (( DRY )) && { _run "$@" >/dev/null; return 0; }
   local out rc=0
   out="$(_run "$@")" || rc=$?
@@ -326,12 +380,27 @@ This tool is too slow for an on-edit hook — move it to the CI/verify stage and
 remove it from the ROUTING TABLE, or raise VALIDATE_BUDGET_S deliberately." || true
       return 0 ;;
     125)
+      if [[ "$(exec_mode)" == "host" ]]; then
+        log "host mode: no directory ./$_STRIP for $REL"
+        warn_once "nohostdir-$_STRIP" \
+          "[validate] host mode: ./$_STRIP does not exist, so $REL was not validated.
+Fix the \`strip\` of this branch in the ROUTING TABLE." || true
+        return 0
+      fi
       log "no running container for service '$_SVC'"
       warn_once "nocontainer-$_SVC" \
         "[validate] service \`$_SVC\` has no running container, so $REL was not validated.
-Start the stack (\`make up\`) to re-enable on-edit validation." || true
+Start the stack (\`$(up_hint)\`) to re-enable on-edit validation." || true
       return 0 ;;
     126|127)
+      if [[ "$(exec_mode)" == "host" ]]; then
+        log "host mode: tool '$tool' not found"
+        warn_once "wiring-host-$tool" \
+          "[validate] host mode: \`$tool\` is not installed on this machine, so $REL was
+not validated. Install the project dependencies on the host (the SessionStart
+hook does it in a cloud session), or set VALIDATE_EXEC=docker." || true
+        return 0
+      fi
       log "tool '$tool' not found in service '$_SVC'"
       warn_once "wiring-$_SVC-$tool" \
         "[validate] \`$tool\` is not installed in the \`$_SVC\` container, so $REL was not
@@ -460,7 +529,7 @@ muted() {
 
 # ── Validate one repo-relative path; sets _VIOLATION / WARNING ───────────────
 validate_path() {
-  REL="$1"; F="$REL"; _SVC=""; _SKIP=0; _ROUTED=0; _VIOLATION=""
+  REL="$1"; F="$REL"; _SVC=""; _STRIP=""; _SKIP=0; _ROUTED=0; _VIOLATION=""
   _DEADLINE=$(( $(date +%s) + VALIDATE_BUDGET_S ))
 
   is_excluded_path "$REL" && { log "excluded: $REL"; return 0; }
@@ -494,7 +563,7 @@ cli_mode() {
     --dry-run)
       [[ -z "$arg" ]] && { printf 'usage: %s --dry-run <path>\n' "$0" >&2; exit 64; }
       DRY=1
-      printf 'project : %s\ncompose : %s\nfile    : %s\n' "$PROJECT_ROOT" "$(compose_project)" "$arg" >&2
+      printf 'project : %s\ncompose : %s\nexec    : %s\nfile    : %s\n' "$PROJECT_ROOT" "$(compose_project)" "$(exec_mode)" "$arg" >&2
       validate_path "$arg"
       printf 'service : %s\nin-ctr  : %s\nrouted  : %s  skipped: %s\n' \
         "${_SVC:-<none>}" "${F:-<none>}" "$_ROUTED" "$_SKIP" >&2
@@ -521,13 +590,19 @@ cli_mode() {
         printf 'worktree  : main checkout\n'
       fi
       printf 'timeout   : %s\n' "${TIMEOUT_BIN:-bash watchdog fallback}"
-      printf 'docker    : %s\n' "$(docker version --format '{{.Server.Version}}' 2>/dev/null || printf 'UNREACHABLE')"
-      printf 'services referenced by the routing table:\n'
-      local s cid
-      for s in $(grep -oE '(^|;)[[:space:]]*svc[[:space:]]+[a-zA-Z0-9_.-]+' "$0" | awk '{print $NF}' | sort -u); do
-        cid="$(lookup_cid "$s")"
-        printf '  %-20s %s\n' "$s" "${cid:-NOT RUNNING — run: make up}"
-      done
+      printf 'exec      : %s (VALIDATE_EXEC=%s)\n' "$(exec_mode)" "$VALIDATE_EXEC"
+      printf 'fix verbs : %s\n' "$(fixing && printf on || printf 'off (VALIDATE_NO_FIX=1)')"
+      if [[ "$(exec_mode)" == "host" ]]; then
+        printf 'docker    : not used — commands run on the host from %s\n' "$PROJECT_ROOT"
+      else
+        printf 'docker    : %s\n' "$(docker version --format '{{.Server.Version}}' 2>/dev/null || printf 'UNREACHABLE')"
+        printf 'services referenced by the routing table:\n'
+        local s cid
+        for s in $(grep -oE '(^|;)[[:space:]]*svc[[:space:]]+[a-zA-Z0-9_.-]+' "$0" | awk '{print $NF}' | sort -u); do
+          cid="$(lookup_cid "$s")"
+          printf '  %-20s %s\n' "$s" "${cid:-NOT RUNNING — run: $(up_hint)}"
+        done
+      fi
       printf 'suppressed warnings this session: %s\n' "$(ls "$STATE_DIR"/warn-* 2>/dev/null | wc -l | tr -d ' ')"
       printf 'log       : %s\n' "$LOG_FILE"
       ;;
@@ -562,7 +637,8 @@ fi
 
 state_init
 
-if in_linked_worktree && [[ "$(worktree_decision)" == "skip" ]]; then
+# Host mode reads the worktree's own files: the stale-mount hazard is docker-only.
+if [[ "$(exec_mode)" == "docker" ]] && in_linked_worktree && [[ "$(worktree_decision)" == "skip" ]]; then
   silent "linked worktree pinned to the main stack by COMPOSE_PROJECT_NAME (VALIDATE_WORKTREE=$VALIDATE_WORKTREE)"
 fi
 

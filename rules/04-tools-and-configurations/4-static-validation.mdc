@@ -32,11 +32,13 @@ One file, `.agents/hooks/validate-on-edit.sh`, holding two layers:
 
 Plus a thin registration file per agent host (`.claude/settings.json`,
 `.cursor/hooks.json`). There is no cross-agent hook standard: the logic lives
-once under `.agents/`, each host gets a pointer.
+once under `.agents/`, each host gets a pointer. Alongside: `.githooks/pre-commit`
+replays the hook on staged files, and in a Claude Code cloud session (no Docker)
+the runner runs the routing table on the host.
 
 ## When to install
 
-- Any project with Docker and a dev stack the team already runs (`make up`).
+- Any project with Docker and a dev stack the team already runs (`make up` / `task up`).
 - Any project where agents perform repeated edits.
 
 ## When NOT to install
@@ -59,7 +61,7 @@ once under `.agents/`, each host gets a pointer.
 ## Coverage limits — the verify phase stays mandatory
 
 - Files written through the Bash tool (`cat >`, `sed -i`, code generators)
-  never trigger the hook.
+  never trigger the hook; the pre-commit replay catches them at commit time.
 - In a linked git worktree the hook validates only if that worktree has its own
   stack; when `COMPOSE_PROJECT_NAME` pins it to the main checkout's stack it
   skips, because linting the main checkout's stale copy is a false pass.
