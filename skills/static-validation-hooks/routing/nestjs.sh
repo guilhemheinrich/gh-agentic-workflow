@@ -1,7 +1,7 @@
 # Routing table — NestJS backend (+ optional frontend workspace).
 # Paste between the BEGIN/END ROUTING TABLE markers in validate-on-edit.sh.
 #
-# Container prerequisite: the `api` service is up (`make up`) with the repo
+# Container prerequisite: the `api` service is up (`make up` / `task up`) with the repo
 # bind-mounted at its WORKDIR and eslint resolvable from its node_modules.
 #
 # NestJS specifics worth knowing before you edit this table:

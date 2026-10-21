@@ -7,10 +7,12 @@ description: >-
   already-up compose container, and stays silent unless something is wrong.
   Ships a generic runner plus go / python / typescript / nestjs routing tables,
   the Claude and Cursor registration adapters, a SessionStart hook that installs
-  dependencies in Claude Code cloud sessions, and a per-language reference for
+  dependencies in Claude Code cloud sessions (where the runner switches to host
+  mode, no Docker there), a pre-commit replay, and a per-language reference for
   proving a branch actually rejects something. Use when adding lint-on-edit to
-  a project, adapting the routing table to a new stack or workspace, or
-  debugging a hook that is slow, noisy, or silently doing nothing.
+  a project, adapting the routing table to a new stack or workspace, making it
+  work in cloud sessions, or debugging a hook that is slow, noisy, or silently
+  doing nothing.
 ---
 
 # Static Validation Hooks
@@ -33,7 +35,8 @@ agent writes a file
       └─▶│ ROUTING TABLE (yours)        │ glob → service → linter
          └──────────────────────────────┘
                     │
-                    ▼  docker exec on the container `make up` already started
+                    ▼  docker exec on the container `make up`/`task up` already started
+                       (host mode in a Docker-less cloud session, §5)
               clean → exit 0, silence
           violation → exit 2, stderr back to the model
 ```
@@ -49,7 +52,8 @@ agent writes a file
 | `routing/go.sh`                   | Routing table — gofmt + golangci-lint. | Fork it         |
 | `templates/claude-settings.json`  | Claude registration.                | Path only          |
 | `templates/cursor-hooks.json`     | Cursor registration.                | Path only          |
-| `templates/session-start.sh`      | Claude cloud-session dependency install (§5). | Install/build steps |
+| `templates/session-start.sh`      | Claude cloud-session dependency install + pre-commit activation (§5). | Install/build steps |
+| `templates/pre-commit.sh`         | Replays the hook on staged files (§10). | As is          |
 | `references/proving-the-hook-bites.md` | Per-language canaries, coverage probes, silent-pass traps. | Read it |
 
 There is no standard, cross-agent hook format: Claude reads
@@ -98,6 +102,17 @@ only `version` and `hooks` on purpose: Cursor silently stopped loading it when
 it held `_comment*` keys with documentation text (observed with
 `cursor-agent 2026.09.02`), so any note about it lives here, not in the JSON.
 
+Install the pre-commit replay (§10):
+
+```bash
+mkdir -p .githooks
+cp <this-repo>/skills/static-validation-hooks/templates/pre-commit.sh .githooks/pre-commit
+chmod +x .githooks/pre-commit
+git config core.hooksPath .githooks   # wrap it in a `hooks` target, call it from `setup`
+```
+
+The session-start hook runs that `git config` itself in cloud sessions.
+
 Smoke-test, in this order:
 
 ```bash
@@ -144,6 +159,19 @@ Five verbs, evaluated top-down, first match wins:
 | `fix CMD…`      | Best-effort auto-fix. Failures are logged, never shown to the agent.    |
 | `check CMD…`    | Validation. A non-zero exit becomes agent feedback.                     |
 | `skip`          | Declare the path as deliberately unvalidated.                           |
+
+Plus one predicate, `fixing`, false under `VALIDATE_NO_FIX=1` (the pre-commit).
+`fix` verbs are skipped there on their own; a `check` whose linter fixes in place
+must branch on it, or the pre-commit repairs the working tree and commits the
+unfixed index:
+
+```bash
+    *.ts)
+      svc api
+      if fixing; then check npx --no-install eslint --fix --max-warnings=0 "$F"
+      else            check npx --no-install eslint --max-warnings=0 "$F"; fi
+      ;;
+```
 
 ```bash
 route() {
@@ -219,7 +247,7 @@ reported **at most once per session** and then falls silent:
 | ----------------------------- | ---------------------------------------------- | ------------ |
 | Lint passes                   | nothing                                        | silent       |
 | Violation                     | linter output (Claude: stderr, exit 2; Cursor: `additional_context`) | see §6 |
-| No running container          | "start the stack", once                        | silent       |
+| No running container          | "start the stack" (`task up` / `make up`), once | silent      |
 | Tool missing in container     | "`ruff` is not installed in `api`", once       | silent       |
 | Budget exceeded               | "too slow for a hook, move it to CI", once     | silent       |
 | No branch matches the file    | "no validation branch matches `.rs`", once     | silent       |
@@ -257,19 +285,31 @@ registered by the `SessionStart` block of `templates/claude-settings.json`.
 | Synchronous by default                       | The session starts only once dependencies exist, so the first edit is validated. Async (`{"async": true}` on stdout) starts faster but races the agent's first edit. |
 | Idempotent, non-interactive                  | It runs on every session start, resume included.                    |
 
-For cloud coverage the routing table has to run linters on the host, since no
-container is up. A table that already does (the stack's containers run frozen
-images with no source mount, say) needs only this hook. A purely docker-routed
-table still validates nothing in the cloud; route the cloud case to host
-binaries — inside the routing-table markers — or accept the gap and lean on CI.
+For cloud coverage the linters have to run on the host, since there is no
+Docker daemon to `docker exec` into. The runner does it on its own — **host
+mode**:
+
+- `VALIDATE_EXEC=auto` (default) picks `host` when `CLAUDE_CODE_REMOTE=true`,
+  `docker` everywhere else. Force either with `VALIDATE_EXEC=docker|host`.
+- The same routing table runs from the repo root, or from the `strip`ped prefix
+  when the branch has one, so `$F` resolves exactly as in the container's
+  WORKDIR. Write linter paths relative (`node_modules/.bin/eslint`), never
+  container-absolute (`/app/node_modules/...`).
+- `svc` is still required (it names the branch), but no container is looked up.
+- A missing tool warns once and names the host install, not a container; a
+  `strip` prefix that does not exist on the host warns once too. Neither passes
+  silently as clean.
+
+Anything the image installs outside the lockfile (a system `ruff`,
+`golangci-lint`) must be installed by the session-start hook too, or that
+branch warns once and validates nothing. Prove each branch with a canary in
+host mode as well (`CLAUDE_CODE_REMOTE=true .agents/hooks/validate-on-edit.sh
+--check …`).
 
 Measured on 2026-10-15 on a pnpm monorepo (12 workspace projects, host-routed
 ESLint): `pnpm install` + workspace package build took ~30 s from an empty
 `node_modules`, ~3 s when already installed; afterwards ESLint answered in 1–2 s
 per file, cold included, and the CI unit-test suites passed in the session.
-Make the "tool missing" message of a host-routed branch name the install
-command (`pnpm install`), not a container — the generic "not installed in the
-`<svc>` container" text points the agent at a service that does not exist.
 
 Validate it the way the session will run it:
 
@@ -368,6 +408,9 @@ One clean pass resets the counter immediately.
 | `VALIDATE_MAX_RETRIES`  | `3`     | Rejections before muting a file.                 |
 | `VALIDATE_MUTE_TTL_S`   | `900`   | How long a muted file stays muted.               |
 | `VALIDATE_WORKTREE`     | `auto`  | `auto` \| `skip` \| `run` in a linked worktree.  |
+| `VALIDATE_EXEC`         | `auto`  | `docker` \| `host`; `auto` = `host` when `CLAUDE_CODE_REMOTE=true` (§5, Cloud sessions). |
+| `VALIDATE_NO_FIX=1`     | `0`     | Report only: skips `fix`, `fixing` is false (pre-commit). |
+| `VALIDATE_UP_CMD`       | sniffed | Command named in "start the stack": `task up` with a Taskfile, else `make up`. |
 | `VALIDATE_HOST`         | sniffed | `claude` \| `cursor` response shape; the sniff reads `cursor_version`/`tool_output` (Cursor) vs `tool_response` (Claude). |
 | `VALIDATE_DEBUG=1`      | `0`     | Trace to stderr as well as the log.              |
 
@@ -405,9 +448,12 @@ Claude `PostToolUse Edit|Write` and Cursor `postToolUse Write` fire on agent
 *file-edit tools*. Cursor reports both its create and its search-replace edit
 tool as `Write`, so the single matcher covers both.
 Files written through the Bash tool (`cat > f.ts`, `sed -i`, code generators
-like `nest g` or `prisma generate`) never trigger the hook. Complement with a
-pre-commit hook running the same script over `git diff --name-only` if that gap
-matters for the project.
+like `nest g` or `prisma generate`) never trigger the hook.
+`templates/pre-commit.sh` closes that gap at commit time: it runs `--check` on
+every staged file with `VALIDATE_NO_FIX=1` and a 30s budget, blocks on a
+violation, and prints warnings without blocking. It reads the working-tree copy
+of each file, not the index blob, so a partially staged file is checked as it
+stands on disk.
 
 ## 11. See also
 
@@ -424,7 +470,11 @@ The historical design record is kept under `specs/014-lint-on-edit-hook/`.
 
 ## Implementation Status
 
-**Fully Implemented.** The runner ships with `--dry-run`, `--check` and
+**Fully Implemented.** Host mode, `VALIDATE_NO_FIX`, the up-command hint and
+the pre-commit template were added on 2026-10-21 after a pnpm
+monorepo (Hono API + Expo app) installed the hook from a Claude Code cloud
+session: there, every canary passed in host mode and a canary commit was
+refused by the pre-commit. The runner ships with `--dry-run`, `--check` and
 `--doctor`, and was exercised against a stubbed docker on all paths: clean,
 violation, container down, tool missing, budget exceeded, unrouted extension,
 the three linked-worktree cases, retry brake, mute expiry, Claude and Cursor

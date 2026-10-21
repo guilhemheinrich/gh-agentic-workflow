@@ -1746,8 +1746,9 @@ assets:
       Generate a bespoke static-validation hook in a consumer repo so agents never carry the burden of remembering to
       lint. Ships a generic runner for `.agents/hooks/validate-on-edit.sh` (agent protocol, per-edit time budget, cached
       container resolution, retry brake, warn-once degradation) plus python / typescript / nestjs routing tables and the
-      Claude and Cursor registration adapters, and a SessionStart hook that installs dependencies in Claude Code cloud
-      sessions. Documents the svc/strip/fix/check/skip routing vocabulary, branch ordering, why whole-project checkers
+      Claude and Cursor registration adapters, a SessionStart hook that installs dependencies in Claude Code cloud
+      sessions (where the runner switches to host mode, no Docker there), and a pre-commit replay of the hook on staged
+      files. Documents the svc/strip/fix/check/skip routing vocabulary, branch ordering, why whole-project checkers
       (tsc, phpstan, mypy) must stay in CI, worktree-aware container resolution, and the Bash-tool coverage gap.
       Replaces the former `make lint FILE=…` router approach.
   - path: skills/systematic-debugging/

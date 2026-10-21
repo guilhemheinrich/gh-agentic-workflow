@@ -46,3 +46,11 @@ fi
 # Project-specific build steps go here, e.g. for a pnpm monorepo whose tests
 # import workspace packages through their `dist`:
 #   pnpm -r --filter "./packages/**" build >&2
+
+# The runner switches to host mode here on its own (VALIDATE_EXEC=auto reads
+# CLAUDE_CODE_REMOTE): there is no Docker in a cloud session. Activate the
+# versioned pre-commit replay (templates/pre-commit.sh) too, so files written
+# through the Bash tool are validated at commit time.
+if [ -d .githooks ]; then
+  git config core.hooksPath .githooks
+fi
