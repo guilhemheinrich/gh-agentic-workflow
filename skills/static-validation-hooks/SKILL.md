@@ -6,7 +6,8 @@ description: >-
   routes each edited file to a fast file-local linter running in the project's
   already-up compose container, and stays silent unless something is wrong.
   Ships a generic runner plus go / python / typescript / nestjs routing tables,
-  the Claude and Cursor registration adapters, and a per-language reference for
+  the Claude and Cursor registration adapters, a SessionStart hook that installs
+  dependencies in Claude Code cloud sessions, and a per-language reference for
   proving a branch actually rejects something. Use when adding lint-on-edit to
   a project, adapting the routing table to a new stack or workspace, or
   debugging a hook that is slow, noisy, or silently doing nothing.
@@ -48,6 +49,7 @@ agent writes a file
 | `routing/go.sh`                   | Routing table — gofmt + golangci-lint. | Fork it         |
 | `templates/claude-settings.json`  | Claude registration.                | Path only          |
 | `templates/cursor-hooks.json`     | Cursor registration.                | Path only          |
+| `templates/session-start.sh`      | Claude cloud-session dependency install (§5). | Install/build steps |
 | `references/proving-the-hook-bites.md` | Per-language canaries, coverage probes, silent-pass traps. | Read it |
 
 There is no standard, cross-agent hook format: Claude reads
@@ -77,8 +79,20 @@ Then paste the routing table closest to the stack (`routing/*.sh`) between the
 `route()`, and adapt the globs to the real workspace layout. Keep the two
 marker lines byte-for-byte: the runner upgrade path (§8) and any tooling that
 reads the table locate it with a regex on `^# BEGIN ROUTING TABLE `; a table
-spliced outside the markers is invisible to them. Merge the `hooks` block of
-`templates/claude-settings.json` into `.claude/settings.json`, and copy
+spliced outside the markers is invisible to them.
+
+If the repo is ever worked on from Claude Code cloud sessions, also install the
+session-start hook (§5, *Cloud sessions*):
+
+```bash
+mkdir -p .claude/hooks
+cp <this-repo>/skills/static-validation-hooks/templates/session-start.sh .claude/hooks/
+chmod +x .claude/hooks/session-start.sh
+```
+
+Merge the `hooks` block of
+`templates/claude-settings.json` into `.claude/settings.json` — it registers
+both the `PostToolUse` validation and the `SessionStart` install below — and copy
 `templates/cursor-hooks.json` to `.cursor/hooks.json` as is. That file carries
 only `version` and `hooks` on purpose: Cursor silently stopped loading it when
 it held `_comment*` keys with documentation text (observed with
@@ -211,9 +225,60 @@ reported **at most once per session** and then falls silent:
 | No branch matches the file    | "no validation branch matches `.rs`", once     | silent       |
 | Worktree pinned to main stack | nothing                                        | silent       |
 | Excluded dir, deleted file    | nothing                                        | silent       |
+| Cloud session, no deps/stack  | "not installed" / "no running container", once | silent — install them at session start (below) |
 
 Every one of these is written to `$TMPDIR/validate-on-edit.log` regardless, and
 `--doctor` counts the warnings suppressed this session.
+
+### Cloud sessions — install dependencies at session start
+
+A Claude Code cloud session (claude.ai/code, mobile, GitHub Action) runs in a
+fresh container cloned from the repo. Two things the runner relies on are
+missing there:
+
+- **No dependencies.** No `node_modules`, no virtualenv, no Go module cache. A
+  routing table that runs linters on the host (`node_modules/eslint`, `.venv/bin/ruff`)
+  finds nothing, warns once, and validates **nothing** for the rest of the session.
+- **Usually no stack.** There is no `make up` behind the session, so a
+  docker-routed branch reports "no running container" once and falls silent.
+
+Both look like a working hook — one warning, then silence — which is exactly
+the false pass §2 warns about. The fix is a `SessionStart` hook that installs
+the dependencies before the session begins:
+`templates/session-start.sh`, copied to `.claude/hooks/session-start.sh` and
+registered by the `SessionStart` block of `templates/claude-settings.json`.
+
+| Rule                                         | Why                                                                 |
+| -------------------------------------------- | ------------------------------------------------------------------- |
+| Guard on `CLAUDE_CODE_REMOTE=true`           | Local dependencies are the developer's; a local session must not reinstall them. |
+| Mirror the CI install **and build** steps    | Linters and tests often need workspace packages built (`dist`) first. CI is the step already proven on a clean checkout. |
+| Plain install (`pnpm install`, `npm install`), not `ci`/`--frozen-lockfile` | The container is cached after the hook; a plain install reuses it. |
+| Send install output to stderr                | The hook's stdout is a protocol channel.                            |
+| Synchronous by default                       | The session starts only once dependencies exist, so the first edit is validated. Async (`{"async": true}` on stdout) starts faster but races the agent's first edit. |
+| Idempotent, non-interactive                  | It runs on every session start, resume included.                    |
+
+For cloud coverage the routing table has to run linters on the host, since no
+container is up. A table that already does (the stack's containers run frozen
+images with no source mount, say) needs only this hook. A purely docker-routed
+table still validates nothing in the cloud; route the cloud case to host
+binaries — inside the routing-table markers — or accept the gap and lean on CI.
+
+Measured on 2026-10-15 on a pnpm monorepo (12 workspace projects, host-routed
+ESLint): `pnpm install` + workspace package build took ~30 s from an empty
+`node_modules`, ~3 s when already installed; afterwards ESLint answered in 1–2 s
+per file, cold included, and the CI unit-test suites passed in the session.
+Make the "tool missing" message of a host-routed branch name the install
+command (`pnpm install`), not a container — the generic "not installed in the
+`<svc>` container" text points the agent at a service that does not exist.
+
+Validate it the way the session will run it:
+
+```bash
+CLAUDE_CODE_REMOTE=true CLAUDE_PROJECT_DIR="$PWD" .claude/hooks/session-start.sh </dev/null
+```
+
+Then run one `--check` canary (§2) and one test. The hook takes effect for the
+sessions started after it reaches the default branch.
 
 ### Git worktrees
 

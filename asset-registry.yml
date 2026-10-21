@@ -87,18 +87,6 @@ x-tag-descriptions:
   web-analysis: "[NEW] web-analysis"
   web-components: Web Components, Lit
   workflow: "[NEW] workflow"
-x-category-descriptions:
-  architecture: Architecture patterns and structural principles
-  standards: Coding standards and conventions
-  programming-languages: Language-specific practices
-  frameworks-and-libraries: Framework and library usage
-  tools-and-configurations: Tooling, CLIs and configuration
-  workflows-and-processes: Development workflows and processes
-  templates-and-models: Templates and reusable models
-  quality-assurance: Testing, review and quality
-  domain-specific: Business-domain specific assets
-  philosophy: Project philosophies — paradigms written to PHILOSOPHY.md and referenced from AGENTS.md / CLAUDE.md
-  other: Everything else
 assets:
   - path: .agents/skills/documentation-writer/
     type: skill
@@ -1758,9 +1746,10 @@ assets:
       Generate a bespoke static-validation hook in a consumer repo so agents never carry the burden of remembering to
       lint. Ships a generic runner for `.agents/hooks/validate-on-edit.sh` (agent protocol, per-edit time budget, cached
       container resolution, retry brake, warn-once degradation) plus python / typescript / nestjs routing tables and the
-      Claude and Cursor registration adapters. Documents the svc/strip/fix/check/skip routing vocabulary, branch
-      ordering, why whole-project checkers (tsc, phpstan, mypy) must stay in CI, worktree-aware container resolution,
-      and the Bash-tool coverage gap. Replaces the former `make lint FILE=…` router approach.
+      Claude and Cursor registration adapters, and a SessionStart hook that installs dependencies in Claude Code cloud
+      sessions. Documents the svc/strip/fix/check/skip routing vocabulary, branch ordering, why whole-project checkers
+      (tsc, phpstan, mypy) must stay in CI, worktree-aware container resolution, and the Bash-tool coverage gap.
+      Replaces the former `make lint FILE=…` router approach.
   - path: skills/systematic-debugging/
     type: skill
     description: >-

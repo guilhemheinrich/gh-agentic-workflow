@@ -2,7 +2,18 @@
   "_comment": "Merge the `hooks` block into the consumer repo's .claude/settings.json. Pairs with .agents/hooks/validate-on-edit.sh (see ../SKILL.md).",
   "_comment_timeout": "The hook enforces its own per-command budget (VALIDATE_BUDGET_S, default 3s). The 15s harness timeout here is only a backstop for a wedged docker daemon.",
   "_comment_coverage": "PostToolUse Edit|Write does NOT cover files written through the Bash tool (`cat > f.ts`, `sed -i`, code generators). This hook reduces the verify stage; it does not replace it.",
+  "_comment_session_start": "SessionStart is for Claude Code cloud sessions: a fresh clone has no dependencies installed, so host-run linters have nothing to run. templates/session-start.sh exits at once outside the cloud (CLAUDE_CODE_REMOTE unset). Copy it to .claude/hooks/session-start.sh. See ../SKILL.md §5, Cloud sessions.",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|MultiEdit|NotebookEdit",
