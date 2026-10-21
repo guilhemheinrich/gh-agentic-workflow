@@ -43,7 +43,6 @@ x-tag-descriptions:
   llm: LLM provider APIs, prompts, cross-model review
   lsp: Language Server Protocol, code intelligence
   make: Makefile patterns and conventions
-  taskfile: Task (Taskfile.yml) runner patterns and conventions
   mcp: Model Context Protocol servers and clients
   meta: "[NEW] meta"
   monorepo: Monorepo, Turborepo, workspaces
@@ -71,6 +70,7 @@ x-tag-descriptions:
   sql: SQL databases, migrations, schemas
   starlight: Starlight documentation framework
   svg: "[NEW] svg"
+  taskfile: Task (Taskfile.yml) runner patterns and conventions
   tdd: Test-Driven Development methodology
   testing: Testing, unit and integration tests
   tooling: "[NEW] tooling"
@@ -87,6 +87,20 @@ x-tag-descriptions:
   web-analysis: "[NEW] web-analysis"
   web-components: Web Components, Lit
   workflow: "[NEW] workflow"
+x-bundle-descriptions:
+  common: Stack-agnostic minimum-viable starter set for any project
+x-category-descriptions:
+  architecture: Architecture patterns and structural principles
+  standards: Coding standards and conventions
+  programming-languages: Language-specific practices
+  frameworks-and-libraries: Framework and library usage
+  tools-and-configurations: Tooling, CLIs and configuration
+  workflows-and-processes: Development workflows and processes
+  templates-and-models: Templates and reusable models
+  quality-assurance: Testing, review and quality
+  domain-specific: Business-domain specific assets
+  philosophy: Project philosophies — paradigms written to PHILOSOPHY.md and referenced from AGENTS.md / CLAUDE.md
+  other: Everything else
 assets:
   - path: .agents/skills/documentation-writer/
     type: skill
@@ -1022,6 +1036,7 @@ assets:
       that returns a confident review of nothing.
   - path: skills/cursor-dot-glow/
     type: skill
+    category: frameworks-and-libraries
     tags:
       - animation
       - background
@@ -1077,7 +1092,8 @@ assets:
     description: >-
       Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production
       deployment. Enforces the secrets rule: no configuration value or secret in compose files (not even as a default or
-      in an example), everything from an unversioned .env via ${VAR:?}, fake values in .env.example.
+      in an example) — everything comes from an unversioned .env via ${VAR:?}, with a versioned .env.example holding
+      fake values.
     category: tools-and-configurations
   - path: skills/docker-containerization/
     type: skill
@@ -1116,8 +1132,8 @@ assets:
       - docker
     description: >-
       Write Dockerfiles with multi-stage builds for development and production. Use when creating a Dockerfile,
-      configuring dev vs production builds, handling lockfile generation via make lock, or debugging dependency install
-      issues in Docker.
+      configuring dev vs production builds, handling lockfile generation via make lock or task lock, or debugging
+      dependency install issues in Docker.
     category: tools-and-configurations
   - path: skills/dockerfile-multi-stage/
     type: skill
@@ -1302,6 +1318,7 @@ assets:
       - common
   - path: skills/grievances/
     type: skill
+    category: workflows-and-processes
     tags:
       - common
       - documentation
@@ -1784,6 +1801,7 @@ assets:
       across a fleet, or reviewing a test config that hardcodes a target.
   - path: skills/text-clip-cloud-word/
     type: skill
+    category: frameworks-and-libraries
     tags:
       - animation
       - clip-path
@@ -1810,6 +1828,7 @@ assets:
     category: frameworks-and-libraries
   - path: skills/web-analysis/
     type: skill
+    category: quality-assurance
     tags:
       - accessibility
       - docker
