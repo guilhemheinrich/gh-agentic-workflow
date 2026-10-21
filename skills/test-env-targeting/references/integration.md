@@ -49,7 +49,8 @@ overlay that brings its infrastructure up. Copy that shape:
 
 ## Local backing services: compose or testcontainers
 
-Two ways to get the store, both reading `DATABASE_URL` from `.env.local`:
+Two ways to get the store, both reading `DATABASE_URL` from `.env.local.secret`
+(it carries a password, so never from the committed `.env.local`):
 
 **Compose, already up.** The stack `make up` started is the store. The
 integration config does not start anything; `global-setup.ts` may apply
@@ -122,7 +123,7 @@ filters still work without loading anything.
 
 - [ ] Config file dedicated to the scope, `setupFiles` imports `shared/env.ts`.
 - [ ] `global-setup` refuses remote targets without `TEST_LIVE=1`.
-- [ ] `DATABASE_URL` and service URLs in `tests/env/.env.local`, optional in the schema.
+- [ ] Service URLs in `tests/env/.env.local`; `DATABASE_URL` in `tests/env/.env.local.secret`; both optional in the schema.
 - [ ] Transaction per test, rolled back; `fileParallelism: false` or per-worker schema.
 - [ ] `make test-integration` in `Makefile.tests.mk`; Go twin with `-tags integration`.
 - [ ] No `describe.skip`, no `t.Skip` on missing variables.

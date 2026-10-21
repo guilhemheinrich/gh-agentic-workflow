@@ -43,5 +43,6 @@ Makefile Targets:
 Anti-Patterns:
 
 - NEVER run node/bun/npm/pip directly on host — use containers
+- NEVER write a configuration value or secret in `compose.yml`, not even as a default (`${VAR:-value}`) or in an example: use `${VAR:?message}`, real values in the unversioned `.env`, fake ones (`changeme`) in `.env.example` — see the `docker-compose-orchestration` skill
 - Avoid exposing service ports directly — route through Traefik
 - Avoid hardcoded container names in code — use Docker DNS

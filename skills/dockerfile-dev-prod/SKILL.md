@@ -3,7 +3,7 @@ name: dockerfile-dev-prod
 description: >-
   Write Dockerfiles with multi-stage builds for development and production. Use
   when creating a Dockerfile, configuring dev vs production builds, handling
-  lockfile generation via make lock, or debugging dependency install issues in
+  lockfile generation via make lock or task lock, or debugging dependency install issues in
   Docker.
 tags:
   - ci-cd
@@ -18,14 +18,14 @@ Universal pattern for writing Dockerfiles that support two dependency installati
 
 | Target stage | Behavior |
 |:---|:---|
-| `development` | Copies `package.json` (no lockfile required), runs a free `install`, generates the lockfile inside the image. Retrieved on host via `make lock`. |
+| `development` | Copies `package.json` (no lockfile required), runs a free `install`, generates the lockfile inside the image. Retrieved on host via `make lock` (or `task lock`). |
 | `production` | Copies `package.json` **and** the committed lockfile, runs a strict frozen install (`--frozen-lockfile`, `--ci`, etc.). |
 
 ## Essential Rules
 
 > **Never launch an ephemeral container (`docker run --rm …`) to generate the lockfile.**
 >
-> The lockfile is produced as a side-effect of the `development` stage build, then retrieved on host via `make lock` (`docker compose cp`).
+> The lockfile is produced as a side-effect of the `development` stage build, then retrieved on host via `make lock` / `task lock` (`docker compose cp`).
 
 > **The lockfile is always committed in the repo.** Production builds depend on it.
 
@@ -158,6 +158,21 @@ lock:
 	docker compose up -d $(SERVICE_NAME)
 	docker compose cp $(SERVICE_NAME):/app/$(LOCKFILE) ./$(LOCKFILE)
 	docker compose down
+```
+
+### Task — `task lock`
+
+Même séquence dans un `Taskfile.yml` (voir [makefile-conventions/taskfile.md](../makefile-conventions/taskfile.md)) :
+
+```yaml
+tasks:
+  lock:
+    desc: Régénère le lockfile dans l'image (stage development) et le copie sur l'hôte
+    cmds:
+      - docker compose build my-service
+      - docker compose up -d my-service
+      - docker compose cp my-service:/app/<lockfile> ./<lockfile>
+      - docker compose down
 ```
 
 ### Examples

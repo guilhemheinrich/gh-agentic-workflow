@@ -43,6 +43,7 @@ x-tag-descriptions:
   llm: LLM provider APIs, prompts, cross-model review
   lsp: Language Server Protocol, code intelligence
   make: Makefile patterns and conventions
+  taskfile: Task (Taskfile.yml) runner patterns and conventions
   mcp: Model Context Protocol servers and clients
   meta: "[NEW] meta"
   monorepo: Monorepo, Turborepo, workspaces
@@ -1087,7 +1088,8 @@ assets:
       - docker-compose
     description: >-
       Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production
-      deployment
+      deployment. Enforces the secrets rule: no configuration value or secret in compose files (not even as a default or
+      in an example), everything from an unversioned .env via ${VAR:?}, fake values in .env.example.
     category: tools-and-configurations
   - path: skills/docker-containerization/
     type: skill
@@ -1445,9 +1447,11 @@ assets:
       - docker
       - make
       - monorepo
+      - taskfile
     description: >-
-      Templates and procedures for a project-root Makefile: env vars, targets up, down, test, setup, db-*, coverage. Use
-      when authoring or debugging Makefiles.
+      Templates and procedures for the project-root task runner, Makefile or Taskfile.yml (Task): env vars, targets up,
+      down, test, lock, setup, db-*, coverage, plus the Make → Task mapping. Use when authoring, debugging or converting
+      Makefiles and Taskfiles.
     category: architecture
     bundles:
       - common

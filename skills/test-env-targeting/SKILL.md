@@ -250,7 +250,7 @@ moment demo data differs.
 | `TEST_ENV`           | the selector                               | `ENV=` on make, or the file |
 | `E2E_BASE_URL`       | frontend origin as seen from the runner    | committed file |
 | `API_BASE_URL`       | backend origin as seen from the runner     | committed file |
-| `DATABASE_URL`       | local backing store, integration only      | `.env.local`  |
+| `DATABASE_URL`       | local backing store, integration only      | `.env.local.secret` |
 | `TEST_USER_EMAIL`    | demo identity name                         | committed file |
 | `TEST_USER_PASSWORD` | demo identity secret                       | `.secret` or CI store |
 | `PROD_CONFIRM`       | prod lock, `1`                             | make command line only |
