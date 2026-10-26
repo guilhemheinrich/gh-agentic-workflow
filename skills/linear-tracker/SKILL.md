@@ -85,6 +85,12 @@ workflow.
 | Talking to the Linear MCP | **this skill** |
 | The reference returned, and its format | **this skill** |
 
+**One script serves both.** `../grievances/scripts/grievances.py` implements the
+verb, the config reader and the field mapping; this skill's SKILL.md is that
+code's specification, not a second implementation of it. The dependency runs one
+way: the script knows a backend named `linear` from a one-row table, and knows
+nothing about the MCP.
+
 ### The contract, in both directions
 
 **What this skill receives** — one grievance record, as the CLI emits it:
@@ -154,13 +160,13 @@ tags: ["scaling", "linear:TT-412"]
 tracked?" is a string match on a committed file. That is what makes the publish
 step idempotent, and what lets an audit run offline.
 
-**Writing it is the caller's job, and today it has no command.** The grievances
-CLI has no `tag` subcommand, and hand-editing the JSON header is an explicit
-anti-pattern there — the tables and headers are tool-owned. Attaching the
-reference after the fact therefore requires the `publish` verb to exist in the
-grievances skill. **Until it does, this skill can create issues but the binding
-must be recorded by declaring the tag at `add` time, or not at all.** Do not
-work around it by editing the ledger.
+**Writing it is the grievances CLI's job, through `publish --record`.** Never by
+hand: the JSON header and the tables are tool-owned, and an edit made around the
+CLI dies at the next mutation or breaks the file.
+
+```bash
+grievances.py publish GRV-worker-hosted-api-scale --record TT-412 --url "https://linear.app/…"
+```
 
 ### Do not use publishing to launder a finding
 
@@ -273,19 +279,37 @@ assignee from the git blame, the last committer, or the repository owner.
 
 ## Publishing — the protocol this skill answers
 
-Called by the grievances skill's `publish` verb, once per record.
+**The script is shared, and it is the grievances skill's.** Steps 1 to 5 below
+are implemented in `../grievances/scripts/grievances.py` — the same file that
+owns the ledger. This skill does not reimplement them, and must not: a second
+copy of the mapping drifts from the first, and only one of the two writes the
+ledger. `./install.sh` copies the whole `skills/` tree to one root, so that
+relative path holds after installation as it does in the repository.
 
-1. **Read `.linear.json`.** Absent → stop, report "not configured". This is not
-   a failure.
-2. **Read the record** (`show --json` plus the prose body).
-3. **Check the binding.** A `linear:` tag already present → stop, report
-   "already published as `TT-NNN`". Publishing twice makes two issues nobody
-   reconciles.
-4. **Refuse out-of-boundary findings.** Regulatory, security, data-loss or money
-   → stop, name the rule (see above).
+What is left for this skill is **step 6 alone: the MCP call.** That is the only
+step needing a credential, and the only one a script cannot make.
+
+```bash
+# 1-5  build the payload, and stop on every refusal
+grievances.py publish GRV-worker-hosted-api-scale --prepare --json
+# 6    this skill: create the issue through the Linear MCP, get TT-412 back
+# 7    write the reference into the record's tags
+grievances.py publish GRV-worker-hosted-api-scale --record TT-412 --url "https://linear.app/…"
+```
+
+1. **Read `.linear.json`.** Absent → `status: not-configured`, exit 0. This is
+   not a failure.
+2. **Read the record** — the JSON header plus the prose body.
+3. **Check the binding.** A `linear:` tag already present → `already-published`,
+   exit 0. Publishing twice makes two issues nobody reconciles.
+4. **Flag out-of-boundary findings.** A tag reading `security`, `regulatory`,
+   `data-loss` or `money` fills `warnings`. It **warns and does not block**:
+   whether such a tag marks a real security defect or a missing response header
+   is a judgement no script can make, and a heuristic that blocks is a heuristic
+   that gets worked around. **Read the warning and apply the rule above.**
 5. **Build the issue** per the mapping table, provenance header included.
-6. **Create it** through the Linear MCP.
-7. **Return `{ref, url}`** to the caller. Write nothing to the ledger.
+6. **Create it** through the Linear MCP. ← this skill, and only this.
+7. **Hand `{ref, url}` back** to `publish --record`, which writes the tag.
 
 **On failure, fail loudly and write nothing.** A publish that silently does
 nothing is the worst outcome available: the caller believes the finding left the
@@ -353,34 +377,33 @@ configuration beyond the MCP itself, and changes nothing.
 
 ## Implementation Status
 
-**Specified, not implemented.** Nothing in this skill has been built. It
-documents the contract so that the two halves can be written independently and
-still meet.
+**The repository half is implemented and tested; the Linear half is not.**
 
-**Verified against the current `grievances` skill on 2026-09-21:**
+**Built and exercised** — `../grievances/scripts/grievances.py`, subcommand
+`publish` (2026-09-23):
 
-- The record schema and the closed JSON field list are read from
-  `skills/grievances/scripts/grievances.py` (`Grievance` dataclass, `from_meta`).
-- The refusal of unknown JSON fields was read in `from_meta` and is quoted above
-  verbatim.
-- The `linear:TT-412` tag binding was exercised end to end: a grievance declared
-  with `--tag "linear:TT-412"` in a throwaway repository came back carrying that
-  tag through `list --json`, with no change to the CLI.
+- `--prepare` reads `.linear.json`, validates it, builds the issue payload and
+  returns one of `prepared` / `not-configured` / `already-published`. It writes
+  nothing.
+- `--record <REF>` writes the `linear:<REF>` tag and a `published` log line.
+- 19 unit tests cover it, inside the suite's 75. Run them the documented way:
+  `docker run --rm -v "$PWD:/repo" -w /repo/skills/grievances/scripts
+  python:3.12-alpine python3 -m unittest`.
+- Exercised end to end in a throwaway repository: `init` → `add` → `bump ×2` →
+  `publish --prepare` with no config (`not-configured`, exit 0) → with a config
+  (payload, priority 2, `×3` in the header) → `--record TT-412` → the same
+  `--record` again (`already-recorded`) → `--record TT-999` (refused without
+  `--force`). The rewritten ledger reloads, and the header keys stay inside the
+  closed field list.
 
-**Prerequisites this skill does not own, and cannot start without:**
+**One bug this work found and fixed.** `render_log_entry` had no branch for a
+`published` action, so the entry fell through to the resolution renderer and
+displayed **Resolved** for a finding nothing had resolved. A test now pins it.
 
-1. **A `publish` verb in the `grievances` skill.** It selects the record, calls
-   a backend, and writes the returned reference into the record's tags. Without
-   it there is no supported way to attach a reference after declaration — the
-   CLI has no `tag` subcommand, and hand-editing the header is forbidden.
-2. **A decision on how a backend is selected.** This skill assumes the presence
-   of `.linear.json` is the signal. That convention belongs to the `publish`
-   verb's design, not here, and should be confirmed there.
-
-**Not verified:** every Linear-side claim. No issue has been created by this
-skill, no `.linear.json` exists in any repository, and the field mapping has
-never been exercised against a live workspace. The first real publish is what
-proves the mapping, the priority scale and the initial-state behaviour.
+**Not verified: every Linear-side claim.** No issue has been created through this
+skill, no `.linear.json` exists in any repository of the fleet, and the mapping
+has never met a live workspace. The first real publish is what proves the
+priority scale, the label names and the team's initial state.
 
 ## See also
 
