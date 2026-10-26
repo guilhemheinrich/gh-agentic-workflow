@@ -67,6 +67,7 @@ docker run --rm -v "$PWD:/repo" -v "<skill>:/skill:ro" -w /repo python:3.12-alpi
 | `resolve <id>` | Close it: date + commit hash. Moves its row to the resolved table. |
 | `reopen <id>` | Move it back to the open table, keeping the history. |
 | `bump <id>` | Count another occurrence (`×N`) instead of declaring a duplicate. |
+| `publish <id>` | Send it to a tracker, in two steps: `--prepare` builds the issue payload, `--record <REF>` writes the reference back. |
 | `list` / `show` | Read it — `--json` for agents. |
 | `rebuild` | Regenerate the tables and headings, re-sorted. Idempotent. |
 | `check` | Audit one repo (`--strict` also fails on a drifted file), or every repo under a pilot root with `--all --root <path>`. |
@@ -111,6 +112,54 @@ Exactly one of `--commit` (7–40 hex chars, validated), `--promoted-to <ref>` o
 all). The date defaults to today. The row moves from the open table to the
 resolved one, **same columns plus `Resolved` and `Commit`**, and a resolution line
 is appended to the detail block.
+
+### Publishing one to a tracker
+
+Some findings deserve to leave the repository and become work someone can own.
+`publish` is that verb, and it belongs here because **only this skill writes the
+ledger**. A tracker is one backend answering it — for Linear, see the
+[`linear-tracker`](../linear-tracker/SKILL.md) skill, which documents the
+`.linear.json` configuration and the field mapping this script implements.
+
+**The script never talks to the tracker.** Authentication lives in the caller's
+MCP configuration, per machine, never in a committed file. So the verb is a
+handshake in two steps, with the network call in between, made by whoever holds
+the credentials:
+
+```bash
+grievances.py publish GRV-0007 --prepare --json     # 1. the payload. Writes nothing.
+# 2. the caller creates the issue through the tracker's MCP, and gets TT-412 back
+grievances.py publish GRV-0007 --record TT-412 --url "https://linear.app/…"
+```
+
+**Step 1 answers with a status, and two of its three answers are not failures:**
+
+| Status | Exit | Meaning |
+|---|---|---|
+| `prepared` | 0 | The payload is in `issue`; create it, then record the reference. |
+| `not-configured` | 0 | No `.linear.json`. This repository keeps its findings locally, which is the normal mode — not a degraded one. |
+| `already-published` | 0 | A `linear:` tag is already there. Publishing twice makes two issues nobody reconciles. |
+
+A missing `project` key, a config carrying a credential, a malformed reference
+and a rebinding without `--force` all exit 2 with a message naming the fix.
+
+**The reference lands in the record's `tags`, as `linear:TT-412`.** That choice
+is forced: `Grievance.from_meta` validates the JSON header against a closed field
+list, so a `"linear"` key of its own would make every later `add`, `resolve`,
+`list` and `check` fail on that file. `tags` is already a free-form `list[str]`.
+Reading the binding is then a string match on a committed file — offline, exact,
+and enough to answer "is this finding already tracked?".
+
+**Publishing resolves nothing.** The record stays open, because an issue in a
+tracker is a second home, not a fix. When the finding has genuinely grown teeth,
+close it separately with the promotion rule below:
+`resolve GRV-0007 --promoted-to TT-412`.
+
+Three fields are deliberately never sent, and their absence is the contract:
+`state` (never copied from `status` — the two lifecycles are opposite, and a
+finding published as it is closed would create an issue that is already done),
+`estimate` (the record's effort is a free string, a tracker estimate a per-team
+number) and `assignee` (this ledger forbids owners on purpose).
 
 ## The file's shape
 

@@ -39,6 +39,8 @@ Usage:
     grievances.py resolve GRV-0003 --promoted-to specs/156-cdar-refresh/ --note "..."
     grievances.py reopen GRV-0001 --note "..."
     grievances.py bump GRV-0001
+    grievances.py publish GRV-0001 --prepare --json
+    grievances.py publish GRV-0001 --record TT-412 --url https://linear.app/…
     grievances.py list [--status open|resolved|all] [--json]
     grievances.py show GRV-0001 [--json]
     grievances.py rebuild
@@ -128,6 +130,71 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 COMMIT_RE = re.compile(r"^[0-9a-fA-F]{7,40}$")
 ID_RE = re.compile(rf"^(?:{ANY_ID_PATTERN})$")
 
+# ── Trackers ───────────────────────────────────────────────────────────────
+# `publish` sends one record to a tracker and brings its reference back.
+#
+# This script NEVER talks to the tracker. Authentication lives in the caller's
+# MCP configuration, per machine, never in a committed file. So the verb is a
+# two-step handshake:
+#
+#   1. `publish <ID> --prepare`          -> the payload, as JSON. Writes nothing.
+#   2. the caller creates the issue      -> outside this script, through the MCP.
+#   3. `publish <ID> --record TT-412`    -> writes `linear:TT-412` into the tags.
+#
+# The reference lands in `tags` and not in a field of its own because
+# `Grievance.from_meta` refuses unknown JSON keys: a `"linear"` key would make
+# every later read of that ledger fail. `tags` is already a free-form list[str].
+#
+# One backend exists today. This table is what keeps the verb from being named
+# after it: a second tracker is one more row plus one more payload builder.
+
+
+@dataclass(frozen=True)
+class Backend:
+    """A tracker a repository can publish to."""
+
+    name: str
+    config_basename: str
+    config_env: str
+    required_keys: tuple[str, ...]
+    ref_re: re.Pattern[str]
+    ref_example: str
+
+    @property
+    def tag_prefix(self) -> str:
+        return f"{self.name}:"
+
+
+BACKENDS: dict[str, Backend] = {
+    "linear": Backend(
+        name="linear",
+        config_basename=".linear.json",
+        config_env="LINEAR_CONFIG",
+        required_keys=("team", "project"),
+        # Linear issue identifiers: a team key, a hyphen, a counter — `TT-412`.
+        ref_re=re.compile(r"^[A-Z][A-Z0-9]{1,9}-\d+$"),
+        ref_example="TT-412",
+    ),
+}
+DEFAULT_BACKEND = "linear"
+
+# Linear's own priority scale: 0 none, 1 urgent, 2 high, 3 medium, 4 low. The
+# four severities map onto 1-4 and never onto 0 — an issue with no priority
+# sorts below everything and is read by nobody.
+SEVERITY_TO_PRIORITY = {"critical": 1, "high": 2, "medium": 3, "low": 4}
+
+# A committed config carrying one of these keys is a committed secret.
+SECRETISH_RE = re.compile(r"token|secret|password|api[-_]?key|credential", re.IGNORECASE)
+
+# Tags suggesting the finding never belonged in the ledger at all (see the
+# skill's boundary table). They produce a WARNING and never a refusal: whether a
+# tag reading `security` marks a real security defect or a missing response
+# header is a judgement this script cannot make, and a heuristic that blocks is
+# a heuristic that gets worked around.
+BOUNDARY_TAGS = frozenset(
+    {"security", "regulatory", "compliance", "data-loss", "dataloss", "money", "rgpd", "gdpr"}
+)
+
 
 class UserError(Exception):
     """A problem the caller can fix by changing the command line."""
@@ -206,6 +273,15 @@ class Grievance:
         note = (entry.get("note") or "").strip()
         if action == "reopened":
             line = f"**Reopened {date}**"
+            return f"{line} — {note}" if note else line
+        if action == "published":
+            # Without this branch the fallback below reads the entry as a
+            # resolution and renders "**Resolved …**" — publishing resolves
+            # nothing, it only gives the finding a second home.
+            line = f"**Published {date}** → `{entry.get('ref', '?')}`"
+            url = entry.get("url")
+            if url:
+                line += f" · {url}"
             return f"{line} — {note}" if note else line
         kind = entry.get("kind", "fixed")
         if kind == "fixed":
@@ -781,6 +857,128 @@ def emit(payload: dict[str, Any], as_json: bool, human: str) -> None:
         print(human)
 
 
+# ── Tracker helpers (shared with the tracker-adapter skills) ───────────────
+
+
+def resolve_config_path(args: argparse.Namespace, backend: Backend) -> Path:
+    """Where this repository declares which project it publishes to."""
+    if getattr(args, "config", None):
+        return Path(args.config).expanduser().resolve()
+    env = os.environ.get(backend.config_env)
+    if env:
+        return Path(env).expanduser().resolve()
+    repo = Path(getattr(args, "repo", None) or ".").expanduser().resolve()
+    root = git_root(repo) or repo
+    return root / backend.config_basename
+
+
+def load_tracker_config(path: Path, backend: Backend) -> dict[str, Any]:
+    """Read and validate a backend's committed configuration."""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise UserError(f"{path}: invalid JSON: {exc}") from exc
+    except OSError as exc:
+        raise UserError(f"{path}: cannot be read: {exc}") from exc
+    if not isinstance(raw, dict):
+        raise UserError(f"{path}: expected a JSON object, got {type(raw).__name__}")
+    leaked = sorted(k for k in raw if SECRETISH_RE.search(k))
+    if leaked:
+        raise UserError(
+            f"{path} carries {', '.join(leaked)} and this file is committed. "
+            f"Authentication belongs to the {backend.name} MCP server configuration, per machine"
+        )
+    missing = [k for k in backend.required_keys if not raw.get(k)]
+    if missing:
+        raise UserError(
+            f"{path}: missing required key(s): {', '.join(missing)}. "
+            "Name them by hand: a project guessed from the repository name files findings "
+            "on a board nobody who could act on them watches"
+        )
+    labels = raw.get("labels") or []
+    if not isinstance(labels, list) or any(not isinstance(x, str) for x in labels):
+        raise UserError(f"{path}: 'labels' must be a list of strings")
+    return raw
+
+
+def binding_tag(backend: Backend, ref: str) -> str:
+    return f"{backend.tag_prefix}{ref}"
+
+
+def find_binding(grievance: Grievance, backend: Backend) -> str | None:
+    """The reference this record is already bound to, if any."""
+    for tag in grievance.tags:
+        if tag.startswith(backend.tag_prefix):
+            return tag[len(backend.tag_prefix) :]
+    return None
+
+
+def boundary_warnings(grievance: Grievance) -> list[str]:
+    """Reasons a human should look before this record becomes routine work."""
+    hits = sorted(t for t in grievance.tags if t.lower() in BOUNDARY_TAGS)
+    if not hits:
+        return []
+    return [
+        f"tagged {', '.join(hits)}: a finding with a regulatory, security, data-loss or money "
+        "dimension is not a grievance. Check it belongs in a spec or a roadmap item rather than "
+        "a run project, where the framing hides the severity"
+    ]
+
+
+def provenance_header(grievance: Grievance) -> str:
+    """The facts a tracker has no field for, in a fixed and searchable shape.
+
+    The record id, the declaration date, the recurrence count and the locus each
+    lack a home in Linear. `createdAt` is Linear's own and is set on creation, so
+    a four-month-old finding would read as filed today.
+    """
+    first = [f"`{grievance.id}`", f"declared {grievance.date}"]
+    if grievance.occurrences > 1:
+        first.append(f"seen ×{grievance.occurrences}")
+    lines = ["> " + " · ".join(first)]
+    second: list[str] = []
+    if grievance.locus:
+        second.append(f"`{grievance.locus}`")
+    if grievance.source:
+        second.append(f"surfaced by {grievance.source}")
+    if second:
+        lines.append("> " + " · ".join(second))
+    return "\n".join(lines)
+
+
+def build_issue(grievance: Grievance, prose: str, config: dict[str, Any], backend: Backend) -> dict[str, Any]:
+    """Map one record onto the fields a tracker issue is created with.
+
+    Three fields are deliberately absent, and their absence is the contract:
+
+      - `state`  — never derived from `status`. The two lifecycles are opposite:
+        a finding is typically published as it is closed in the ledger, so
+        copying one onto the other creates an issue that is already done. The
+        caller uses the team's own initial state.
+      - `estimate` — the record's effort is a free string ("0.5d"); a tracker
+        estimate is a number on a per-team scale. No safe conversion exists, so
+        the effort stays in the description where it reads correctly.
+      - `assignee` — the ledger forbids owners on purpose. Never invent one from
+        git blame or the last committer; ask a human, or publish unassigned.
+    """
+    labels = [t for t in grievance.tags if not t.startswith(backend.tag_prefix)]
+    for label in config.get("labels") or []:
+        if label not in labels:
+            labels.append(label)
+    description = provenance_header(grievance)
+    body = prose.strip("\n")
+    if body:
+        description += "\n\n" + body
+    return {
+        "title": grievance.short,
+        "description": description,
+        "priority": SEVERITY_TO_PRIORITY[grievance.severity],
+        "team": config["team"],
+        "project": config["project"],
+        "labels": labels,
+    }
+
+
 # ── Commands ───────────────────────────────────────────────────────────────
 
 
@@ -964,6 +1162,120 @@ def cmd_bump(args: argparse.Namespace) -> int:
         {"id": grievance.id, "file": str(path), "occurrences": grievance.occurrences},
         args.json,
         f"{grievance.id} seen ×{grievance.occurrences}",
+    )
+    return 0
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """Send one record to a tracker, in two steps the caller drives."""
+    backend = BACKENDS[args.backend]
+    path = resolve_ledger_path(args)
+    ledger = Ledger.load(path)
+    grievance = ledger.get(check_id(args.id))
+    selected = [flag for flag in (args.prepare, args.record) if flag]
+    if len(selected) != 1:
+        raise UserError(
+            "pass exactly one of --prepare (build the payload, write nothing) "
+            f"or --record <REF> (write the reference back, e.g. {backend.ref_example})"
+        )
+    if args.record:
+        return publish_record(args, backend, ledger, grievance, path)
+    return publish_prepare(args, backend, ledger, grievance, path)
+
+
+def publish_prepare(
+    args: argparse.Namespace, backend: Backend, ledger: Ledger, grievance: Grievance, path: Path
+) -> int:
+    """Step 1 — build the issue payload. Reads only; the ledger is untouched."""
+    config_path = resolve_config_path(args, backend)
+    if not config_path.exists():
+        # Not an error and not a warning. A repository that keeps its findings
+        # locally is working normally, and `publish` must exit 0 so a batch over
+        # a whole fleet does not stop on the first unconfigured repository.
+        emit(
+            {"id": grievance.id, "status": "not-configured", "backend": backend.name, "config": str(config_path)},
+            args.json,
+            f"{grievance.id}: no {config_path} — this repository does not publish to {backend.name}. Not an error.",
+        )
+        return 0
+    existing = find_binding(grievance, backend)
+    if existing and not args.force:
+        emit(
+            {"id": grievance.id, "status": "already-published", "backend": backend.name, "ref": existing},
+            args.json,
+            f"{grievance.id} is already published as {existing} — "
+            "publishing twice makes two issues nobody reconciles",
+        )
+        return 0
+    config = load_tracker_config(config_path, backend)
+    issue = build_issue(grievance, ledger.prose[grievance.id], config, backend)
+    payload = {
+        "id": grievance.id,
+        "status": "prepared",
+        "backend": backend.name,
+        "config": str(config_path),
+        "file": str(path),
+        "issue": issue,
+        "warnings": boundary_warnings(grievance),
+        "next": f"grievances.py publish {grievance.id} --record <{backend.ref_example}> --url <URL>",
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    for warning in payload["warnings"]:
+        print(f"! {warning}")
+    print(f"team     {issue['team']}")
+    print(f"project  {issue['project']}")
+    print(f"priority {issue['priority']}  (from severity {grievance.severity})")
+    print(f"labels   {', '.join(issue['labels']) or '(none)'}")
+    print(f"title    {issue['title']}")
+    print("description")
+    print(issue["description"])
+    print("")
+    print(f"then: {payload['next']}")
+    return 0
+
+
+def publish_record(
+    args: argparse.Namespace, backend: Backend, ledger: Ledger, grievance: Grievance, path: Path
+) -> int:
+    """Step 3 — write the reference the caller got back from the tracker."""
+    ref = args.record.strip()
+    if not backend.ref_re.match(ref):
+        raise UserError(f"invalid {backend.name} reference {ref!r}: expected e.g. {backend.ref_example}")
+    if args.url and not args.url.startswith(("http://", "https://")):
+        raise UserError(f"invalid --url {args.url!r}: expected an absolute http(s) URL")
+    existing = find_binding(grievance, backend)
+    if existing == ref:
+        emit(
+            {"id": grievance.id, "status": "already-recorded", "backend": backend.name, "ref": ref},
+            args.json,
+            f"{grievance.id} already carries {binding_tag(backend, ref)} — nothing to do",
+        )
+        return 0
+    if existing and not args.force:
+        raise UserError(
+            f"{grievance.id} is already bound to {existing}. Two issues for one finding is the "
+            f"failure this check exists to prevent; pass --force to rebind it to {ref}"
+        )
+    grievance.tags = [t for t in grievance.tags if not t.startswith(backend.tag_prefix)]
+    grievance.tags.append(binding_tag(backend, ref))
+    entry: dict[str, Any] = {
+        "action": "published",
+        "date": check_date(args.date),
+        "backend": backend.name,
+        "ref": ref,
+    }
+    if args.url:
+        entry["url"] = args.url.strip()
+    if args.note:
+        entry["note"] = args.note.strip()
+    grievance.history.append(entry)
+    save(ledger, args.dry_run)
+    emit(
+        {"id": grievance.id, "status": "published", "backend": backend.name, "ref": ref, "file": str(path)},
+        args.json,
+        f"{grievance.id} published as {ref} in {path}",
     )
     return 0
 
@@ -1240,6 +1552,18 @@ def build_parser() -> argparse.ArgumentParser:
     p_bump.add_argument("--date", help="also move the entry's date to this one")
     p_bump.add_argument("--redate", action="store_true", help="also move the entry's date to today")
     p_bump.set_defaults(func=cmd_bump)
+
+    p_pub = with_common(sub.add_parser("publish", help="send a grievance to a tracker, in two steps"))
+    p_pub.add_argument("id")
+    p_pub.add_argument("--prepare", action="store_true", help="step 1: build the issue payload, write nothing")
+    p_pub.add_argument("--record", metavar="REF", help="step 3: write the reference the tracker returned")
+    p_pub.add_argument("--url", help="the issue URL, kept in the log line")
+    p_pub.add_argument("--backend", choices=sorted(BACKENDS), default=DEFAULT_BACKEND)
+    p_pub.add_argument("--config", help="tracker config path (default: <git root>/.linear.json)")
+    p_pub.add_argument("--date", help="publication date, YYYY-MM-DD (default: today)")
+    p_pub.add_argument("--note", help="one line on why it left the repository")
+    p_pub.add_argument("--force", action="store_true", help="prepare or rebind although a reference already exists")
+    p_pub.set_defaults(func=cmd_publish)
 
     p_list = with_common(sub.add_parser("list", help="list grievances"))
     p_list.add_argument("--status", choices=("open", "resolved", "all"), default="open")
