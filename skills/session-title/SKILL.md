@@ -57,6 +57,13 @@ spec mode is sticky once detected. A *read* of a spec does not count, so a hook
 that prints `specs/012-…/context-keep.md` at session start cannot misclassify
 the session.
 
+The slug is the spec folder's name, never the agent's wording, and it follows
+the folder. A scope change that renames `specs/295-parent-acts` to
+`specs/295-child-tenant-acts` retitles the session at the next Stop, even when
+nothing is written in the folder afterwards: a missing slug is followed
+through its number. When two folders share the number, the script does not
+guess and keeps the last known slug.
+
 The title subject follows the mode. A spec session is named by its slug
 (`042-webhook`). A free session is named by a 2-5 word topic that the agent
 writes once (`Mes Mailles impersonation`). That topic stays until the agent

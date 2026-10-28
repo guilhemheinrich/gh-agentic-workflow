@@ -143,6 +143,21 @@ default_branch() {
   printf 'main'
 }
 
+# resolve_slug ROOT SLUG — the slug the spec folder has NOW. A renamed spec
+# (git mv specs/042-webhook specs/042-webhook-202) keeps its number, so a
+# missing slug is followed through its NNN prefix. Empty when the folder is
+# gone, or when two folders share the number (never guess between them).
+resolve_slug() {
+  local root="$1" slug="$2" num d hits=()
+  [[ -n "$slug" ]] || return 0
+  [[ -n "$(spec_dir "$root" "$slug")" ]] && { printf '%s' "$slug"; return; }
+  num="${slug%%-*}"; [[ "$num" =~ ^[0-9]{3}$ ]] || return 0
+  for d in "$root"/specs/"$num"-* "$root"/specs/archived/"$num"-* "$root"/specs/archive/"$num"-*; do
+    [[ -d "$d" ]] && hits+=("$(basename "$d")")
+  done
+  (( ${#hits[@]} == 1 )) && printf '%s' "${hits[0]}"
+}
+
 # spec_dir ROOT SLUG — the spec folder, live or archived; empty when absent.
 spec_dir() {
   local d
@@ -220,10 +235,13 @@ facts() {
   reason="$(printf '%s' "$cache" | jq -r '.modeReason // "no spec-kit signal"')"
   local bslug=""
   [[ "$branch" =~ ([0-9]{3}-[A-Za-z0-9._-]+) ]] && bslug="${BASH_REMATCH[1]}"
-  local tslug; tslug="$(printf '%s' "$scan" | jq -r '.slug')"
-  if [[ -n "$tslug" && -n "$(spec_dir "$root" "$tslug")" ]]; then
+  local tslug; tslug="$(resolve_slug "$root" "$(printf '%s' "$scan" | jq -r '.slug')")"
+  bslug="$(resolve_slug "$root" "$bslug")"
+  # A cached slug follows a renamed folder too; it stays as-is when unresolved.
+  local cslug; cslug="$(resolve_slug "$root" "$slug")"; [[ -n "$cslug" ]] && slug="$cslug"
+  if [[ -n "$tslug" ]]; then
     mode="spec"; slug="$tslug"; reason="session wrote into specs/$tslug/"
-  elif [[ -n "$bslug" && -n "$(spec_dir "$root" "$bslug")" ]]; then
+  elif [[ -n "$bslug" ]]; then
     mode="spec"; slug="$bslug"; reason="branch $branch names specs/$bslug/"
   elif [[ "$mode" != "spec" && "$(printf '%s' "$scan" | jq -r '.speckit')" == "true" ]]; then
     mode="spec"; reason="a /speckit.* command ran in this session"
@@ -470,6 +488,8 @@ case "$cmd" in
     slug="$(printf '%s' "$cache" | jq -r '.spec // empty')"
     [[ -n "$slug" ]] || exit 0
     root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || root="$repo"
+    slug="$(resolve_slug "$root" "$slug")"
+    [[ -n "$slug" ]] || exit 0
     dir="$(spec_dir "$root" "$slug")"
     [[ -n "$dir" && -f "$dir/tasks.md" ]] || exit 0
     read -r done total <<<"$(count_tasks "$dir/tasks.md")"
@@ -480,7 +500,7 @@ case "$cmd" in
     title="$(render_title to-implement "$slug" "" "$done/$total" working)" || exit 1
     merge_cache "$session" '.progressMark = $m' --arg m "$mark"
     [[ "$title" == "$(printf '%s' "$cache" | jq -r '.title // ""')" ]] && exit 0
-    merge_cache "$session" '.subject = $s | .status = "to-implement" | .title = $t' --arg s "$slug" --arg t "$title"
+    merge_cache "$session" '.spec = $s | .subject = $s | .status = "to-implement" | .title = $t' --arg s "$slug" --arg t "$title"
     echo "$title"
     ;;
   working)
