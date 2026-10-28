@@ -86,6 +86,7 @@ at most 60 characters; the script truncates the subject with `…`.
 | `to-test` | 🧪 À tester #12 · <topic> | both | exercise the change | uncommitted work, or merged PR |
 | `to-ship` | 🚀 À pousser · <topic> | both | approve commit / push / PR | uncommitted or unpushed work |
 | `to-merge` | 🔀 À merger #12 · <topic> | both | review and merge | PR open, or branch pushed without a PR found |
+| `merged` | 🏁 Mergé #12 · <topic> | both | test the change, or archive | set by the sweep only, never at Stop |
 | `to-close` | 📦 À clôturer · <topic> | both | archive session and branch | merged PR |
 | `blocked` | ⛔ Bloqué · <topic> | both | chase the outside dependency | agent judgement |
 | `closed` | ✅ Clos · <topic> | both | nothing | PR closed |
@@ -208,6 +209,28 @@ Stop. `session-title-progress.sh` (PostToolUse, matcher
 
 Every hook stays silent in a scheduled-task run, detected by the
 `<scheduled-task` tag at the top of its transcript.
+
+## A PR merged while the session was idle
+
+A PR is often merged from the forge while its session sits idle. No turn
+runs, so no hook fires, and the title keeps saying "🔀 To merge #12". The
+desktop app's PR bar does notice, but it covers GitHub only. Bitbucket
+repositories such as `modelo-broker-pa` get no PR bar at all.
+
+The sweep closes that gap for every forge. For each session whose title is
+`to-merge`, it reads `cwd` and `branch` from `list_sessions`, then checks:
+
+- **GitHub** (`origin` on github.com, `gh` installed): `gh pr view <branch>`
+  reports `MERGED`, and the PR number comes from there.
+- **Any other forge**: `git fetch origin <base>`, then
+  `git merge-base --is-ancestor <branch> origin/<base>`. Only a branch that
+  exists on `origin` qualifies, so a fresh local branch never reads as merged.
+
+A merged PR turns "🟠 🔀 To merge #12 · x" into "🟠 🏁 Merged #12 · x", and the
+age dot keeps counting. The sweep cannot tell whether the change needs a hand
+test, so `merged` leaves that call to the human: the next turn in the session
+judges `to-test` or `to-close` as usual. Every network call is bounded
+(`SESSION_TITLE_GH_TIMEOUT` for `gh`, 10 s for `git fetch`).
 
 ## Freshness dot: how long the session has waited
 
@@ -339,3 +362,7 @@ Working dot: tested on the same fixture. A spec prompt gave
 "🔵 🔨 À implémenter 3/4 · 295-parent-acts" twice in a row, and `restore`
 gave back the 🟢 title once. A stray `--subject` in spec mode kept the slug.
 A crashed "🔵 🛠️ Coding 4/5" aged to 🟠. A free session with unchanged facts got JUDGE (full re-title), a spec one its 🟢 title back; the counter kept the status "working".
+
+Merged PR: on a fake Bitbucket (a local bare origin, no `gh`), the sweep turned
+the merged branch into "🏁 Merged" and left the open one and a session without
+`cwd` alone. On GitHub it saw PR #12 of this repository as merged.

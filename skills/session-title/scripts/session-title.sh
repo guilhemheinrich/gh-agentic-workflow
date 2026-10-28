@@ -370,20 +370,67 @@ redot() {
     | if $d == "" then $base else "\($d) \($base)" end'
 }
 
+# pr_merged CWD BRANCH — prints "merged" (or the PR number) when BRANCH's work
+# reached the base branch; nothing otherwise. GitHub: gh pr view. Any other
+# forge (Bitbucket): fetch origin/<base>, then git ancestry, so a merge is
+# seen without the app's GitHub-only PR bar. Every network call is bounded.
+pr_merged() {
+  local cwd="$1" branch="$2" base out
+  [[ -n "$cwd" && -d "$cwd" && -n "$branch" ]] || return 0
+  git -C "$cwd" rev-parse --verify --quiet "refs/heads/$branch" >/dev/null 2>&1 || return 0
+  if [[ "$GH_ENABLED" == "1" ]] && command -v gh >/dev/null 2>&1 \
+     && git -C "$cwd" remote get-url origin 2>/dev/null | grep -q 'github\.com'; then
+    out="$(cd "$cwd" && run_bounded "$GH_TIMEOUT" gh pr view "$branch" --json state,number)" || out=""
+    printf '%s' "$out" | jq -r 'select(.state == "MERGED") | .number' 2>/dev/null
+    return 0
+  fi
+  base="$(default_branch "$cwd")"
+  [[ "$branch" != "$base" ]] || return 0
+  git -C "$cwd" rev-parse --verify --quiet "refs/remotes/origin/$branch" >/dev/null 2>&1 || return 0
+  run_bounded 10 git -C "$cwd" fetch -q origin "$base" >/dev/null || true
+  git -C "$cwd" merge-base --is-ancestor "refs/heads/$branch" "refs/remotes/origin/$base" 2>/dev/null && echo merged
+  return 0
+}
+
+# merged_overrides FILE — {sessionId: new base title} for "to-merge" sessions
+# whose PR is now merged: "🔀 To merge #12 · x" becomes "🏁 Merged #12 · x".
+merged_overrides() {
+  local ov='{}' id cwd branch base hit pr subj title
+  local icon; icon="$(jq -r '.statuses["to-merge"].icon' "$TEMPLATES")"
+  while IFS=$'\t' read -r id cwd branch base; do
+    hit="$(pr_merged "$cwd" "$branch")"
+    [[ -n "$hit" ]] || continue
+    pr=""; [[ "$hit" =~ ^[0-9]+$ ]] && pr="$hit"
+    [[ -z "$pr" && "$base" =~ \#([0-9]+) ]] && pr="${BASH_REMATCH[1]}"
+    subj="${base#* · }"
+    title="$(redot "$(render_title merged "$subj" "$pr" "")" "")" || continue
+    ov="$(jq -c --arg k "$id" --arg v "$title" '. + {($k): $v}' <<<"$ov")"
+  done < <(jq -r --arg icon "$icon" --slurpfile tpl "$TEMPLATES" '
+    ([$tpl[0].freshness.levels[].dot, $tpl[0].freshness.workingDot] | map(. + " ")) as $dots
+    | (if type == "array" then . else (.sessions // []) end)[]
+    | select(.isArchived != true and .isRunning != true and (.title | type) == "string")
+    | (reduce $dots[] as $p (.title; ltrimstr($p))) as $base
+    | select($base | startswith($icon + " "))
+    | [.sessionId, (.cwd // ""), (.branch // ""), $base] | @tsv' "$1")
+  printf '%s' "$ov"
+}
+
 # sweep FILE — FILE is list_sessions output. Prints one {sessionId,title} line
-# per session whose age dot is stale. Only titles built from the templates are
-# touched; running and archived sessions are skipped. With freshness off, the
-# dots are stripped instead, so turning the feature off cleans the sidebar.
+# per session whose age dot is stale, or whose "to-merge" PR got merged. Only
+# titles built from the templates are touched; running and archived sessions
+# are skipped. With freshness off, the dots are stripped instead, so turning
+# the feature off cleans the sidebar.
 sweep() {
   local fresh=false; freshness_on && fresh=true
-  jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --slurpfile tpl "$TEMPLATES" '
+  local ov; ov="$(merged_overrides "$1")"; [[ -n "$ov" ]] || ov='{}'
+  jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --argjson ov "$ov" --slurpfile tpl "$TEMPLATES" '
     ($tpl[0].freshness.levels) as $levels
     | ([$levels[].dot, $tpl[0].freshness.workingDot] | map(. + " ")) as $dots
     | ([$tpl[0].statuses[].icon] + [$tpl[0].activities | to_entries[] | select(.key | startswith("$") | not) | .value.icon]) as $icons
     | (if type == "array" then . else (.sessions // []) end)[]
     | select(.isArchived != true and .isRunning != true and (.title | type) == "string")
     | .title as $t
-    | (reduce $dots[] as $p ($t; ltrimstr($p))) as $base
+    | ($ov[.sessionId] // (reduce $dots[] as $p ($t; ltrimstr($p)))) as $base
     | select(any($icons[]; . as $i | $base | startswith($i)))
     | ((.lastActivityAt // "") | sub("\\.[0-9]+Z$"; "Z") | try fromdateiso8601 catch null) as $at
     | select($at != null)
