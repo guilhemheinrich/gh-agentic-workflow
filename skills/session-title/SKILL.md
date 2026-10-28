@@ -279,8 +279,14 @@ scheduled task with `taskId: "session-title-freshness"`, the cron printed by
 
 ## Install (Claude Code, user scope)
 
-`install.sh` copies the skill to `~/.claude/skills/` and both hooks to
-`~/.agents/hooks/`. Register the hooks in `~/.claude/settings.json`:
+`install.sh` / `install.ps1` copy the skill to `~/.claude/skills/` (and to the
+other agent directories), copy `hooks/` to `~/.agents/hooks/` and `scripts/` to
+`~/.agents/scripts/`, then register the four hooks in `~/.claude/settings.json`
+through `scripts/hooktools/merge-claude-hooks.cjs` (requires Node.js). The merge
+is idempotent and leaves every other setting and hook untouched; pass
+`--no-claude-hooks` (`-NoClaudeHooks` on PowerShell) to skip it. The manifest is
+`scripts/hooktools/claude-code-hooks.json`. For a manual setup, register them in
+`~/.claude/settings.json`:
 
 ```json
 {
