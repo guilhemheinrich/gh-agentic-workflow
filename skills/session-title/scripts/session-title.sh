@@ -12,6 +12,7 @@
 #   session-title.sh check  --session ID [...same]   # facts + changed=true once per new fingerprint
 #   session-title.sh set STATUS --session ID [--repo DIR] [--subject TEXT]
 #                                                    # prints the title, or UNCHANGED
+#   session-title.sh gate   --session ID            # before AskUserQuestion: deny once, then allow
 #   session-title.sh render STATUS [--subject TEXT] [--pr N] [--progress D/T]
 #   session-title.sh list [--mode spec|free]
 #   session-title.sh forget --session ID
@@ -29,6 +30,7 @@
 #   SESSION_TITLE_GH=0             disable gh lookups
 #   SESSION_TITLE_GH_TIMEOUT=4     seconds before a gh call is abandoned
 #   SESSION_TITLE_GH_TTL=60        seconds a gh answer is reused
+#   SESSION_TITLE_GATE_TTL=300     seconds the question gate stays open after a deny
 
 set -uo pipefail
 
@@ -323,6 +325,25 @@ case "$cmd" in
       --arg subj "$subject" --arg s "$status_arg" --arg t "$title"
     if [[ "$title" == "$(printf '%s' "$state" | jq -r '.currentTitle')" ]]; then echo "UNCHANGED"; else echo "$title"; fi
     ;;
+  gate)
+    # Before an interactive question (AskUserQuestion): prints "deny" once so
+    # the agent can rename the session to 'decide', then "allow". Never denies
+    # twice within SESSION_TITLE_GATE_TTL seconds, even if the rename failed.
+    # Either way the Stop fingerprint is cleared, so the turn that follows the
+    # human's answer re-titles the session instead of keeping "À trancher".
+    [[ -n "$session" ]] || die "gate needs --session"
+    now="$(date +%s)"
+    verdict="$(read_cache "$session" | jq -r --argjson now "$now" --argjson ttl "${SESSION_TITLE_GATE_TTL:-300}" '
+      if .status == "decide" then "allow"
+      elif ($now - (.gateAt // 0)) < $ttl then "allow"
+      else "deny" end')"
+    if [[ "$verdict" == "deny" ]]; then
+      merge_cache "$session" '.gateAt = $now | .asked = ""' --argjson now "$now"
+    else
+      merge_cache "$session" '.gateAt = 0 | .asked = ""'
+    fi
+    echo "$verdict"
+    ;;
   render)
     [[ -n "$status_arg" ]] || die "render needs STATUS"
     render_title "$status_arg" "${subject:-<subject>}" "$pr" "$progress"
@@ -337,5 +358,5 @@ case "$cmd" in
     [[ -n "$session" ]] || die "forget needs --session"
     rm -f "$(cache_file "$session")"
     ;;
-  *) sed -n '2,32p' "$0"; exit 2 ;;
+  *) sed -n '2,34p' "$0"; exit 2 ;;
 esac
