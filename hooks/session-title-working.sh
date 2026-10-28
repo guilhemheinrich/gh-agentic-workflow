@@ -4,7 +4,7 @@
 # Claude Code UserPromptSubmit hook. The moment the human sends a message, the
 # old title ("🟠 🧪 À tester · …") is wrong: the human now waits on the agent.
 # This hook asks the agent to make its FIRST tool call a rename to the working
-# title naming what IT does, "🔵 🛠️ Coding · <topic>" (English activity catalogue), as soon as it has read the message and
+# title naming what IT does, "🔵 🛠️ Coding · <topic>" (fixed activity catalogue), as soon as it has read the message and
 # before any other work.
 #
 # A spec session gets the exact title (its subject is the spec slug). A free
@@ -60,7 +60,7 @@ ctx="$(printf '%s' "$menu" | jq -r '
       "[session-title] As soon as you have read this message, and before any other work, make your FIRST tool call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and a title saying what YOU are about to do:",
       (if .subject then "  \"\($d)<icon> <Activity> · \(.subject)\"  (keep the subject exactly: it is the spec folder)"
        else "  \"\($d)<icon> <Activity> · <topic>\"  (<topic>: 2-5 words in the user language naming what this message asks)" end),
-      "Pick the one activity that matches, and copy what comes before the dash exactly (icon, English label, counter if any):",
+      "Pick the one activity that matches, and copy what comes before the dash exactly (icon, label, counter if any):",
       (.activities[] | "  - \(.)"),
       "Do not mention this to the user."
     ] | join("\n")')"

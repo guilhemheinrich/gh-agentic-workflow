@@ -90,7 +90,17 @@ at most 60 characters; the script truncates the subject with `…`.
 | `blocked` | ⛔ Bloqué · <topic> | both | chase the outside dependency | agent judgement |
 | `closed` | ✅ Clos · <topic> | both | nothing | PR closed |
 
-`SESSION_TITLE_LANG=en` switches the labels to English.
+## Language: one setting for every label
+
+`SESSION_TITLE_LANG` sets the language of every fixed label, statuses and
+activities alike. It defaults to `en`; `fr` is the other choice. The table
+above shows the `fr` labels. The free-text subject is not a label: the agent
+writes it in the session's language.
+
+| `SESSION_TITLE_LANG` | At Stop | While working |
+|---|---|---|
+| unset or `en` | 🟢 🔀 To merge #12 · Pastilles et activités | 🔵 🛠️ Coding 4/5 · 295-child-tenant-acts |
+| `fr` | 🟢 🔀 À merger #12 · Pastilles et activités | 🔵 🛠️ Code 4/5 · 295-child-tenant-acts |
 
 ## When the hook speaks to you
 
@@ -143,21 +153,20 @@ human owes a test, yet the human now waits on the agent.
 `session-title-working.sh` (UserPromptSubmit) asks the agent to make its
 first tool call a rename, right after reading the message. The title then
 says what the **agent** does, from the `activities` catalogue of
-`templates/titles.json`. The labels are English present participles whatever
-`SESSION_TITLE_LANG` says: they are shorter and uniform.
+`templates/titles.json`, in the language of `SESSION_TITLE_LANG`.
 
-| Activity | Agent is |
-|---|---|
-| 🔍 Investigating | reading code, logs or docs to understand |
-| 💭 Thinking | answering a question, weighing options |
-| 📝 Specifying | writing or amending a spec |
-| 🗺️ Planning | writing a plan or a task list |
-| 🛠️ Coding 3/14 | writing or changing code (counter in a spec with open tasks) |
-| 🔬 Testing | running or writing tests, trying the change |
-| 🐛 Debugging | chasing a failure |
-| 👀 Reviewing | reviewing a diff, a PR or a document |
-| ✍️ Writing | writing docs, a report or a message |
-| 📤 Shipping | committing, pushing, opening a PR |
+| Activity (en) | (fr) | Agent is |
+|---|---|---|
+| 🔍 Investigating | Analyse | reading code, logs or docs to understand |
+| 💭 Thinking | Réflexion | answering a question, weighing options |
+| 📝 Specifying | Spécification | writing or amending a spec |
+| 🗺️ Planning | Planification | writing a plan or a task list |
+| 🛠️ Coding 3/14 | Code 3/14 | writing or changing code (counter in a spec with open tasks) |
+| 🔬 Testing | Tests | running or writing tests, trying the change |
+| 🐛 Debugging | Débogage | chasing a failure |
+| 👀 Reviewing | Relecture | reviewing a diff, a PR or a document |
+| ✍️ Writing | Rédaction | writing docs, a report or a message |
+| 📤 Shipping | Livraison | committing, pushing, opening a PR |
 
 - **Free session**: "🔵 🛠️ Coding · Verbes d'activité", with a topic that fits
   the new message.

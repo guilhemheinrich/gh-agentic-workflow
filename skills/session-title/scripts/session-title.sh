@@ -39,7 +39,7 @@
 #   free — everything else ("vibe coding", questions, investigations).
 #
 # Env knobs (all optional):
-#   SESSION_TITLE_LANG=fr|en       label language (default fr)
+#   SESSION_TITLE_LANG=en|fr       language of every status and activity label (default en)
 #   SESSION_TITLE_TEMPLATES=PATH   template file override
 #   SESSION_TITLE_CACHE=DIR        per-session cache (default ~/.cache/session-title)
 #   SESSION_TITLE_GH=0             disable gh lookups
@@ -51,7 +51,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES="${SESSION_TITLE_TEMPLATES:-$SCRIPT_DIR/../templates/titles.json}"
-LANG_KEY="${SESSION_TITLE_LANG:-fr}"
+LANG_KEY="${SESSION_TITLE_LANG:-en}"
 CACHE_DIR="${SESSION_TITLE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/session-title}"
 GH_ENABLED="${SESSION_TITLE_GH:-1}"
 GH_TIMEOUT="${SESSION_TITLE_GH_TIMEOUT:-4}"
@@ -350,11 +350,11 @@ render_title() {
 # render_activity KEY SUBJECT PROGRESS — "🔵 🛠️ Coding 5/14 · 295-parent-acts".
 render_activity() {
   local fresh=false; freshness_on && fresh=true
-  jq -r --arg k "$1" --arg subj "$2" --arg prog "$3" --argjson fresh "$fresh" '
+  jq -r --arg k "$1" --arg subj "$2" --arg prog "$3" --argjson fresh "$fresh" --arg l "$LANG_KEY" '
     .activities[$k] as $a
     | if $a == null then error("unknown activity: \($k)") else . end
     | (if $fresh then "\(.freshness.workingDot) " else "" end) as $dot
-    | ($a.label | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))) as $label
+    | (($a.label[$l] // $a.label.en) | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))) as $label
     | (.maxLength - ($label | length) - 5 - ($dot | length)) as $room
     | (if ($subj | length) > $room and $room > 1 then ($subj[0:($room - 1)] + "…") else $subj end) as $sub
     | "\($dot)\($a.icon) \($label) · \($sub)"
@@ -541,11 +541,11 @@ case "$cmd" in
       fi
     fi
     fresh=false; freshness_on && fresh=true
-    jq -c --arg subj "$slug" --arg prog "$prog" --argjson fresh "$fresh" '
+    jq -c --arg subj "$slug" --arg prog "$prog" --argjson fresh "$fresh" --arg l "$LANG_KEY" '
       {dot: (if $fresh then .freshness.workingDot else "" end),
        subject: (if $subj == "" then null else $subj end),
        activities: [.activities | to_entries[] | select(.key | startswith("$") | not)
-         | "\(.value.icon) \(.value.label | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))) — \(.value.when)"]}
+         | "\(.value.icon) \((.value.label[$l] // .value.label.en) | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))) — \(.value.when)"]}
     ' "$TEMPLATES"
     ;;
   restore)
