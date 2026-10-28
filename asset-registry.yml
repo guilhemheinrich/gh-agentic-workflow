@@ -701,6 +701,31 @@ assets:
       never ends the turn and the Stop hook never runs. Never denies twice within SESSION_TITLE_GATE_TTL seconds; clears
       the Stop fingerprint so the next turn re-titles. Desktop and attended sessions only. Disable with
       SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-working.sh
+    type: hook
+    category: workflows-and-processes
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude UserPromptSubmit hook that asks the agent to make its first tool call a rename to the working title as soon
+      as a message arrives — an activity from a fixed catalogue, "🔵 🛠️ Coding 3/14 · <subject>", with the spec
+      slug kept as subject in a spec session. The Stop hook restores or re-judges the title at the end of the turn. Desktop
+      and attended sessions only; silent in scheduled runs. Disable with SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-progress.sh
+    type: hook
+    category: workflows-and-processes
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude PostToolUse hook (matcher Agent|Task|Edit|Write|MultiEdit) that keeps the "🔨 À implémenter D/T" counter of
+      a spec session live during a long turn: when tasks.md finishes a phase (or a task, with progress.every = "task"),
+      it hands the agent the exact new title through additionalContext. Ignores tool calls made inside subagents, which
+      cannot rename their parent. Desktop and attended sessions only; silent in scheduled runs. Disable with
+      SESSION_TITLE_SYNC=0.
   - path: rules/00-architecture/0-hexagonal-ddd.mdc
     type: rule
     description: >-
@@ -1757,7 +1782,7 @@ assets:
       being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
       deterministic facts through `scripts/session-title.sh` (spec or free session, spec-kit stage, git state, PR state,
       whether the turn ended on a question) and, once per new set of facts, asks the agent to judge the human's next
-      action and rename the session; only the agent can call the app's `set_session_title` tool. Works for spec-kit
+      action and rename the session; only the agent can call the app's `set_session_title` tool. A scheduled sweep prefixes an age dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4 days), at a frequency set in one user-level config file. Works for spec-kit
       sessions (any spec-kit flow, not only /dev-it) and for free "vibe coding" sessions alike. Use when installing the
       title hook, when the hook asks for a title update, when a session's title no longer says what to do next, or when
       adding a status to the template set. Triggers on "session title", "rename session", "titre de session",

@@ -16,6 +16,21 @@
 #   session-title.sh render STATUS [--subject TEXT] [--pr N] [--progress D/T]
 #   session-title.sh list [--mode spec|free]
 #   session-title.sh forget --session ID
+#   session-title.sh sweep  --sessions FILE         # list_sessions JSON -> {sessionId,title} lines to rename
+#   session-title.sh cron                           # cron expression of the freshness sweep
+#   session-title.sh config                         # effective user config
+#   session-title.sh progress --session ID [--repo DIR]  # live "🔨 D/T" title, or nothing
+#   session-title.sh scheduled --transcript FILE    # exit 0 when the session is a scheduled run
+#   session-title.sh working --session ID           # prompt arrived: activity menu for the working title
+#   session-title.sh restore --session ID           # Stop, facts unchanged: previous title, fresh dot
+#
+# Freshness: every title carries an age dot ("🟡 🔀 À merger #12 · 042-webhook").
+# `set` always renders 🟢 (the turn just ended); a scheduled task runs `sweep`
+# to repaint idle sessions. Levels live in ../templates/titles.json; the sweep
+# frequency lives in ONE user-level file, $SESSION_TITLE_CONFIG
+# (default ~/.config/session-title/config.json):
+#   { "freshness": { "enabled": true, "sweepMinutes": 5 }, "progress": { "every": "phase" } }
+# progress.every: "phase" (rename when a tasks.md section is all checked) or "task".
 #
 # Session mode:
 #   spec — the session works on a spec-kit feature: the branch names an
@@ -24,7 +39,7 @@
 #   free — everything else ("vibe coding", questions, investigations).
 #
 # Env knobs (all optional):
-#   SESSION_TITLE_LANG=fr|en       label language (default fr)
+#   SESSION_TITLE_LANG=en|fr       language of every status and activity label (default en)
 #   SESSION_TITLE_TEMPLATES=PATH   template file override
 #   SESSION_TITLE_CACHE=DIR        per-session cache (default ~/.cache/session-title)
 #   SESSION_TITLE_GH=0             disable gh lookups
@@ -36,16 +51,51 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES="${SESSION_TITLE_TEMPLATES:-$SCRIPT_DIR/../templates/titles.json}"
-LANG_KEY="${SESSION_TITLE_LANG:-fr}"
+LANG_KEY="${SESSION_TITLE_LANG:-en}"
 CACHE_DIR="${SESSION_TITLE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/session-title}"
 GH_ENABLED="${SESSION_TITLE_GH:-1}"
 GH_TIMEOUT="${SESSION_TITLE_GH_TIMEOUT:-4}"
 GH_TTL="${SESSION_TITLE_GH_TTL:-60}"
+CONFIG_FILE="${SESSION_TITLE_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/session-title/config.json}"
 
 die() { printf 'session-title: %s\n' "$*" >&2; exit 1; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required"
 [[ -f "$TEMPLATES" ]] || die "templates not found: $TEMPLATES"
+
+# ── User config ──────────────────────────────────────────────────────────────
+# Defaults deep-merged with the user file; a missing or broken file means defaults.
+config() {
+  local user='{}'
+  [[ -s "$CONFIG_FILE" ]] && user="$(jq -c . "$CONFIG_FILE" 2>/dev/null)" || true
+  [[ -n "$user" ]] || user='{}'
+  jq -n --argjson u "$user" '{freshness: {enabled: true, sweepMinutes: 5}, progress: {every: "phase"}} * $u'
+}
+
+# is_scheduled TRANSCRIPT — the session is a scheduled-task run: nobody reads
+# its title, so the hooks stay silent there.
+is_scheduled() {
+  [[ -n "${1:-}" && -f "$1" ]] && head -c 8192 "$1" 2>/dev/null | grep -q '<scheduled-task'
+}
+
+# phases_done FILE — number of task sections (## / ### headings) whose tasks are all checked.
+phases_done() {
+  awk '
+    /^#{2,3} / { if (n > 0 && n == d) p++; n = 0; d = 0; next }
+    /^[[:space:]]*[-*] \[[ xX]\]/ { n++; if ($0 ~ /\[[xX]\]/) d++ }
+    END { if (n > 0 && n == d) p++; print p + 0 }' "$1" 2>/dev/null
+}
+
+freshness_on() { [[ "$(config | jq -r '.freshness.enabled')" == "true" ]]; }
+
+# sweep_cron -> cron expression for sweepMinutes, or fails on an interval cron cannot express.
+sweep_cron() {
+  local n; n="$(config | jq -r '.freshness.sweepMinutes')"
+  [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 )) || die "sweepMinutes must be a positive integer, got: $n"
+  if (( n < 60 )); then printf '*/%s * * * *\n' "$n"
+  elif (( n % 60 == 0 && n <= 1440 )); then printf '0 */%s * * *\n' "$((n / 60))"
+  else die "sweepMinutes=$n: use 1-59 or a whole number of hours"; fi
+}
 
 # ── Cache ────────────────────────────────────────────────────────────────────
 cache_file() { printf '%s/%s.json' "$CACHE_DIR" "$1"; }
@@ -91,6 +141,21 @@ default_branch() {
     git -C "$1" show-ref --verify --quiet "refs/remotes/origin/$b" && { printf '%s' "$b"; return; }
   done
   printf 'main'
+}
+
+# resolve_slug ROOT SLUG — the slug the spec folder has NOW. A renamed spec
+# (git mv specs/042-webhook specs/042-webhook-202) keeps its number, so a
+# missing slug is followed through its NNN prefix. Empty when the folder is
+# gone, or when two folders share the number (never guess between them).
+resolve_slug() {
+  local root="$1" slug="$2" num d hits=()
+  [[ -n "$slug" ]] || return 0
+  [[ -n "$(spec_dir "$root" "$slug")" ]] && { printf '%s' "$slug"; return; }
+  num="${slug%%-*}"; [[ "$num" =~ ^[0-9]{3}$ ]] || return 0
+  for d in "$root"/specs/"$num"-* "$root"/specs/archived/"$num"-* "$root"/specs/archive/"$num"-*; do
+    [[ -d "$d" ]] && hits+=("$(basename "$d")")
+  done
+  (( ${#hits[@]} == 1 )) && printf '%s' "${hits[0]}"
 }
 
 # spec_dir ROOT SLUG — the spec folder, live or archived; empty when absent.
@@ -170,10 +235,13 @@ facts() {
   reason="$(printf '%s' "$cache" | jq -r '.modeReason // "no spec-kit signal"')"
   local bslug=""
   [[ "$branch" =~ ([0-9]{3}-[A-Za-z0-9._-]+) ]] && bslug="${BASH_REMATCH[1]}"
-  local tslug; tslug="$(printf '%s' "$scan" | jq -r '.slug')"
-  if [[ -n "$tslug" && -n "$(spec_dir "$root" "$tslug")" ]]; then
+  local tslug; tslug="$(resolve_slug "$root" "$(printf '%s' "$scan" | jq -r '.slug')")"
+  bslug="$(resolve_slug "$root" "$bslug")"
+  # A cached slug follows a renamed folder too; it stays as-is when unresolved.
+  local cslug; cslug="$(resolve_slug "$root" "$slug")"; [[ -n "$cslug" ]] && slug="$cslug"
+  if [[ -n "$tslug" ]]; then
     mode="spec"; slug="$tslug"; reason="session wrote into specs/$tslug/"
-  elif [[ -n "$bslug" && -n "$(spec_dir "$root" "$bslug")" ]]; then
+  elif [[ -n "$bslug" ]]; then
     mode="spec"; slug="$bslug"; reason="branch $branch names specs/$bslug/"
   elif [[ "$mode" != "spec" && "$(printf '%s' "$scan" | jq -r '.speckit')" == "true" ]]; then
     mode="spec"; reason="a /speckit.* command ran in this session"
@@ -252,30 +320,85 @@ facts() {
          elif $upstream and $branch != $base and .pr == null then ["to-merge", "to-ship"]
          else ["to-read"] end)
         | if $question then ["decide"] + (. - ["decide"]) else . end)
-    | .allowed = [$tpl[0].statuses | to_entries[] | select(.value.modes | index($mode)) | .key]
+    | .allowed = [$tpl[0].statuses | to_entries[] | select((.value.modes | index($mode)) and .value.atStop != false) | .key]
     | .fingerprint = ({mode, s: .spec, d: ($dirty > 0), a: ($ahead > 0), pr, m: $merged, q: $question} | tojson)'
 }
 
 # ── Render ───────────────────────────────────────────────────────────────────
-render_title() { # STATUS SUBJECT PR PROGRESS
-  jq -r --arg s "$1" --arg subj "$2" --arg pr "$3" --arg prog "$4" --arg l "$LANG_KEY" '
+# render_title STATUS SUBJECT PR PROGRESS [DOT] — DOT is "fresh" (default) or
+# "working"; "working" is always forced for the working status. No dot when
+# freshness is off.
+render_title() {
+  local fresh=false; freshness_on && fresh=true
+  jq -r --arg s "$1" --arg subj "$2" --arg pr "$3" --arg prog "$4" --arg l "$LANG_KEY" \
+    --argjson fresh "$fresh" --arg kind "${5:-fresh}" '
     .statuses[$s] as $x
     | if $x == null then error("unknown status: \($s)") else . end
+    | (if ($kind == "working" or $s == "working") then .freshness.workingDot else .freshness.levels[0].dot end) as $d
+    | (if $fresh then "\($d) " else "" end) as $dot
     | .maxLength as $max
     | ($x.label[$l] // $x.label.en)
       | gsub("\\{pr\\}"; (if $pr == "" then "" else " #\($pr)" end))
       | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))
     | . as $label
-    | ($max - ($label | length) - 5) as $room
+    | ($max - ($label | length) - 5 - ($dot | length)) as $room
     | (if ($subj | length) > $room and $room > 1 then ($subj[0:($room - 1)] + "…") else $subj end) as $sub
-    | "\($x.icon) \($label) · \($sub)"
+    | "\($dot)\($x.icon) \($label) · \($sub)"
   ' "$TEMPLATES"
+}
+
+# render_activity KEY SUBJECT PROGRESS — "🔵 🛠️ Coding 5/14 · 295-parent-acts".
+render_activity() {
+  local fresh=false; freshness_on && fresh=true
+  jq -r --arg k "$1" --arg subj "$2" --arg prog "$3" --argjson fresh "$fresh" --arg l "$LANG_KEY" '
+    .activities[$k] as $a
+    | if $a == null then error("unknown activity: \($k)") else . end
+    | (if $fresh then "\(.freshness.workingDot) " else "" end) as $dot
+    | (($a.label[$l] // $a.label.en) | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))) as $label
+    | (.maxLength - ($label | length) - 5 - ($dot | length)) as $room
+    | (if ($subj | length) > $room and $room > 1 then ($subj[0:($room - 1)] + "…") else $subj end) as $sub
+    | "\($dot)\($a.icon) \($label) · \($sub)"
+  ' "$TEMPLATES"
+}
+
+# redot TITLE DOT — TITLE with any leading age/working dot replaced by DOT
+# (DOT empty: dot removed).
+redot() {
+  jq -rn --arg t "$1" --arg d "$2" --slurpfile tpl "$TEMPLATES" '
+    ([$tpl[0].freshness.levels[].dot, $tpl[0].freshness.workingDot] | map(. + " ")) as $dots
+    | (reduce $dots[] as $p ($t; ltrimstr($p))) as $base
+    | if $d == "" then $base else "\($d) \($base)" end'
+}
+
+# sweep FILE — FILE is list_sessions output. Prints one {sessionId,title} line
+# per session whose age dot is stale. Only titles built from the templates are
+# touched; running and archived sessions are skipped. With freshness off, the
+# dots are stripped instead, so turning the feature off cleans the sidebar.
+sweep() {
+  local fresh=false; freshness_on && fresh=true
+  jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --slurpfile tpl "$TEMPLATES" '
+    ($tpl[0].freshness.levels) as $levels
+    | ([$levels[].dot, $tpl[0].freshness.workingDot] | map(. + " ")) as $dots
+    | ([$tpl[0].statuses[].icon] + [$tpl[0].activities | to_entries[] | select(.key | startswith("$") | not) | .value.icon]) as $icons
+    | (if type == "array" then . else (.sessions // []) end)[]
+    | select(.isArchived != true and .isRunning != true and (.title | type) == "string")
+    | .title as $t
+    | (reduce $dots[] as $p ($t; ltrimstr($p))) as $base
+    | select(any($icons[]; . as $i | $base | startswith($i)))
+    | ((.lastActivityAt // "") | sub("\\.[0-9]+Z$"; "Z") | try fromdateiso8601 catch null) as $at
+    | select($at != null)
+    | (($now - $at) / 60) as $age
+    | (first($levels[] | select(.belowMinutes == null or $age < .belowMinutes)) | .dot) as $dot
+    | (if $fresh then "\($dot) \($base)" else $base end) as $new
+    | select($new != $t)
+    | {sessionId, title: $new}
+  ' "$1"
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 cmd="${1:-}"; [[ $# -gt 0 ]] && shift
 repo="$(pwd)"; session=""; subject=""; pr=""; progress=""; status_arg=""
-transcript=""; lastfile=""; mode_arg=""
+transcript=""; lastfile=""; mode_arg=""; sessions_file=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;;
@@ -286,6 +409,7 @@ while [[ $# -gt 0 ]]; do
     --transcript) transcript="$2"; shift 2 ;;
     --last-message-file) lastfile="$2"; shift 2 ;;
     --mode) mode_arg="$2"; shift 2 ;;
+    --sessions) sessions_file="$2"; shift 2 ;;
     -*) die "unknown option: $1" ;;
     *) status_arg="$1"; shift ;;
   esac
@@ -312,8 +436,12 @@ case "$cmd" in
     jq -e --arg s "$status_arg" --arg m "$mode" '.statuses[$s].modes | index($m)' "$TEMPLATES" >/dev/null \
       || die "status '$status_arg' is not allowed in $mode mode (see: list --mode $mode)"
     cache="$(read_cache "$session")"
-    # Spec sessions are named by their spec; free sessions keep the agent's topic.
-    [[ -z "$subject" && "$mode" == "spec" ]] && subject="$(printf '%s' "$state" | jq -r '.spec.slug // empty')"
+    # Spec sessions are named by their spec, always: a --subject never replaces
+    # the slug. Free sessions keep the agent's topic.
+    if [[ "$mode" == "spec" ]]; then
+      slug="$(printf '%s' "$state" | jq -r '.spec.slug // empty')"
+      [[ -n "$slug" ]] && subject="$slug"
+    fi
     [[ -z "$subject" ]] && subject="$(printf '%s' "$cache" | jq -r '.subject // empty')"
     [[ -z "$subject" ]] && subject="$(printf '%s' "$state" | jq -r 'if .git.branch != .git.base then .git.branch else "" end')"
     [[ -z "$subject" ]] && subject="$(basename "$(printf '%s' "$state" | jq -r '.root')")"
@@ -358,5 +486,90 @@ case "$cmd" in
     [[ -n "$session" ]] || die "forget needs --session"
     rm -f "$(cache_file "$session")"
     ;;
-  *) sed -n '2,34p' "$0"; exit 2 ;;
+  sweep)
+    [[ -n "$sessions_file" && -f "$sessions_file" ]] || die "sweep needs --sessions FILE (list_sessions JSON)"
+    sweep "$sessions_file"
+    ;;
+  progress)
+    # Mid-turn live counter: prints the new "🔨 À implémenter D/T" title when
+    # the spec's tasks.md crossed a boundary since the last print (a finished
+    # phase, or a finished task with progress.every = "task"); nothing otherwise.
+    # Reads the cache and tasks.md only: no git, no gh, so it is cheap enough
+    # for a PostToolUse hook.
+    [[ -n "$session" ]] || die "progress needs --session"
+    cache="$(read_cache "$session")"
+    [[ "$(printf '%s' "$cache" | jq -r '.mode // ""')" == "spec" ]] || exit 0
+    slug="$(printf '%s' "$cache" | jq -r '.spec // empty')"
+    [[ -n "$slug" ]] || exit 0
+    root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || root="$repo"
+    slug="$(resolve_slug "$root" "$slug")"
+    [[ -n "$slug" ]] || exit 0
+    dir="$(spec_dir "$root" "$slug")"
+    [[ -n "$dir" && -f "$dir/tasks.md" ]] || exit 0
+    read -r done total <<<"$(count_tasks "$dir/tasks.md")"
+    (( total > 0 && done < total )) || exit 0
+    if [[ "$(config | jq -r '.progress.every')" == "task" ]]; then mark="$done"
+    else mark="$(phases_done "$dir/tasks.md")"; fi
+    [[ "$mark" == "$(printf '%s' "$cache" | jq -r '.progressMark // ""')" ]] && exit 0
+    title="$(render_activity coding "$slug" "$done/$total")" || exit 1
+    merge_cache "$session" '.progressMark = $m' --arg m "$mark"
+    [[ "$title" == "$(printf '%s' "$cache" | jq -r '.progressTitle // ""')" ]] && exit 0
+    # A mid-turn title: the status stays "working" so the Stop hook replaces it.
+    merge_cache "$session" '.spec = $s | .progressTitle = $t' --arg s "$slug" --arg t "$title"
+    echo "$title"
+    ;;
+  working)
+    # A prompt just arrived: the human now waits on the agent. Remembers the
+    # title to restore and prints {dot, subject, activities}: the agent picks
+    # the activity that matches what it is about to do. subject is the spec
+    # slug in spec mode (fixed), null in free mode (the agent writes a topic).
+    [[ -n "$session" ]] || die "working needs --session"
+    cache="$(read_cache "$session")"
+    if [[ "$(printf '%s' "$cache" | jq -r '.status // ""')" != "working" ]]; then
+      merge_cache "$session" '.prevTitle = (.title // "") | .prevStatus = (.status // "")'
+    fi
+    merge_cache "$session" '.status = "working"'
+    slug="$(printf '%s' "$cache" | jq -r 'if .mode == "spec" then (.spec // "") else "" end')"
+    root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || root="$repo"
+    [[ -n "$slug" ]] && slug="$(resolve_slug "$root" "$slug")"
+    prog=""
+    if [[ -n "$slug" ]]; then
+      dir="$(spec_dir "$root" "$slug")"
+      if [[ -f "$dir/tasks.md" ]]; then
+        read -r done total <<<"$(count_tasks "$dir/tasks.md")"
+        (( total > 0 && done < total )) && prog="$done/$total"
+      fi
+    fi
+    fresh=false; freshness_on && fresh=true
+    jq -c --arg subj "$slug" --arg prog "$prog" --argjson fresh "$fresh" --arg l "$LANG_KEY" '
+      {dot: (if $fresh then .freshness.workingDot else "" end),
+       subject: (if $subj == "" then null else $subj end),
+       activities: [.activities | to_entries[] | select(.key | startswith("$") | not)
+         | "\(.value.icon) \((.value.label[$l] // .value.label.en) | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))) — \(.value.when)"]}
+    ' "$TEMPLATES"
+    ;;
+  restore)
+    # Stop with unchanged facts after a working title. Spec mode: prints the
+    # previous title with a fresh dot (its slug is not the agent's to choose).
+    # Free mode: prints JUDGE — the topic may have moved, so the agent re-titles.
+    # Prints nothing when there is nothing to restore.
+    [[ -n "$session" ]] || die "restore needs --session"
+    cache="$(read_cache "$session")"
+    [[ "$(printf '%s' "$cache" | jq -r '.status // ""')" == "working" ]] || exit 0
+    if [[ "$(printf '%s' "$cache" | jq -r '.mode // "free"')" != "spec" ]]; then echo "JUDGE"; exit 0; fi
+    prev="$(printf '%s' "$cache" | jq -r '.prevTitle // ""')"
+    [[ -n "$prev" ]] || exit 0
+    if freshness_on; then title="$(redot "$prev" "$(jq -r '.freshness.levels[0].dot' "$TEMPLATES")")"
+    else title="$(redot "$prev" "")"; fi
+    merge_cache "$session" '.status = (.prevStatus // "") | .title = $t' --arg t "$title"
+    echo "$title"
+    ;;
+  scheduled)
+    is_scheduled "$transcript"
+    ;;
+  cron) sweep_cron ;;
+  config)
+    config | jq --arg f "$CONFIG_FILE" --arg c "$(sweep_cron)" '. + {file: $f, cron: $c}'
+    ;;
+  *) sed -n '2,51p' "$0"; exit 2 ;;
 esac

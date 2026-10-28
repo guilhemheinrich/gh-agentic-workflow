@@ -51,6 +51,8 @@ if [[ -z "$script" ]]; then
 fi
 [[ -n "$script" && -f "$script" ]] || exit 0
 
+bash "$script" scheduled --transcript "$(field '.transcript_path')" 2>/dev/null && exit 0
+
 [[ "$(bash "$script" gate --session "$session" 2>/dev/null)" == "deny" ]] || exit 0
 
 root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)" || root="$cwd"

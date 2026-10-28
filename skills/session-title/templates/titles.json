@@ -1,7 +1,31 @@
 {
-  "$comment": "Session title templates. The title is read when the agent is idle, so every label names the HUMAN's next action. Tokens: {pr} -> ' #12' or '', {progress} -> ' 3/10' or ''. Labels are UI strings rendered in the reader's language (SESSION_TITLE_LANG, default fr). 'modes' lists where a status may be chosen; 'next' is the guidance the agent reads.",
+  "$comment": "Session title templates. The title is read when the agent is idle, so every label names the HUMAN's next action. Tokens: {pr} -> ' #12' or '', {progress} -> ' 3/10' or ''. Labels are UI strings rendered in ONE language for every status and activity (SESSION_TITLE_LANG, default en); the free-text subject follows the session language. 'modes' lists where a status may be chosen; 'next' is the guidance the agent reads.",
   "format": "{icon} {label} · {subject}",
   "maxLength": 60,
+  "freshness": {
+    "$comment": "Age dot prefixed to every title: '🟡 🔀 À merger #12 · 042-webhook'. Age = now - lastActivityAt of the session (a rename does not touch lastActivityAt). The first level whose belowMinutes exceeds the age wins; the last level has no bound. The sweep frequency lives in the user config (session-title.sh config), not here.",
+    "workingDot": "🔵",
+    "levels": [
+      { "dot": "🟢", "belowMinutes": 5 },
+      { "dot": "🟡", "belowMinutes": 90 },
+      { "dot": "🟠", "belowMinutes": 1440 },
+      { "dot": "🔴", "belowMinutes": 5760 },
+      { "dot": "⚫" }
+    ]
+  },
+  "activities": {
+    "$comment": "What the AGENT is doing while it has the floor, shown after the blue working dot: '🔵 🛠️ Coding 5/14 · 295-parent-acts'. Labels follow SESSION_TITLE_LANG like the statuses (default en). Chosen by the agent when a prompt arrives.",
+    "investigating": { "icon": "🔍", "label": { "en": "Investigating", "fr": "Analyse" }, "when": "reading code, logs or docs to understand" },
+    "thinking":      { "icon": "💭", "label": { "en": "Thinking", "fr": "Réflexion" },      "when": "answering a question, weighing options" },
+    "specifying":    { "icon": "📝", "label": { "en": "Specifying", "fr": "Spécification" },    "when": "writing or amending a spec" },
+    "planning":      { "icon": "🗺️", "label": { "en": "Planning", "fr": "Planification" },      "when": "writing a plan or a task list" },
+    "coding":        { "icon": "🛠️", "label": { "en": "Coding{progress}", "fr": "Code{progress}" }, "when": "writing or changing code" },
+    "testing":       { "icon": "🔬", "label": { "en": "Testing", "fr": "Tests" },       "when": "running or writing tests, trying the change" },
+    "debugging":     { "icon": "🐛", "label": { "en": "Debugging", "fr": "Débogage" },     "when": "chasing a failure" },
+    "reviewing":     { "icon": "👀", "label": { "en": "Reviewing", "fr": "Relecture" },     "when": "reviewing a diff, a PR or a document" },
+    "writing":       { "icon": "✍️", "label": { "en": "Writing", "fr": "Rédaction" },       "when": "writing docs, a report or a message" },
+    "shipping":      { "icon": "📤", "label": { "en": "Shipping", "fr": "Livraison" },      "when": "committing, pushing, opening a PR" }
+  },
   "statuses": {
     "to-clarify":   { "icon": "❓", "modes": ["spec"],         "label": { "fr": "À clarifier",          "en": "To clarify" },          "next": "spec.md holds [NEEDS CLARIFICATION]; human answers or runs /speckit.clarify." },
     "to-plan":      { "icon": "📐", "modes": ["spec"],         "label": { "fr": "À planifier",          "en": "To plan" },             "next": "spec.md is ready; human reviews it, then /speckit.plan." },
@@ -15,6 +39,7 @@
     "to-merge":     { "icon": "🔀", "modes": ["spec", "free"], "label": { "fr": "À merger{pr}",         "en": "To merge{pr}" },        "next": "A PR is open; human reviews and merges it." },
     "to-close":     { "icon": "📦", "modes": ["spec", "free"], "label": { "fr": "À clôturer",           "en": "To close" },            "next": "Merged and nothing left to exercise, or the human confirmed it works; human archives the session and the branch." },
     "blocked":      { "icon": "⛔", "modes": ["spec", "free"], "label": { "fr": "Bloqué",               "en": "Blocked" },             "next": "Waiting on something outside the session (a colleague, an access, a deploy)." },
+    "working":      { "icon": "⚙️", "modes": ["spec", "free"], "atStop": false, "label": { "fr": "En cours",   "en": "Working" },             "next": "Fallback activity while the agent works; prefer a verb from 'activities'. Set when a prompt arrives, never at Stop." },
     "closed":       { "icon": "✅", "modes": ["spec", "free"], "label": { "fr": "Clos",                 "en": "Closed" },              "next": "Nothing left; the session can be archived." }
   }
 }
