@@ -2,6 +2,16 @@
   "$comment": "Session title templates. The title is read when the agent is idle, so every label names the HUMAN's next action. Tokens: {pr} -> ' #12' or '', {progress} -> ' 3/10' or ''. Labels are UI strings rendered in the reader's language (SESSION_TITLE_LANG, default fr). 'modes' lists where a status may be chosen; 'next' is the guidance the agent reads.",
   "format": "{icon} {label} · {subject}",
   "maxLength": 60,
+  "freshness": {
+    "$comment": "Age dot prefixed to every title: '🟡 🔀 À merger #12 · 042-webhook'. Age = now - lastActivityAt of the session (a rename does not touch lastActivityAt). The first level whose belowMinutes exceeds the age wins; the last level has no bound. The sweep frequency lives in the user config (session-title.sh config), not here.",
+    "levels": [
+      { "dot": "🟢", "belowMinutes": 5 },
+      { "dot": "🟡", "belowMinutes": 90 },
+      { "dot": "🟠", "belowMinutes": 1440 },
+      { "dot": "🔴", "belowMinutes": 5760 },
+      { "dot": "⚫" }
+    ]
+  },
   "statuses": {
     "to-clarify":   { "icon": "❓", "modes": ["spec"],         "label": { "fr": "À clarifier",          "en": "To clarify" },          "next": "spec.md holds [NEEDS CLARIFICATION]; human answers or runs /speckit.clarify." },
     "to-plan":      { "icon": "📐", "modes": ["spec"],         "label": { "fr": "À planifier",          "en": "To plan" },             "next": "spec.md is ready; human reviews it, then /speckit.plan." },

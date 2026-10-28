@@ -16,6 +16,16 @@
 #   session-title.sh render STATUS [--subject TEXT] [--pr N] [--progress D/T]
 #   session-title.sh list [--mode spec|free]
 #   session-title.sh forget --session ID
+#   session-title.sh sweep  --sessions FILE         # list_sessions JSON -> {sessionId,title} lines to rename
+#   session-title.sh cron                           # cron expression of the freshness sweep
+#   session-title.sh config                         # effective user config
+#
+# Freshness: every title carries an age dot ("🟡 🔀 À merger #12 · 042-webhook").
+# `set` always renders 🟢 (the turn just ended); a scheduled task runs `sweep`
+# to repaint idle sessions. Levels live in ../templates/titles.json; the sweep
+# frequency lives in ONE user-level file, $SESSION_TITLE_CONFIG
+# (default ~/.config/session-title/config.json):
+#   { "freshness": { "enabled": true, "sweepMinutes": 5 } }
 #
 # Session mode:
 #   spec — the session works on a spec-kit feature: the branch names an
@@ -41,11 +51,32 @@ CACHE_DIR="${SESSION_TITLE_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/session-title}
 GH_ENABLED="${SESSION_TITLE_GH:-1}"
 GH_TIMEOUT="${SESSION_TITLE_GH_TIMEOUT:-4}"
 GH_TTL="${SESSION_TITLE_GH_TTL:-60}"
+CONFIG_FILE="${SESSION_TITLE_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/session-title/config.json}"
 
 die() { printf 'session-title: %s\n' "$*" >&2; exit 1; }
 
 command -v jq >/dev/null 2>&1 || die "jq is required"
 [[ -f "$TEMPLATES" ]] || die "templates not found: $TEMPLATES"
+
+# ── User config ──────────────────────────────────────────────────────────────
+# Defaults deep-merged with the user file; a missing or broken file means defaults.
+config() {
+  local user='{}'
+  [[ -s "$CONFIG_FILE" ]] && user="$(jq -c . "$CONFIG_FILE" 2>/dev/null)" || true
+  [[ -n "$user" ]] || user='{}'
+  jq -n --argjson u "$user" '{freshness: {enabled: true, sweepMinutes: 5}} * $u'
+}
+
+freshness_on() { [[ "$(config | jq -r '.freshness.enabled')" == "true" ]]; }
+
+# sweep_cron -> cron expression for sweepMinutes, or fails on an interval cron cannot express.
+sweep_cron() {
+  local n; n="$(config | jq -r '.freshness.sweepMinutes')"
+  [[ "$n" =~ ^[0-9]+$ ]] && (( n >= 1 )) || die "sweepMinutes must be a positive integer, got: $n"
+  if (( n < 60 )); then printf '*/%s * * * *\n' "$n"
+  elif (( n % 60 == 0 && n <= 1440 )); then printf '0 */%s * * *\n' "$((n / 60))"
+  else die "sweepMinutes=$n: use 1-59 or a whole number of hours"; fi
+}
 
 # ── Cache ────────────────────────────────────────────────────────────────────
 cache_file() { printf '%s/%s.json' "$CACHE_DIR" "$1"; }
@@ -257,25 +288,52 @@ facts() {
 }
 
 # ── Render ───────────────────────────────────────────────────────────────────
-render_title() { # STATUS SUBJECT PR PROGRESS
-  jq -r --arg s "$1" --arg subj "$2" --arg pr "$3" --arg prog "$4" --arg l "$LANG_KEY" '
+render_title() { # STATUS SUBJECT PR PROGRESS — prefixed with the fresh dot when freshness is on
+  local fresh=false; freshness_on && fresh=true
+  jq -r --arg s "$1" --arg subj "$2" --arg pr "$3" --arg prog "$4" --arg l "$LANG_KEY" \
+    --argjson fresh "$fresh" '
     .statuses[$s] as $x
     | if $x == null then error("unknown status: \($s)") else . end
+    | (if $fresh then "\(.freshness.levels[0].dot) " else "" end) as $dot
     | .maxLength as $max
     | ($x.label[$l] // $x.label.en)
       | gsub("\\{pr\\}"; (if $pr == "" then "" else " #\($pr)" end))
       | gsub("\\{progress\\}"; (if $prog == "" then "" else " \($prog)" end))
     | . as $label
-    | ($max - ($label | length) - 5) as $room
+    | ($max - ($label | length) - 5 - ($dot | length)) as $room
     | (if ($subj | length) > $room and $room > 1 then ($subj[0:($room - 1)] + "…") else $subj end) as $sub
-    | "\($x.icon) \($label) · \($sub)"
+    | "\($dot)\($x.icon) \($label) · \($sub)"
   ' "$TEMPLATES"
+}
+
+# sweep FILE — FILE is list_sessions output. Prints one {sessionId,title} line
+# per session whose age dot is stale. Only titles built from the templates are
+# touched; running and archived sessions are skipped. With freshness off, the
+# dots are stripped instead, so turning the feature off cleans the sidebar.
+sweep() {
+  local fresh=false; freshness_on && fresh=true
+  jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --slurpfile tpl "$TEMPLATES" '
+    ($tpl[0].freshness.levels) as $levels
+    | [$tpl[0].statuses[].icon] as $icons
+    | (if type == "array" then . else (.sessions // []) end)[]
+    | select(.isArchived != true and .isRunning != true and (.title | type) == "string")
+    | .title as $t
+    | (reduce ($levels[].dot + " ") as $p ($t; ltrimstr($p))) as $base
+    | select(any($icons[]; . as $i | $base | startswith($i)))
+    | ((.lastActivityAt // "") | sub("\\.[0-9]+Z$"; "Z") | try fromdateiso8601 catch null) as $at
+    | select($at != null)
+    | (($now - $at) / 60) as $age
+    | (first($levels[] | select(.belowMinutes == null or $age < .belowMinutes)) | .dot) as $dot
+    | (if $fresh then "\($dot) \($base)" else $base end) as $new
+    | select($new != $t)
+    | {sessionId, title: $new}
+  ' "$1"
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 cmd="${1:-}"; [[ $# -gt 0 ]] && shift
 repo="$(pwd)"; session=""; subject=""; pr=""; progress=""; status_arg=""
-transcript=""; lastfile=""; mode_arg=""
+transcript=""; lastfile=""; mode_arg=""; sessions_file=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;;
@@ -286,6 +344,7 @@ while [[ $# -gt 0 ]]; do
     --transcript) transcript="$2"; shift 2 ;;
     --last-message-file) lastfile="$2"; shift 2 ;;
     --mode) mode_arg="$2"; shift 2 ;;
+    --sessions) sessions_file="$2"; shift 2 ;;
     -*) die "unknown option: $1" ;;
     *) status_arg="$1"; shift ;;
   esac
@@ -358,5 +417,13 @@ case "$cmd" in
     [[ -n "$session" ]] || die "forget needs --session"
     rm -f "$(cache_file "$session")"
     ;;
-  *) sed -n '2,34p' "$0"; exit 2 ;;
+  sweep)
+    [[ -n "$sessions_file" && -f "$sessions_file" ]] || die "sweep needs --sessions FILE (list_sessions JSON)"
+    sweep "$sessions_file"
+    ;;
+  cron) sweep_cron ;;
+  config)
+    config | jq --arg f "$CONFIG_FILE" --arg c "$(sweep_cron)" '. + {file: $f, cron: $c}'
+    ;;
+  *) sed -n '2,45p' "$0"; exit 2 ;;
 esac

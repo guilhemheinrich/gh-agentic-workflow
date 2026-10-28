@@ -1753,7 +1753,7 @@ assets:
       being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
       deterministic facts through `scripts/session-title.sh` (spec or free session, spec-kit stage, git state, PR state,
       whether the turn ended on a question) and, once per new set of facts, asks the agent to judge the human's next
-      action and rename the session; only the agent can call the app's `set_session_title` tool. Works for spec-kit
+      action and rename the session; only the agent can call the app's `set_session_title` tool. A scheduled sweep prefixes an age dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4 days), at a frequency set in one user-level config file. Works for spec-kit
       sessions (any spec-kit flow, not only /dev-it) and for free "vibe coding" sessions alike. Use when installing the
       title hook, when the hook asks for a title update, when a session's title no longer says what to do next, or when
       adding a status to the template set. Triggers on "session title", "rename session", "titre de session",

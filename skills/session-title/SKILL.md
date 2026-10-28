@@ -9,7 +9,9 @@ description: >-
   `scripts/session-title.sh` (spec or free session, spec-kit stage, git state,
   PR state, whether the turn ended on a question) and, once per new set of
   facts, asks the agent to judge the human's next action and rename the
-  session; only the agent can call the app's `set_session_title` tool. Works
+  session; only the agent can call the app's `set_session_title` tool. A
+  scheduled sweep prefixes an age dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4
+  days), at a frequency set in one user-level config file. Works
   for spec-kit sessions (any spec-kit flow, not only /dev-it) and for free
   "vibe coding" sessions alike. Use when installing the title hook, when the
   hook asks for a title update, when a session's title no longer says what to
@@ -127,6 +129,51 @@ already `decide`. It never denies twice within `SESSION_TITLE_GATE_TTL`
 seconds (default 300), so a declined rename cannot loop. It also clears the
 Stop fingerprint, so the turn after the click re-titles the session.
 
+## Freshness dot: how long the session has waited
+
+Every title starts with a dot that ages with the session:
+"🟠 🔀 À merger #12 · 042-webhook" means this PR has waited more than 1 h 30.
+
+| Age since the session's last activity | Dot |
+|---|---|
+| under 5 min | 🟢 |
+| 5 min to 1 h 30 | 🟡 |
+| 1 h 30 to 1 day | 🟠 |
+| 1 day to 4 days | 🔴 |
+| over 4 days | ⚫ |
+
+No hook fires on an idle session, so two pieces share the work:
+
+1. `set` always renders 🟢, because the turn has just ended.
+2. A scheduled task, `session-title-freshness`, runs `sweep` and repaints idle
+   sessions. Its prompt is `templates/freshness-sweep.md`.
+
+`sweep` reads the `lastActivityAt` field of `list_sessions`. A rename leaves
+that field unchanged: renaming `local_3f5a96d8…` kept `14:13:50.723Z`. It only
+repaints titles built from the templates, and skips running and archived
+sessions. A title the human typed, such as "Horloge de fraîcheur du titre",
+stays as it is.
+
+The levels live in `templates/titles.json` under `freshness`. The sweep
+frequency lives in **one** user-level file,
+`~/.config/session-title/config.json` (`SESSION_TITLE_CONFIG` overrides the
+path):
+
+```json
+{ "freshness": { "enabled": true, "sweepMinutes": 5 } }
+```
+
+Without the file, the sweep runs every 5 minutes. Accepted values are 1 to 59
+minutes, or a whole number of hours (120 → `0 */2 * * *`). Each run checks its
+own cron against `session-title.sh cron` and corrects it. A change to the file
+therefore takes effect at the next run, with no reinstall. `"enabled": false`
+makes the next run strip every dot.
+
+Install the task once, from a desktop session: ask the agent to create a
+scheduled task with `taskId: "session-title-freshness"`, the cron printed by
+`session-title.sh cron`, and the prompt "Read and follow
+~/.agents/skills/session-title/templates/freshness-sweep.md".
+
 ## Install (Claude Code, user scope)
 
 `install.sh` copies the skill to `~/.claude/skills/` and both hooks to
@@ -154,6 +201,9 @@ session-title.sh gate --session <id>                                  # deny onc
 session-title.sh render to-merge --subject 042-webhook --pr 12
 session-title.sh list --mode free
 session-title.sh forget --session <id>                                 # drop the cache
+session-title.sh sweep --sessions list-sessions.json                   # renames the freshness dot needs
+session-title.sh cron                                                  # schedule from the user config
+session-title.sh config                                                # effective config, file path, cron
 ```
 
 ## Limits
@@ -172,6 +222,14 @@ session-title.sh forget --session <id>                                 # drop th
    `custom-title` entries. That format is undocumented, so a missing title only
    disables the `UNCHANGED` shortcut.
 
+5. **Each sweep is one agent run, on the app's default model.** A scheduled
+   task cannot pick its model: all 3,412 scheduled runs recorded on the
+   author's machine ran on Opus with a 1M context. At 5 minutes, that makes
+   288 Opus runs a day, even when no dot changes. The app also delays
+   recurring tasks by a few minutes, so a dot can turn late by that much.
+6. **Sweep runs show in the sidebar.** A scheduled run cannot archive
+   itself: `archive_session` blocks when nobody attends the session.
+
 ## Implementation Status
 
 Fully implemented. Tested on fixture repos in spec mode, with mode detected
@@ -185,3 +243,8 @@ Tested in free mode on a real desktop transcript: 5 dirty files led to the
 suggestion `to-test`/`to-ship`. The current title was read back from
 `custom-title`, and a repeated stop stayed silent. Also tested through `gh`
 on this repository: PR #7 came back `MERGED`.
+
+Freshness: `sweep` tested on 9 fixture sessions aged 2 min to 5 days. It
+repainted the 5 stale dots, left a correct one, a typed title, a running and
+an archived session alone, and stripped all dots with `enabled: false`. The
+scheduled task itself is not yet tested end to end.
