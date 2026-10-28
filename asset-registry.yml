@@ -710,8 +710,8 @@ assets:
       - shell
     description: >-
       Claude UserPromptSubmit hook that asks the agent to make its first tool call a rename to the working title as soon
-      as a message arrives — "🔵 ⚙️ En cours · <topic>" in a free session, the previous title with a blue dot in a spec
-      session so the slug and stage stay. The Stop hook restores or re-judges the title at the end of the turn. Desktop
+      as a message arrives — an English activity from a fixed catalogue, "🔵 🛠️ Coding 3/14 · <subject>", with the spec
+      slug kept as subject in a spec session. The Stop hook restores or re-judges the title at the end of the turn. Desktop
       and attended sessions only; silent in scheduled runs. Disable with SESSION_TITLE_SYNC=0.
   - path: hooks/session-title-progress.sh
     type: hook

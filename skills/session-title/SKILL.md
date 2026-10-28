@@ -141,26 +141,49 @@ Stop fingerprint, so the turn after the click re-titles the session.
 When the human sends a message, the old title lies: "🟠 🧪 À tester" says the
 human owes a test, yet the human now waits on the agent.
 `session-title-working.sh` (UserPromptSubmit) asks the agent to make its
-first tool call a rename, right after reading the message:
+first tool call a rename, right after reading the message. The title then
+says what the **agent** does, from the `activities` catalogue of
+`templates/titles.json`. The labels are English present participles whatever
+`SESSION_TITLE_LANG` says: they are shorter and uniform.
 
-- **Free session**: "🔵 ⚙️ En cours · <topic>", with a topic that fits the
-  new message.
-- **Spec session**: the previous title with a blue dot, so the slug and the
-  stage stay: "🔵 🔨 À implémenter 3/14 · 295-parent-acts". A spec session
-  keeps its slug until it is closed or merged; `set` ignores `--subject` there.
+| Activity | Agent is |
+|---|---|
+| 🔍 Investigating | reading code, logs or docs to understand |
+| 💭 Thinking | answering a question, weighing options |
+| 📝 Specifying | writing or amending a spec |
+| 🗺️ Planning | writing a plan or a task list |
+| 🛠️ Coding 3/14 | writing or changing code (counter in a spec with open tasks) |
+| 🔬 Testing | running or writing tests, trying the change |
+| 🐛 Debugging | chasing a failure |
+| 👀 Reviewing | reviewing a diff, a PR or a document |
+| ✍️ Writing | writing docs, a report or a message |
+| 📤 Shipping | committing, pushing, opening a PR |
 
-At Stop, the working title goes away. If the facts changed, the usual
-judgement runs. If not, `restore` hands back the previous title with a 🟢 dot,
-in one call. The `working` status is never offered at Stop. A session that
-crashed mid-turn keeps "⚙️ En cours" and ages like any other, so an orange
-"En cours" means a turn that never finished.
+- **Free session**: "🔵 🛠️ Coding · Verbes d'activité", with a topic that fits
+  the new message.
+- **Spec session**: the subject stays the spec folder,
+  "🔵 🛠️ Coding 3/14 · 295-parent-acts". A spec session keeps its slug until
+  it is closed or merged; `set` ignores `--subject` there.
+
+At Stop, the working title goes away:
+
+- **Facts changed**: the usual judgement runs.
+- **Facts unchanged, spec session**: `restore` hands back the previous title
+  with a 🟢 dot, in one call. The slug is not the agent's to choose.
+- **Facts unchanged, free session**: the usual judgement runs too. The topic
+  can move without any trace in git, so restoring would bring back a stale
+  topic, such as "À tester · lancer Run now" long after the run.
+
+The activities and the `working` fallback are never offered at Stop. A
+session that crashed mid-turn keeps its activity and ages like any other, so
+an orange "🛠️ Coding" means a turn that never finished.
 
 ## Live implementation counter
 
 A long `/speckit.implement` or `/dev-it` turn may run for an hour without a
 Stop. `session-title-progress.sh` (PostToolUse, matcher
 `Agent|Task|Edit|Write|MultiEdit`) keeps the counter moving meanwhile:
-"🟢 🔨 À implémenter 0/14" becomes "🟢 🔨 À implémenter 5/14" when phase 1 of
+"🔵 🛠️ Coding 0/14" becomes "🔵 🛠️ Coding 5/14" when phase 1 of
 `tasks.md` is all checked.
 
 - `session-title.sh progress` decides. It reads the cache and `tasks.md`
@@ -306,4 +329,4 @@ with `every: task`, and left 4/4 to the Stop hook.
 Working dot: tested on the same fixture. A spec prompt gave
 "🔵 🔨 À implémenter 3/4 · 295-parent-acts" twice in a row, and `restore`
 gave back the 🟢 title once. A stray `--subject` in spec mode kept the slug.
-A crashed "🔵 ⚙️ En cours" aged to 🟠.
+A crashed "🔵 🛠️ Coding 4/5" aged to 🟠. A free session with unchanged facts got JUDGE (full re-title), a spec one its 🟢 title back; the counter kept the status "working".

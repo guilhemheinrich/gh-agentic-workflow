@@ -68,12 +68,15 @@ state="$(bash "$script" check --repo "$cwd" --session "$session" \
 [[ -n "$lastfile" ]] && rm -f "$lastfile"
 [[ -n "$state" ]] || exit 0
 if [[ "$(printf '%s' "$state" | jq -r '.changed' 2>/dev/null)" != "true" ]]; then
-  # Same facts as the last ask, but the prompt hook titled the session
-  # "🔵 ⚙️ En cours": hand back the previous title, freshly dotted, in one call.
+  # Same facts as the last ask, but the prompt hook put a working title up
+  # ("🔵 🛠️ Coding · …"). Spec mode: hand back the previous title in one call.
+  # Free mode (JUDGE): the topic may have moved, so fall through to the full ask.
   restored="$(bash "$script" restore --session "$session" 2>/dev/null)"
   [[ -n "$restored" ]] || exit 0
-  jq -n --arg t "$restored" '{decision: "block", reason: "[session-title] Turn done, facts unchanged. Call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and title \"\($t)\", then stop. Do not mention this to the user."}'
-  exit 0
+  if [[ "$restored" != "JUDGE" ]]; then
+    jq -n --arg t "$restored" '{decision: "block", reason: "[session-title] Turn done, facts unchanged. Call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and title \"\($t)\", then stop. Do not mention this to the user."}'
+    exit 0
+  fi
 fi
 
 templates="$(cd "$(dirname "$script")/.." && pwd)/templates/titles.json"

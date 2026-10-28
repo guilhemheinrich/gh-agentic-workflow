@@ -5,7 +5,7 @@
 # Keeps the implementation counter live during a long turn: when the spec's
 # tasks.md crosses a boundary (a finished phase by default, or a finished task
 # with progress.every = "task" in ~/.config/session-title/config.json), it
-# hands the agent the new title, "🟢 🔨 À implémenter 5/14 · 295-parent-acts…".
+# hands the agent the new title, "🔵 🛠️ Coding 5/14 · 295-parent-acts…".
 #
 # Implementers often tick tasks.md inside a subagent, and a subagent cannot
 # rename its parent session. So the hook ignores tool calls made inside a
