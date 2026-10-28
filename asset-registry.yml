@@ -19,11 +19,13 @@ x-tag-descriptions:
   ddd: "[NEW] ddd"
   debugging: Debugging, investigation, troubleshooting
   devops: "[NEW] devops"
+  devtools: "[NEW] devtools"
   docker: Docker, Dockerfile, images
   docker-compose: Docker Compose orchestration
   documentation: Documentation, Diátaxis, JSDoc
   domain: "[NEW] domain"
   e2e: End-to-end testing (Playwright, Cypress)
+  environment: "[NEW] environment"
   eslint: Linting, static analysis
   fp-ts: fp-ts / Effect functional programming
   frontend: Frontend development, UI frameworks
@@ -52,6 +54,7 @@ x-tag-descriptions:
   performance: "[NEW] performance"
   philosophy: Project philosophies and guiding paradigms (PHILOSOPHY.md)
   playwright: Playwright browser automation, E2E testing
+  ports: "[NEW] ports"
   prisma: Prisma ORM
   process: "[NEW] process"
   purity: "[NEW] purity"
@@ -87,6 +90,7 @@ x-tag-descriptions:
   web-analysis: "[NEW] web-analysis"
   web-components: Web Components, Lit
   workflow: "[NEW] workflow"
+  worktree: "[NEW] worktree"
 x-bundle-descriptions:
   common: Stack-agnostic minimum-viable starter set for any project
 x-category-descriptions:
@@ -670,6 +674,20 @@ assets:
       referenced in asset-registry.yml. If not, it reminds the agent (per AGENTS.md) to register the skill in the same
       change; silent when already registered. Supports Claude PostToolUse and Cursor afterFileEdit. Reminder-only —
       never rewrites the registry. Disable with REGISTRY_SYNC=0.
+  - path: hooks/session-title-sync.sh
+    type: hook
+    category: workflows-and-processes
+    tags:
+      - claude
+      - hooks
+      - shell
+      - spec-kit
+    description: >-
+      Claude Stop hook that gathers the session's facts through the session-title skill (spec or free session, spec-kit
+      stage, git, PR, question ending) and, once per new set of facts, blocks the stop with a reason asking the agent to
+      judge the human's next action and rename the desktop session from the fixed templates ("À merger", "À tester", "À
+      clôturer"). Desktop and attended sessions only; never loops (honours stop_hook_active). Disable with
+      SESSION_TITLE_SYNC=0.
   - path: rules/00-architecture/0-hexagonal-ddd.mdc
     type: rule
     description: >-
@@ -917,17 +935,6 @@ assets:
       modified UI surface MUST be observed in a real browser before the implementation is considered complete, and every
       newly introduced interactive element MUST be exercised and its observable outcome asserted against the spec.
     category: quality-assurance
-  - path: skills/ai-igniter-setup/
-    type: skill
-    tags:
-      - devtools
-      - docker
-      - worktree
-    description: >-
-      Set up AI Igniter (ScreamZ/ai-igniter) in a project to manage isolated worktree-aware dev environments with
-      automatic port allocation, managed .env sections, and Docker-based services (PostgreSQL, S3, custom). Use when
-      onboarding a project for parallel-branch development or Claude Code worktrees.
-    category: developer-experience
   - path: skills/adversarial-review-convergence/
     type: skill
     tags:
@@ -949,6 +956,19 @@ assets:
       when round N returns more findings than round N-1, when the panel and the author are arguing instead of
       converging, or when deciding whether a review is finished.
     category: quality-assurance
+  - path: skills/ai-igniter-setup/
+    type: skill
+    tags:
+      - devtools
+      - docker
+      - environment
+      - ports
+      - worktree
+    description: >-
+      Set up AI Igniter (ScreamZ/ai-igniter) in a project to manage isolated worktree-aware dev environments with
+      automatic port allocation, managed .env sections, and Docker-based services (PostgreSQL, S3, custom). Use when
+      onboarding a project for parallel-branch development or Claude Code worktrees.
+    category: developer-experience
   - path: skills/app-version-surface/
     type: skill
     tags:
@@ -1706,6 +1726,25 @@ assets:
       signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint
       with PBKDF2-SHA256 password hashing.
     category: domain-specific
+  - path: skills/session-title/
+    type: skill
+    category: workflows-and-processes
+    tags:
+      - claude
+      - hooks
+      - shell
+      - spec-kit
+    description: >-
+      Keep a Claude desktop session title equal to the next action its human owes — "🔀 À merger #12 · 042-webhook", "🧪
+      À tester · Mes Mailles impersonation", "📐 À planifier · 042-webhook" — chosen from 13 fixed templates instead of
+      being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
+      deterministic facts through `scripts/session-title.sh` (spec or free session, spec-kit stage, git state, PR state,
+      whether the turn ended on a question) and, once per new set of facts, asks the agent to judge the human's next
+      action and rename the session; only the agent can call the app's `set_session_title` tool. Works for spec-kit
+      sessions (any spec-kit flow, not only /dev-it) and for free "vibe coding" sessions alike. Use when installing the
+      title hook, when the hook asks for a title update, when a session's title no longer says what to do next, or when
+      adding a status to the template set. Triggers on "session title", "rename session", "titre de session",
+      "intitulé", "à merger", "à tester", "à clôturer".
   - path: skills/sonarqube-config/
     type: skill
     tags:

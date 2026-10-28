@@ -1,0 +1,20 @@
+{
+  "$comment": "Session title templates. The title is read when the agent is idle, so every label names the HUMAN's next action. Tokens: {pr} -> ' #12' or '', {progress} -> ' 3/10' or ''. Labels are UI strings rendered in the reader's language (SESSION_TITLE_LANG, default fr). 'modes' lists where a status may be chosen; 'next' is the guidance the agent reads.",
+  "format": "{icon} {label} · {subject}",
+  "maxLength": 60,
+  "statuses": {
+    "to-clarify":   { "icon": "❓", "modes": ["spec"],         "label": { "fr": "À clarifier",          "en": "To clarify" },          "next": "spec.md holds [NEEDS CLARIFICATION]; human answers or runs /speckit.clarify." },
+    "to-plan":      { "icon": "📐", "modes": ["spec"],         "label": { "fr": "À planifier",          "en": "To plan" },             "next": "spec.md is ready; human reviews it, then /speckit.plan." },
+    "to-split":     { "icon": "🧩", "modes": ["spec"],         "label": { "fr": "À découper",           "en": "To split" },            "next": "plan.md is ready; human reviews it, then /speckit.tasks." },
+    "to-implement": { "icon": "🔨", "modes": ["spec"],         "label": { "fr": "À implémenter{progress}", "en": "To implement{progress}" }, "next": "tasks.md has open tasks; human runs /speckit.implement or says continue." },
+    "to-read":      { "icon": "💬", "modes": ["spec", "free"], "label": { "fr": "À lire",               "en": "To read" },             "next": "The agent answered; nothing changed on disk. Human reads the answer." },
+    "decide":       { "icon": "🙋", "modes": ["spec", "free"], "label": { "fr": "À trancher",           "en": "Decision needed" },     "next": "The turn ended on a question or a choice only the human can make." },
+    "paused":       { "icon": "⏸️", "modes": ["spec", "free"], "label": { "fr": "En pause",             "en": "Paused" },              "next": "Work stopped unfinished (interrupted, budget, context); human says continue." },
+    "to-test":      { "icon": "🧪", "modes": ["spec", "free"], "label": { "fr": "À tester{pr}",         "en": "To test{pr}" },         "next": "A change has a surface the human should exercise (UI, endpoint, job, CLI), locally or on staging." },
+    "to-ship":      { "icon": "🚀", "modes": ["spec", "free"], "label": { "fr": "À pousser",            "en": "To ship" },             "next": "Work is done but uncommitted, unpushed or without a PR; human approves commit / push / PR." },
+    "to-merge":     { "icon": "🔀", "modes": ["spec", "free"], "label": { "fr": "À merger{pr}",         "en": "To merge{pr}" },        "next": "A PR is open; human reviews and merges it." },
+    "to-close":     { "icon": "📦", "modes": ["spec", "free"], "label": { "fr": "À clôturer",           "en": "To close" },            "next": "Merged and nothing left to exercise, or the human confirmed it works; human archives the session and the branch." },
+    "blocked":      { "icon": "⛔", "modes": ["spec", "free"], "label": { "fr": "Bloqué",               "en": "Blocked" },             "next": "Waiting on something outside the session (a colleague, an access, a deploy)." },
+    "closed":       { "icon": "✅", "modes": ["spec", "free"], "label": { "fr": "Clos",                 "en": "Closed" },              "next": "Nothing left; the session can be archived." }
+  }
+}
