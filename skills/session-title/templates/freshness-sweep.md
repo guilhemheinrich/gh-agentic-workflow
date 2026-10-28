@@ -18,8 +18,10 @@ If neither exists, stop.
    "session-title-freshness"` and the printed expression. If `cron` fails,
    leave the schedule alone and continue.
 2. **List the sessions.** Call `mcp__ccd_session_mgmt__list_sessions` with
-   `limit: 100`. Write its JSON result, unchanged, to
-   `$HOME/.cache/session-title/sweep-sessions.json`.
+   `limit: 100`. Write its JSON result to
+   `$HOME/.cache/session-title/sweep-sessions.json` exactly as returned:
+   every session, every field. Never drop `cwd` or `branch`: the script reads
+   them to see that a PR got merged.
 3. **Compute the renames.** Run
    `bash "$ST" sweep --sessions "$HOME/.cache/session-title/sweep-sessions.json"`.
    Each output line is `{"sessionId": …, "title": …}`. No line means nothing
