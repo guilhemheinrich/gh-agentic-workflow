@@ -46,11 +46,13 @@
         "ddd",
         "debugging",
         "devops",
+        "devtools",
         "docker",
         "docker-compose",
         "documentation",
         "domain",
         "e2e",
+        "environment",
         "eslint",
         "fp-ts",
         "frontend",
@@ -70,7 +72,6 @@
         "llm",
         "lsp",
         "make",
-        "taskfile",
         "mcp",
         "meta",
         "monorepo",
@@ -80,6 +81,7 @@
         "performance",
         "philosophy",
         "playwright",
+        "ports",
         "prisma",
         "process",
         "purity",
@@ -98,6 +100,7 @@
         "sql",
         "starlight",
         "svg",
+        "taskfile",
         "tdd",
         "testing",
         "tooling",
@@ -113,7 +116,8 @@
         "vue",
         "web-analysis",
         "web-components",
-        "workflow"
+        "workflow",
+        "worktree"
       ],
       "patternProperties": {
         ".*": {
@@ -244,6 +248,22 @@
         "hexagonal": {
           "type": "string",
           "const": "[NEW] hexagonal"
+        },
+        "devtools": {
+          "type": "string",
+          "const": "[NEW] devtools"
+        },
+        "environment": {
+          "type": "string",
+          "const": "[NEW] environment"
+        },
+        "ports": {
+          "type": "string",
+          "const": "[NEW] ports"
+        },
+        "worktree": {
+          "type": "string",
+          "const": "[NEW] worktree"
         }
       }
     },
@@ -326,11 +346,13 @@
         "ddd",
         "debugging",
         "devops",
+        "devtools",
         "docker",
         "docker-compose",
         "documentation",
         "domain",
         "e2e",
+        "environment",
         "eslint",
         "fp-ts",
         "frontend",
@@ -350,7 +372,6 @@
         "llm",
         "lsp",
         "make",
-        "taskfile",
         "mcp",
         "meta",
         "monorepo",
@@ -360,6 +381,7 @@
         "performance",
         "philosophy",
         "playwright",
+        "ports",
         "prisma",
         "process",
         "purity",
@@ -378,6 +400,7 @@
         "sql",
         "starlight",
         "svg",
+        "taskfile",
         "tdd",
         "testing",
         "tooling",
@@ -393,7 +416,8 @@
         "vue",
         "web-analysis",
         "web-components",
-        "workflow"
+        "workflow",
+        "worktree"
       ]
     },
     "assetType": {
