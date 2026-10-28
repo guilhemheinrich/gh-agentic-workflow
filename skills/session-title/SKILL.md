@@ -35,6 +35,7 @@ the agent is doing — it names what the **human** does next.
 |---|---|
 | `session-title.sh` | gathers facts, detects the session mode, renders titles from templates |
 | `session-title-sync.sh` (Stop hook) | at the end of a turn, blocks the stop **once per new set of facts** with the facts and the allowed statuses |
+| `session-title-ask.sh` (PreToolUse hook, `AskUserQuestion`) | before a click-to-answer question, denies the call **once** so the agent sets `decide` first |
 | the agent | judges the status, picks the topic of a free session, calls `set_session_title` |
 
 The script proposes and the agent decides. The facts cannot tell a merged
@@ -106,20 +107,41 @@ For a merged PR, apply this rule:
 - `to-close`: nothing to exercise by hand, or the human already said it works.
   Example: a skill, a README, a refactor covered by green tests.
 
+## Questions the human answers by clicking
+
+A click-to-answer question (`AskUserQuestion`) does not end the turn. The
+tool call waits for the click, so the Stop hook never runs. Without help, the
+sidebar would keep "💬 À lire" while the session waits on the human.
+
+`session-title-ask.sh` closes that gap. When the agent calls
+`AskUserQuestion`, the hook refuses the first call, with a reason that asks
+the agent to:
+
+1. run `set decide --subject "<topic of the question>"`;
+2. rename the session with the printed title, for example
+   "🙋 À trancher · PR 147 Analytics";
+3. call `AskUserQuestion` again, which now goes through.
+
+`session-title.sh gate` decides deny or allow. It allows when the status is
+already `decide`. It never denies twice within `SESSION_TITLE_GATE_TTL`
+seconds (default 300), so a declined rename cannot loop. It also clears the
+Stop fingerprint, so the turn after the click re-titles the session.
+
 ## Install (Claude Code, user scope)
 
-`install.sh` copies the skill to `~/.claude/skills/` and the hook to
-`~/.agents/hooks/`. Register the hook in `~/.claude/settings.json`:
+`install.sh` copies the skill to `~/.claude/skills/` and both hooks to
+`~/.agents/hooks/`. Register the hooks in `~/.claude/settings.json`:
 
 ```json
 {
   "hooks": {
-    "Stop": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-sync.sh" }] }]
+    "Stop": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-sync.sh" }] }],
+    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-ask.sh" }] }]
   }
 }
 ```
 
-The hook runs only where the rename tool exists
+Both hooks run only where the rename tool exists
 (`CLAUDE_CODE_ENTRYPOINT=claude-desktop`) and only in attended sessions.
 `SESSION_TITLE_FORCE=1` lifts both gates. It requires `jq`; `gh` is optional.
 
@@ -128,6 +150,7 @@ The hook runs only where the rename tool exists
 ```bash
 session-title.sh facts  --session <id> --repo . --transcript <jsonl>   # what the hook sees
 session-title.sh set to-ship --session <id> --repo . --subject "Mes Mailles impersonation"
+session-title.sh gate --session <id>                                  # deny once before a question, then allow
 session-title.sh render to-merge --subject 042-webhook --pr 12
 session-title.sh list --mode free
 session-title.sh forget --session <id>                                 # drop the cache
@@ -138,6 +161,7 @@ session-title.sh forget --session <id>                                 # drop th
 1. **One extra agent step per change of facts.** A turn that changes nothing
    (same git state, same PR, same question/no-question ending) costs nothing.
    A turn that changes something costs one short continuation.
+   A click-to-answer question costs one more step: the refused first call.
 2. **A topic shift alone does not wake the hook.** In a free session, a new
    subject with the same git state keeps the old topic. Run `set` with a new
    `--subject` to refresh it.
