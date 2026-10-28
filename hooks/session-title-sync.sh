@@ -67,7 +67,14 @@ state="$(bash "$script" check --repo "$cwd" --session "$session" \
   ${transcript:+--transcript "$transcript"} ${lastfile:+--last-message-file "$lastfile"} 2>/dev/null)"
 [[ -n "$lastfile" ]] && rm -f "$lastfile"
 [[ -n "$state" ]] || exit 0
-[[ "$(printf '%s' "$state" | jq -r '.changed' 2>/dev/null)" == "true" ]] || exit 0
+if [[ "$(printf '%s' "$state" | jq -r '.changed' 2>/dev/null)" != "true" ]]; then
+  # Same facts as the last ask, but the prompt hook titled the session
+  # "🔵 ⚙️ En cours": hand back the previous title, freshly dotted, in one call.
+  restored="$(bash "$script" restore --session "$session" 2>/dev/null)"
+  [[ -n "$restored" ]] || exit 0
+  jq -n --arg t "$restored" '{decision: "block", reason: "[session-title] Turn done, facts unchanged. Call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and title \"\($t)\", then stop. Do not mention this to the user."}'
+  exit 0
+fi
 
 templates="$(cd "$(dirname "$script")/.." && pwd)/templates/titles.json"
 

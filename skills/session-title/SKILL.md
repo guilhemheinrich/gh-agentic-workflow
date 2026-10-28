@@ -129,6 +129,25 @@ already `decide`. It never denies twice within `SESSION_TITLE_GATE_TTL`
 seconds (default 300), so a declined rename cannot loop. It also clears the
 Stop fingerprint, so the turn after the click re-titles the session.
 
+## Working dot: the agent has the floor
+
+When the human sends a message, the old title lies: "🟠 🧪 À tester" says the
+human owes a test, yet the human now waits on the agent.
+`session-title-working.sh` (UserPromptSubmit) asks the agent to make its
+first tool call a rename, right after reading the message:
+
+- **Free session**: "🔵 ⚙️ En cours · <topic>", with a topic that fits the
+  new message.
+- **Spec session**: the previous title with a blue dot, so the slug and the
+  stage stay: "🔵 🔨 À implémenter 3/14 · 295-parent-acts". A spec session
+  keeps its slug until it is closed or merged; `set` ignores `--subject` there.
+
+At Stop, the working title goes away. If the facts changed, the usual
+judgement runs. If not, `restore` hands back the previous title with a 🟢 dot,
+in one call. The `working` status is never offered at Stop. A session that
+crashed mid-turn keeps "⚙️ En cours" and ages like any other, so an orange
+"En cours" means a turn that never finished.
+
 ## Live implementation counter
 
 A long `/speckit.implement` or `/dev-it` turn may run for an hour without a
@@ -206,7 +225,8 @@ scheduled task with `taskId: "session-title-freshness"`, the cron printed by
   "hooks": {
     "Stop": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-sync.sh" }] }],
     "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-ask.sh" }] }],
-    "PostToolUse": [{ "matcher": "Agent|Task|Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-progress.sh" }] }]
+    "PostToolUse": [{ "matcher": "Agent|Task|Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-progress.sh" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-working.sh" }] }]
   }
 }
 ```
@@ -275,3 +295,8 @@ real scheduled run on 2026-10-28 repainted 9 sessions.
 Live counter: tested on a 2-phase, 4-task fixture. It stayed silent at 1/4,
 inside a subagent and on a repeat. It renamed at 2/4 (phase done), at 3/4
 with `every: task`, and left 4/4 to the Stop hook.
+
+Working dot: tested on the same fixture. A spec prompt gave
+"🔵 🔨 À implémenter 3/4 · 295-parent-acts" twice in a row, and `restore`
+gave back the 🟢 title once. A stray `--subject` in spec mode kept the slug.
+A crashed "🔵 ⚙️ En cours" aged to 🟠.

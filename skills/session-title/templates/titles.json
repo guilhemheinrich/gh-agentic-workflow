@@ -4,6 +4,7 @@
   "maxLength": 60,
   "freshness": {
     "$comment": "Age dot prefixed to every title: '🟡 🔀 À merger #12 · 042-webhook'. Age = now - lastActivityAt of the session (a rename does not touch lastActivityAt). The first level whose belowMinutes exceeds the age wins; the last level has no bound. The sweep frequency lives in the user config (session-title.sh config), not here.",
+    "workingDot": "🔵",
     "levels": [
       { "dot": "🟢", "belowMinutes": 5 },
       { "dot": "🟡", "belowMinutes": 90 },
@@ -25,6 +26,7 @@
     "to-merge":     { "icon": "🔀", "modes": ["spec", "free"], "label": { "fr": "À merger{pr}",         "en": "To merge{pr}" },        "next": "A PR is open; human reviews and merges it." },
     "to-close":     { "icon": "📦", "modes": ["spec", "free"], "label": { "fr": "À clôturer",           "en": "To close" },            "next": "Merged and nothing left to exercise, or the human confirmed it works; human archives the session and the branch." },
     "blocked":      { "icon": "⛔", "modes": ["spec", "free"], "label": { "fr": "Bloqué",               "en": "Blocked" },             "next": "Waiting on something outside the session (a colleague, an access, a deploy)." },
+    "working":      { "icon": "⚙️", "modes": ["spec", "free"], "atStop": false, "label": { "fr": "En cours",   "en": "Working" },             "next": "The agent is working on the human's last message; the human waits. Set when a prompt arrives, never at Stop." },
     "closed":       { "icon": "✅", "modes": ["spec", "free"], "label": { "fr": "Clos",                 "en": "Closed" },              "next": "Nothing left; the session can be archived." }
   }
 }

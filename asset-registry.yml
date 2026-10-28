@@ -701,6 +701,18 @@ assets:
       never ends the turn and the Stop hook never runs. Never denies twice within SESSION_TITLE_GATE_TTL seconds; clears
       the Stop fingerprint so the next turn re-titles. Desktop and attended sessions only. Disable with
       SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-working.sh
+    type: hook
+    category: workflows-and-processes
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude UserPromptSubmit hook that asks the agent to make its first tool call a rename to the working title as soon
+      as a message arrives — "🔵 ⚙️ En cours · <topic>" in a free session, the previous title with a blue dot in a spec
+      session so the slug and stage stay. The Stop hook restores or re-judges the title at the end of the turn. Desktop
+      and attended sessions only; silent in scheduled runs. Disable with SESSION_TITLE_SYNC=0.
   - path: hooks/session-title-progress.sh
     type: hook
     category: workflows-and-processes
