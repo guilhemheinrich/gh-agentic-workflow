@@ -1450,20 +1450,24 @@ assets:
   - path: skills/linear-tracker/
     type: skill
     tags:
+      - hooks
       - linear
       - mcp
       - process
+      - spec-kit
       - workflow
     description: >-
       Use Linear as the tracker a repository publishes findings to, through the Linear MCP. Covers the per-repository
       configuration that names a team and a project (`.linear.json`), the mapping from a grievance record to a Linear
       issue and the two mappings that silently corrupt data if taken literally, the publish contract this skill answers
-      on behalf of the `grievances` skill, and read-only triage across a workspace. `publish` is a verb of the
-      `grievances` skill; this skill is one backend that answers it, and it never writes a ledger. Use when wiring a
-      repository to a Linear project, when a finding must leave a repository and become an issue someone can own, when
-      auditing which findings are already tracked, or when deciding what a tracker can and cannot hold. Triggers on
-      "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding", "which project does this repo
-      belong to".
+      on behalf of the `grievances` skill, and read-only triage across a workspace. It also installs, once, a repo-local
+      advisory Stop hook and per-phase templates that follow a spec-kit change in Linear — issue at specify, In Progress
+      at the first ticked task, In Review when a PR opens — from file, git and PR facts only, asking once per fact and
+      never blocking. `publish` is a verb of the `grievances` skill; this skill is one backend that answers it, and it
+      never writes a ledger. Use when wiring a repository to a Linear project, when a finding must leave a repository
+      and become an issue someone can own, when auditing which findings are already tracked, or when deciding what a
+      tracker can and cannot hold. Triggers on "Linear", "linear.json", "publish a grievance", "tracker", "issue from a
+      finding", "which project does this repo belong to", "follow a spec in Linear", "spec-kit lifecycle".
     category: workflows-and-processes
   - path: skills/lit-web-components/
     type: skill

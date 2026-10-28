@@ -6,18 +6,25 @@ description: >-
   project (`.linear.json`), the mapping from a grievance record to a Linear
   issue and the two mappings that silently corrupt data if taken literally, the
   publish contract this skill answers on behalf of the `grievances` skill, and
-  read-only triage across a workspace. `publish` is a verb of the `grievances`
+  read-only triage across a workspace. It also installs, once, a repo-local advisory
+  Stop hook and per-phase templates that follow a spec-kit change in Linear —
+  issue at specify, In Progress at the first ticked task, In Review when a PR
+  opens — from file, git and PR facts only, asking once per fact and never
+  blocking. `publish` is a verb of the `grievances`
   skill; this skill is one backend that answers it, and it never writes a
   ledger. Use when wiring a repository to a Linear project, when a finding must
   leave a repository and become an issue someone can own, when auditing which
   findings are already tracked, or when deciding what a tracker can and cannot
   hold. Triggers on "Linear", "linear.json", "publish a grievance", "tracker",
-  "issue from a finding", "which project does this repo belong to".
+  "issue from a finding", "which project does this repo belong to",
+  "follow a spec in Linear", "spec-kit lifecycle".
 license: Apache-2.0
 tags:
+  - hooks
   - linear
   - mcp
   - process
+  - spec-kit
   - workflow
 ---
 
@@ -340,6 +347,115 @@ configuration beyond the MCP itself, and changes nothing.
   exist in Linear, which is why the proposal step reads the ledger rather than
   the tracker. **Propose; do not publish.** The decision is a human's.
 
+## Lifecycle — following a spec-kit change in Linear
+
+**This is a second job, separate from publishing.** Publishing sends one finding
+out. The lifecycle keeps one Linear issue in step with one spec-kit change,
+`specs/NNN-slug/`, from its spec to its pull request. It shares `.linear.json`
+with publishing and nothing else; the grievance contract above is unchanged.
+
+**It is a hook factory.** `scripts/install-lifecycle.sh` copies a hook and
+templates into the consumer repository once. From then on the repository owns
+them, edits them freely, and depends on nothing in this skill.
+
+```bash
+bash skills/linear-tracker/scripts/install-lifecycle.sh /path/to/consumer-repo
+```
+
+| Installed path | Role | Committed |
+|---|---|---|
+| `.agents/hooks/linear-lifecycle.sh` | The Stop hook: gathers facts, asks once per fact | yes |
+| `.agents/hooks/linear-record.sh` | Appends an event to a spec's log | yes |
+| `.agents/linear/phases.json` | Phase switches, state names (EN + FR), duplicate-search size | yes |
+| `.agents/linear/*.md` | One template per phase | yes |
+| `.claude/settings.json` | One `Stop` entry, merged once | yes |
+| `specs/NNN-slug/linear.json` | The spec's event log: `created`, `linked`, `in_progress`, `in_review`, `unavailable` | yes |
+| `<git-common-dir>/linear-lifecycle/asked.json` | Fact keys already asked | no — inside `.git/`, shared by every worktree |
+
+Existing files are kept on re-install; `--force` overwrites them. The hook needs
+bash, jq and git; `gh` is optional and only feeds the PR phase.
+
+### Phase → fact → template
+
+The current spec is the one the git branch names (`042-webhook-202`, or any
+branch starting with `042-`). On any other branch it is every `specs/NNN-*`
+folder with uncommitted files.
+
+| Phase | Fact | Key (asked once) | Asks the agent to | Then records |
+|---|---|---|---|---|
+| specify | `spec.md` exists; the log has no `created`/`linked` | `specify:<slug>` | search issues by title (≤ 20 candidates), show a possible duplicate and ask, else render `specify.issue.md` and `save_issue` | `created ID URL` or `linked ID URL` |
+| implement | ≥ 1 `- [x]` in `tasks.md`; no `in_progress` | `implement:<slug>` | move the issue to In Progress / En cours, comment `implement.comment.md` | `in_progress ID` |
+| pr-open | `gh pr view <branch>` says `OPEN`; no `in_review` | `pr-open:<slug>:<pr>` | move the issue to In Review / En revue, comment `pr-open.comment.md` with the link | `in_review ID PR-URL` |
+| — | the agent has no Linear MCP tool | — | run `linear-record.sh <spec> unavailable` | `unavailable`: the hook stays silent for that spec |
+
+Example: on branch `042-webhook-202` the agent writes
+`specs/042-webhook-202/spec.md`. At the end of that turn the hook asks for the
+issue once. The next turn it is silent, whether or not the agent complied.
+
+**In Progress fires on the first ticked task, not on `tasks.md` existing.** A
+generated task list is a plan; a ticked box is work started.
+
+### Taking over a change someone else started
+
+Example: a colleague wrote `spec.md` and `plan.md` for `042-webhook-202`, and
+you pick up the implementation.
+
+1. **They had the hook.** Their `specs/042-webhook-202/linear.json` is committed
+   and names `TT-412`. The hook reads it: specify is done, and your first
+   ticked task asks for In Progress. The asked-keys store is local to each
+   clone, but the decision rests on the committed log, which travels.
+2. **They created the issue by hand.** No log exists, so the specify ask fires.
+   Its first step searches issues by title; if `TT-412` shows up, the agent
+   asks you and records `linked`. If the title differs, link it yourself:
+
+   ```bash
+   .agents/hooks/linear-record.sh specs/042-webhook-202 linked TT-412 https://linear.app/acme/issue/TT-412
+   ```
+
+From there the hook catches up one phase per stop: ticked tasks ask for In
+Progress, then an open PR asks for In Review.
+
+**A move never goes backwards.** The hook reads the repository log, not
+Linear. If the colleague already moved `TT-412` to In Review by hand, a
+catch-up ask for In Progress would regress it. So every state-move ask starts
+with "read the current state first; if it is already there or later, do not
+move it, record the event only". The agent does that read, since only the agent
+holds the MCP.
+
+### Never blocking — what the hook will not do
+
+1. **No `PreToolUse`, no permission decision, no guarded file.** The installer
+   registers one `Stop` hook and nothing else.
+2. **Its only output is `{"decision":"block","reason":…}` on `Stop`.** On a Stop
+   hook that means "take one more turn". It refuses nothing.
+3. **One ask per fact key, ever.** The key is written before the ask, so an
+   ignored ask is not repeated. A new PR number is a new fact.
+4. **Silent when the turn ended on a question**, and the key stays unconsumed so
+   the fact is asked at a later stop. Silent on `stop_hook_active`, without
+   `.linear.json`, after `unavailable`, and on any missing tool.
+5. **Facts only.** File presence, ticked-box count, branch, PR state, the log.
+   Never the quality or completeness of a document: that is a judgement, and
+   deterministic checks of it proved too heavy and too brittle.
+
+A hook cannot call MCP. So the hook detects, the agent acts, and the log closes
+the loop.
+
+### spec-kit's own extension hooks
+
+**Not registered.** `.specify/extensions.yml` hooks (`after_specify`,
+`after_implement`, …) fire only when a `/speckit.*` command runs. Every such
+command writes its artifact, which the Stop hook sees at the end of the same
+turn. A second entry point would add code without detecting one more fact. It
+would also stay mute for any tool that writes spec-kit artifacts directly.
+
+### Follow-ups, not in this increment
+
+- Phases `plan` (comment), `tasks` (comment with the task list) and merge
+  (`Done`), each with its template.
+- A Cursor adapter (`stop` hook with `followup_message`).
+- PR detection through a Bitbucket CLI.
+- Re-asking when `plan.md` changes after its comment.
+
 ## Boundaries
 
 | Not this skill's job | Where it belongs |
@@ -377,7 +493,24 @@ configuration beyond the MCP itself, and changes nothing.
 
 ## Implementation Status
 
-**The repository half is implemented and tested; the Linear half is not.**
+**Lifecycle hook — built and tested on a fixture, never run against Linear**
+(2026-10-28):
+
+- `scripts/install-lifecycle.sh`, `templates/hooks/linear-lifecycle.sh`,
+  `templates/hooks/linear-record.sh`, three templates and `phases.json`.
+- `tests/lifecycle.test.sh` runs the **installed** copy in a fixture repository,
+  through `bash skills/linear-tracker/tests/run-in-docker.sh` (alpine + bash +
+  jq + git, gh stubbed). 35 checks: no run emits a deny, exactly 6 asks over the
+  whole scenario, a hand-linked takeover catching up on In Progress, the
+  no-regression guard in every state-move ask, silence on a question, on `stop_hook_active`, without
+  `.linear.json` and after `unavailable`, keys shared across worktrees,
+  idempotent install that keeps edited templates. The PR-phase run measured
+  under 200 ms. A mutation that makes the hook emit a deny turns the
+  suite red.
+- Not verified: the Linear MCP calls the hook asks for, and state names in a
+  live workspace.
+
+**Grievance publish — the repository half is implemented and tested; the Linear half is not.**
 
 **Built and exercised** — `../grievances/scripts/grievances.py`, subcommand
 `publish` (2026-09-23):

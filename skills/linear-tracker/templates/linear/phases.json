@@ -1,0 +1,15 @@
+{
+  "states": {
+    "in_progress": ["In Progress", "En cours"],
+    "in_review": ["In Review", "En revue"]
+  },
+  "duplicateSearch": {
+    "by": "title",
+    "maxCandidates": 20
+  },
+  "phases": {
+    "specify": { "enabled": true, "template": "specify.issue.md" },
+    "implement": { "enabled": true, "template": "implement.comment.md", "state": "in_progress" },
+    "pr-open": { "enabled": true, "template": "pr-open.comment.md", "state": "in_review" }
+  }
+}
