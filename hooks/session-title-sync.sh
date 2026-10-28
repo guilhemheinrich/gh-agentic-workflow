@@ -53,6 +53,9 @@ if [[ -z "$script" ]]; then
 fi
 [[ -n "$script" && -f "$script" ]] || exit 0
 
+# A scheduled-task run has no reader for its title; a rename there only costs steps.
+bash "$script" scheduled --transcript "$transcript" 2>/dev/null && exit 0
+
 # Newer payloads carry the turn's final text; older ones need the transcript.
 lastfile=""
 last="$(field '.last_assistant_message')"

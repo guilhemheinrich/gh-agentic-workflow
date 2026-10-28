@@ -19,13 +19,16 @@
 #   session-title.sh sweep  --sessions FILE         # list_sessions JSON -> {sessionId,title} lines to rename
 #   session-title.sh cron                           # cron expression of the freshness sweep
 #   session-title.sh config                         # effective user config
+#   session-title.sh progress --session ID [--repo DIR]  # live "🔨 D/T" title, or nothing
+#   session-title.sh scheduled --transcript FILE    # exit 0 when the session is a scheduled run
 #
 # Freshness: every title carries an age dot ("🟡 🔀 À merger #12 · 042-webhook").
 # `set` always renders 🟢 (the turn just ended); a scheduled task runs `sweep`
 # to repaint idle sessions. Levels live in ../templates/titles.json; the sweep
 # frequency lives in ONE user-level file, $SESSION_TITLE_CONFIG
 # (default ~/.config/session-title/config.json):
-#   { "freshness": { "enabled": true, "sweepMinutes": 5 } }
+#   { "freshness": { "enabled": true, "sweepMinutes": 5 }, "progress": { "every": "phase" } }
+# progress.every: "phase" (rename when a tasks.md section is all checked) or "task".
 #
 # Session mode:
 #   spec — the session works on a spec-kit feature: the branch names an
@@ -64,7 +67,21 @@ config() {
   local user='{}'
   [[ -s "$CONFIG_FILE" ]] && user="$(jq -c . "$CONFIG_FILE" 2>/dev/null)" || true
   [[ -n "$user" ]] || user='{}'
-  jq -n --argjson u "$user" '{freshness: {enabled: true, sweepMinutes: 5}} * $u'
+  jq -n --argjson u "$user" '{freshness: {enabled: true, sweepMinutes: 5}, progress: {every: "phase"}} * $u'
+}
+
+# is_scheduled TRANSCRIPT — the session is a scheduled-task run: nobody reads
+# its title, so the hooks stay silent there.
+is_scheduled() {
+  [[ -n "${1:-}" && -f "$1" ]] && head -c 8192 "$1" 2>/dev/null | grep -q '<scheduled-task'
+}
+
+# phases_done FILE — number of task sections (## / ### headings) whose tasks are all checked.
+phases_done() {
+  awk '
+    /^#{2,3} / { if (n > 0 && n == d) p++; n = 0; d = 0; next }
+    /^[[:space:]]*[-*] \[[ xX]\]/ { n++; if ($0 ~ /\[[xX]\]/) d++ }
+    END { if (n > 0 && n == d) p++; print p + 0 }' "$1" 2>/dev/null
 }
 
 freshness_on() { [[ "$(config | jq -r '.freshness.enabled')" == "true" ]]; }
@@ -421,9 +438,37 @@ case "$cmd" in
     [[ -n "$sessions_file" && -f "$sessions_file" ]] || die "sweep needs --sessions FILE (list_sessions JSON)"
     sweep "$sessions_file"
     ;;
+  progress)
+    # Mid-turn live counter: prints the new "🔨 À implémenter D/T" title when
+    # the spec's tasks.md crossed a boundary since the last print (a finished
+    # phase, or a finished task with progress.every = "task"); nothing otherwise.
+    # Reads the cache and tasks.md only: no git, no gh, so it is cheap enough
+    # for a PostToolUse hook.
+    [[ -n "$session" ]] || die "progress needs --session"
+    cache="$(read_cache "$session")"
+    [[ "$(printf '%s' "$cache" | jq -r '.mode // ""')" == "spec" ]] || exit 0
+    slug="$(printf '%s' "$cache" | jq -r '.spec // empty')"
+    [[ -n "$slug" ]] || exit 0
+    root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || root="$repo"
+    dir="$(spec_dir "$root" "$slug")"
+    [[ -n "$dir" && -f "$dir/tasks.md" ]] || exit 0
+    read -r done total <<<"$(count_tasks "$dir/tasks.md")"
+    (( total > 0 && done < total )) || exit 0
+    if [[ "$(config | jq -r '.progress.every')" == "task" ]]; then mark="$done"
+    else mark="$(phases_done "$dir/tasks.md")"; fi
+    [[ "$mark" == "$(printf '%s' "$cache" | jq -r '.progressMark // ""')" ]] && exit 0
+    title="$(render_title to-implement "$slug" "" "$done/$total")" || exit 1
+    merge_cache "$session" '.progressMark = $m' --arg m "$mark"
+    [[ "$title" == "$(printf '%s' "$cache" | jq -r '.title // ""')" ]] && exit 0
+    merge_cache "$session" '.subject = $s | .status = "to-implement" | .title = $t' --arg s "$slug" --arg t "$title"
+    echo "$title"
+    ;;
+  scheduled)
+    is_scheduled "$transcript"
+    ;;
   cron) sweep_cron ;;
   config)
     config | jq --arg f "$CONFIG_FILE" --arg c "$(sweep_cron)" '. + {file: $f, cron: $c}'
     ;;
-  *) sed -n '2,45p' "$0"; exit 2 ;;
+  *) sed -n '2,49p' "$0"; exit 2 ;;
 esac

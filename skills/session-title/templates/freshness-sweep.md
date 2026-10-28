@@ -9,7 +9,9 @@ Locate the script once: the first existing file of
 `$HOME/.claude/skills/session-title/scripts/session-title.sh`. Call it `$ST`.
 If neither exists, stop.
 
-1. **Keep the schedule equal to the user config.** Run `bash "$ST" cron`.
+1. **Keep the schedule equal to the user config.** Run, in one Bash call,
+   `bash "$ST" cron; rm -f "$HOME/.cache/session-title/sweep-sessions.json"`
+   (the file is rewritten in step 2, and a missing file needs no Read first).
    Call `mcp__scheduled-tasks__list_scheduled_tasks`. If the
    `session-title-freshness` task has a different `cronExpression`, call
    `mcp__scheduled-tasks__update_scheduled_task` with `taskId:

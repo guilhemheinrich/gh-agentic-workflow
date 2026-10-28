@@ -129,6 +129,28 @@ already `decide`. It never denies twice within `SESSION_TITLE_GATE_TTL`
 seconds (default 300), so a declined rename cannot loop. It also clears the
 Stop fingerprint, so the turn after the click re-titles the session.
 
+## Live implementation counter
+
+A long `/speckit.implement` or `/dev-it` turn may run for an hour without a
+Stop. `session-title-progress.sh` (PostToolUse, matcher
+`Agent|Task|Edit|Write|MultiEdit`) keeps the counter moving meanwhile:
+"🟢 🔨 À implémenter 0/14" becomes "🟢 🔨 À implémenter 5/14" when phase 1 of
+`tasks.md` is all checked.
+
+- `session-title.sh progress` decides. It reads the cache and `tasks.md`
+  only, with no git and no `gh`, and prints a title once per boundary.
+- A boundary is a finished section of `tasks.md` (a `##` or `###` heading)
+  by default. `"progress": { "every": "task" }` in the user config renames
+  on every checked task instead.
+- Subagents often tick `tasks.md`, and a subagent cannot rename its parent.
+  The hook ignores calls made inside a subagent (`agent_id` in the payload)
+  and fires on the parent's next call, usually the `Agent` call returning.
+- The agent receives the exact title as `additionalContext`. One rename call
+  per boundary, with no judgement, keeps the cost to a single short step.
+
+Every hook stays silent in a scheduled-task run, detected by the
+`<scheduled-task` tag at the top of its transcript.
+
 ## Freshness dot: how long the session has waited
 
 Every title starts with a dot that ages with the session:
@@ -183,7 +205,8 @@ scheduled task with `taskId: "session-title-freshness"`, the cron printed by
 {
   "hooks": {
     "Stop": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-sync.sh" }] }],
-    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-ask.sh" }] }]
+    "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-ask.sh" }] }],
+    "PostToolUse": [{ "matcher": "Agent|Task|Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-progress.sh" }] }]
   }
 }
 ```
@@ -246,5 +269,9 @@ on this repository: PR #7 came back `MERGED`.
 
 Freshness: `sweep` tested on 9 fixture sessions aged 2 min to 5 days. It
 repainted the 5 stale dots, left a correct one, a typed title, a running and
-an archived session alone, and stripped all dots with `enabled: false`. The
-scheduled task itself is not yet tested end to end.
+an archived session alone, and stripped all dots with `enabled: false`. A
+real scheduled run on 2026-10-28 repainted 9 sessions.
+
+Live counter: tested on a 2-phase, 4-task fixture. It stayed silent at 1/4,
+inside a subagent and on a repeat. It renamed at 2/4 (phase done), at 3/4
+with `every: task`, and left 4/4 to the Stop hook.
