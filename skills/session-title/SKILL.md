@@ -307,6 +307,10 @@ Facts measured on 2026-10-29 shape the design:
   `snapshot` drops only archived sessions, with `grep` before `jq` parses
   anything. The first pass scans every file (12 s for 3,336), later passes
   only files touched in the last 6 days (0.3 s for 170).
+- **The watcher only ages dots.** A prompt bumps `lastActivityAt` before the
+  working hook re-titles the session, so a 🟡 title briefly looks 🟢-fresh.
+  The live run woke once for that. A younger dot is always the Stop hook's
+  job, so `watch` drops any rename that would make a dot younger.
 - **The watcher must not watch itself.** Each wake re-titles the watcher
   session, which would turn 🟡 five minutes later and wake it forever.
   `watch --session <its local id>` excludes it, and records its CLI id in

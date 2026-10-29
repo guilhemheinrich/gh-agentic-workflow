@@ -461,6 +461,20 @@ sweep() {
   ' "$1"
 }
 
+# older_only SNAPSHOT — filters sweep lines on stdin, keeping a rename only
+# when its dot is older than the current one (or the title loses its dot).
+# A prompt bumps lastActivityAt before the working hook re-titles the session,
+# so a 🟡 title can briefly look 🟢-fresh; turning a dot younger is the Stop
+# hook's job, and a watcher wake for it would be wasted.
+older_only() {
+  jq -c --slurpfile snap "$1" --slurpfile tpl "$TEMPLATES" '
+    ([$tpl[0].freshness.workingDot] + [$tpl[0].freshness.levels[].dot]) as $dots
+    | (reduce ($snap[0][]) as $s ({}; .[$s.sessionId] = $s.title)) as $cur
+    | def rank($t): [range(0; $dots | length) as $i | select($t | startswith($dots[$i] + " ")) | $i] | first // null;
+      rank($cur[.sessionId] // "") as $old | rank(.title) as $new
+    | select($old == null or $new == null or $new > $old)'
+}
+
 # snapshot [DAYS] — a list_sessions-shaped array read from the desktop app's
 # own session files (one local_*.json per session), with no agent involved.
 # The app keeps titles in memory, so these files are read-only for us: writing
@@ -490,6 +504,9 @@ snapshot() {
       | {sessionId, title, cwd, branch, isArchived: (.isArchived // false), lastActivityAt: ($at | todate),
          isRunning: ((.title | startswith($w)) and ($now - $at) < 300)}' 2>/dev/null \
     | jq -s .
+  # grep -L exits 1 when no file is archived; under pipefail that would fail a
+  # snapshot whose output is fine.
+  return 0
 }
 
 # ── Commands ─────────────────────────────────────────────────────────────────
@@ -622,7 +639,8 @@ case "$cmd" in
       scope=6
       # The watcher's own session never counts: each wake re-titles it, so it
       # would turn 🟡 five minutes later and wake itself forever.
-      sweep "$snap" 2>/dev/null | grep -v '^$' | { if [[ -n "$session" ]]; then grep -vF "\"$session\"" || true; else cat; fi; } >"$seen_file.$$"
+      sweep "$snap" 2>/dev/null | grep -v '^$' | { if [[ -n "$session" ]]; then grep -vF "\"$session\"" || true; else cat; fi; } \
+        | older_only "$snap" >"$seen_file.$$"
       fresh_lines="$(grep -vxF -f "$seen_file" "$seen_file.$$")"
       [[ -s "$seen_file" ]] || fresh_lines="$(cat "$seen_file.$$")"
       mv "$seen_file.$$" "$seen_file"
