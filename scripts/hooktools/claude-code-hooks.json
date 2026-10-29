@@ -9,6 +9,9 @@
     "PostToolUse": [
       { "matcher": "Agent|Task|Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "bash \"$HOME/.agents/hooks/session-title-progress.sh\"" }] }
     ],
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "bash \"$HOME/.agents/hooks/session-title-watcher-check.sh\"" }] }
+    ],
     "UserPromptSubmit": [
       { "hooks": [{ "type": "command", "command": "bash \"$HOME/.agents/hooks/session-title-working.sh\"" }] }
     ]

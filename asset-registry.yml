@@ -717,6 +717,19 @@ assets:
       judge the human's next action and rename the desktop session from the fixed templates ("À merger", "À tester", "À
       clôturer"). Desktop and attended sessions only; never loops (honours stop_hook_active). Disable with
       SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-watcher-check.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude SessionStart hook that reads the freshness watcher heartbeat (`session-title.sh watcher-status`) and, when
+      no watcher is alive on the machine (fresh device, app restarted, watcher archived), asks the agent to propose one
+      as a New task card in its own worktree, so the age dots never freeze silently. At most one proposal per
+      SESSION_TITLE_NAG_TTL seconds machine-wide; silent on compaction, /clear and scheduled runs. Desktop and attended
+      sessions only. Disable with SESSION_TITLE_SYNC=0.
   - path: hooks/session-title-working.sh
     type: hook
     category: devx-and-agentic
