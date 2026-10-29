@@ -104,6 +104,9 @@ x-category-descriptions:
   quality-assurance: Testing, review and quality
   domain-specific: Business-domain specific assets
   philosophy: Project philosophies — paradigms written to PHILOSOPHY.md and referenced from AGENTS.md / CLAUDE.md
+  devx-and-agentic: >-
+    DevX & Agentic — developer experience and agent harness tooling (session titles, self-improving skills, skill
+    discovery, agent hooks)
   other: Everything else
 assets:
   - path: .agents/skills/documentation-writer/
@@ -663,7 +666,7 @@ assets:
     category: workflows-and-processes
   - path: hooks/registry-sync-on-skill.sh
     type: hook
-    category: tools-and-configurations
+    category: devx-and-agentic
     tags:
       - claude
       - cursor
@@ -674,9 +677,35 @@ assets:
       referenced in asset-registry.yml. If not, it reminds the agent (per AGENTS.md) to register the skill in the same
       change; silent when already registered. Supports Claude PostToolUse and Cursor afterFileEdit. Reminder-only —
       never rewrites the registry. Disable with REGISTRY_SYNC=0.
+  - path: hooks/session-title-ask.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude PreToolUse hook (matcher AskUserQuestion) that denies the first click-to-answer question once, asking the
+      agent to rename the desktop session to "🙋 À trancher · <topic>" before asking again, since an interactive
+      question never ends the turn and the Stop hook never runs. Never denies twice within SESSION_TITLE_GATE_TTL
+      seconds; clears the Stop fingerprint so the next turn re-titles. Desktop and attended sessions only. Disable with
+      SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-progress.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude PostToolUse hook (matcher Agent|Task|Edit|Write|MultiEdit) that keeps the "🔨 À implémenter D/T" counter of
+      a spec session live during a long turn: when tasks.md finishes a phase (or a task, with progress.every = "task"),
+      it hands the agent the exact new title through additionalContext. Ignores tool calls made inside subagents, which
+      cannot rename their parent. Desktop and attended sessions only; silent in scheduled runs. Disable with
+      SESSION_TITLE_SYNC=0.
   - path: hooks/session-title-sync.sh
     type: hook
-    category: workflows-and-processes
+    category: devx-and-agentic
     tags:
       - claude
       - hooks
@@ -688,44 +717,18 @@ assets:
       judge the human's next action and rename the desktop session from the fixed templates ("À merger", "À tester", "À
       clôturer"). Desktop and attended sessions only; never loops (honours stop_hook_active). Disable with
       SESSION_TITLE_SYNC=0.
-  - path: hooks/session-title-ask.sh
-    type: hook
-    category: workflows-and-processes
-    tags:
-      - claude
-      - hooks
-      - shell
-    description: >-
-      Claude PreToolUse hook (matcher AskUserQuestion) that denies the first click-to-answer question once, asking the
-      agent to rename the desktop session to "🙋 À trancher · <topic>" before asking again, since an interactive question
-      never ends the turn and the Stop hook never runs. Never denies twice within SESSION_TITLE_GATE_TTL seconds; clears
-      the Stop fingerprint so the next turn re-titles. Desktop and attended sessions only. Disable with
-      SESSION_TITLE_SYNC=0.
   - path: hooks/session-title-working.sh
     type: hook
-    category: workflows-and-processes
+    category: devx-and-agentic
     tags:
       - claude
       - hooks
       - shell
     description: >-
       Claude UserPromptSubmit hook that asks the agent to make its first tool call a rename to the working title as soon
-      as a message arrives — an activity from a fixed catalogue, "🔵 🛠️ Coding 3/14 · <subject>", with the spec
-      slug kept as subject in a spec session. The Stop hook restores or re-judges the title at the end of the turn. Desktop
+      as a message arrives — an activity from a fixed catalogue, "🔵 🛠️ Coding 3/14 · <subject>", with the spec slug
+      kept as subject in a spec session. The Stop hook restores or re-judges the title at the end of the turn. Desktop
       and attended sessions only; silent in scheduled runs. Disable with SESSION_TITLE_SYNC=0.
-  - path: hooks/session-title-progress.sh
-    type: hook
-    category: workflows-and-processes
-    tags:
-      - claude
-      - hooks
-      - shell
-    description: >-
-      Claude PostToolUse hook (matcher Agent|Task|Edit|Write|MultiEdit) that keeps the "🔨 À implémenter D/T" counter of
-      a spec session live during a long turn: when tasks.md finishes a phase (or a task, with progress.every = "task"),
-      it hands the agent the exact new title through additionalContext. Ignores tool calls made inside subagents, which
-      cannot rename their parent. Desktop and attended sessions only; silent in scheduled runs. Disable with
-      SESSION_TITLE_SYNC=0.
   - path: rules/00-architecture/0-hexagonal-ddd.mdc
     type: rule
     description: >-
@@ -1006,7 +1009,7 @@ assets:
       Set up AI Igniter (ScreamZ/ai-igniter) in a project to manage isolated worktree-aware dev environments with
       automatic port allocation, managed .env sections, and Docker-based services (PostgreSQL, S3, custom). Use when
       onboarding a project for parallel-branch development or Claude Code worktrees.
-    category: developer-experience
+    category: devx-and-agentic
   - path: skills/app-version-surface/
     type: skill
     tags:
@@ -1068,7 +1071,7 @@ assets:
       update propagation to installed users, and semantic-release automation that bumps plugin.json from Conventional
       Commits. Use when bumping a plugin version, testing a plugin locally before publishing, wiring release automation
       for a plugin repo, or debugging why users don't receive a plugin update.
-    category: tools-and-configurations
+    category: devx-and-agentic
   - path: skills/compose-env-ports/
     type: skill
     tags:
@@ -1295,7 +1298,7 @@ assets:
       Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X",
       "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the
       user is looking for functionality that might exist as an installable skill.
-    category: other
+    category: devx-and-agentic
     bundles:
       - common
   - path: skills/fluid-architecture-scroll-mastery/
@@ -1733,6 +1736,24 @@ assets:
       - web-components
     description: Scroll and UX mastery
     category: frameworks-and-libraries
+  - path: skills/self-improving-skills/
+    type: skill
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - meta
+      - process
+    description: >-
+      Turn the corrections a human makes during Claude Code sessions into durable rules and better skills, instead of
+      repeating them every session. Explains the principle (session introspection → proposed amendment → human review →
+      scoped write), compares the eight public implementations surveyed on 2026-10-29 with their maturity, and installs
+      the recommended one, BayramAnnakov/claude-reflect (https://github.com/BayramAnnakov/claude-reflect). Covers where
+      a learning must land (most specific target wins), the measure-before-and-after discipline no mature tool ships
+      yet, and the settings that keep session history long enough to mine. Use when the user asks for a skill that
+      "improves itself", "learns from corrections", "reflects on the session", wants to stop repeating the same
+      correction, or wants to set up /reflect. Triggers on "self-improving", "auto-improve", "reflect",
+      "claude-reflect", "learn from corrections", "retrospective", "introspection de session".
   - path: skills/semantic-release-js-ts-pipeline/
     type: skill
     tags:
@@ -1770,7 +1791,7 @@ assets:
     category: domain-specific
   - path: skills/session-title/
     type: skill
-    category: workflows-and-processes
+    category: devx-and-agentic
     tags:
       - claude
       - hooks
@@ -1782,11 +1803,12 @@ assets:
       being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
       deterministic facts through `scripts/session-title.sh` (spec or free session, spec-kit stage, git state, PR state,
       whether the turn ended on a question) and, once per new set of facts, asks the agent to judge the human's next
-      action and rename the session; only the agent can call the app's `set_session_title` tool. A scheduled sweep prefixes an age dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4 days), at a frequency set in one user-level config file. Works for spec-kit
-      sessions (any spec-kit flow, not only /dev-it) and for free "vibe coding" sessions alike. Use when installing the
-      title hook, when the hook asks for a title update, when a session's title no longer says what to do next, or when
-      adding a status to the template set. Triggers on "session title", "rename session", "titre de session",
-      "intitulé", "à merger", "à tester", "à clôturer".
+      action and rename the session; only the agent can call the app's `set_session_title` tool. A scheduled sweep
+      prefixes an age dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4 days), at a frequency set in one user-level config file.
+      Works for spec-kit sessions (any spec-kit flow, not only /dev-it) and for free "vibe coding" sessions alike. Use
+      when installing the title hook, when the hook asks for a title update, when a session's title no longer says what
+      to do next, or when adding a status to the template set. Triggers on "session title", "rename session", "titre de
+      session", "intitulé", "à merger", "à tester", "à clôturer".
   - path: skills/sonarqube-config/
     type: skill
     tags:
