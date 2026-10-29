@@ -17,6 +17,10 @@
 #   session-title.sh list [--mode spec|free]
 #   session-title.sh forget --session ID
 #   session-title.sh sweep  --sessions FILE         # list_sessions JSON -> {sessionId,title} lines to rename
+#   session-title.sh snapshot [--days N]            # list_sessions-shaped JSON read from the app's own files
+#   session-title.sh watch [--interval S] [--once] [--session LOCAL_ID]
+#                                                   # agent-free trigger: one line per new rename the sweep wants;
+#                                                   # --session excludes the watcher's own session
 #   session-title.sh cron                           # cron expression of the freshness sweep
 #   session-title.sh config                         # effective user config
 #   session-title.sh progress --session ID [--repo DIR]  # live "🔨 D/T" title, or nothing
@@ -46,6 +50,7 @@
 #   SESSION_TITLE_GH_TIMEOUT=4     seconds before a gh call is abandoned
 #   SESSION_TITLE_GH_TTL=60        seconds a gh answer is reused
 #   SESSION_TITLE_GATE_TTL=300     seconds the question gate stays open after a deny
+#   SESSION_TITLE_APP_DIR=DIR      desktop app session files (default ~/Library/Application Support/Claude/claude-code-sessions)
 
 set -uo pipefail
 
@@ -57,6 +62,13 @@ GH_ENABLED="${SESSION_TITLE_GH:-1}"
 GH_TIMEOUT="${SESSION_TITLE_GH_TIMEOUT:-4}"
 GH_TTL="${SESSION_TITLE_GH_TTL:-60}"
 CONFIG_FILE="${SESSION_TITLE_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/session-title/config.json}"
+# Desktop app session files: macOS, then Windows (Git Bash exports APPDATA as a
+# Windows path, so it is converted when cygpath exists).
+if [[ -n "${SESSION_TITLE_APP_DIR:-}" ]]; then APP_DIR="$SESSION_TITLE_APP_DIR"
+elif [[ -n "${APPDATA:-}" ]]; then
+  APP_DIR="$(cygpath -u "$APPDATA" 2>/dev/null || printf '%s' "$APPDATA")/Claude/claude-code-sessions"
+else APP_DIR="$HOME/Library/Application Support/Claude/claude-code-sessions"; fi
+WATCHER_FILE="$CACHE_DIR/watcher.json"
 
 die() { printf 'session-title: %s\n' "$*" >&2; exit 1; }
 
@@ -72,10 +84,17 @@ config() {
   jq -n --argjson u "$user" '{freshness: {enabled: true, sweepMinutes: 5}, progress: {every: "phase"}} * $u'
 }
 
-# is_scheduled TRANSCRIPT — the session is a scheduled-task run: nobody reads
-# its title, so the hooks stay silent there.
+# is_scheduled TRANSCRIPT — the session is a scheduled-task run, or the
+# freshness watcher: nobody reads its title, so the hooks stay silent there.
+# The watcher is recognised by the CLI session id that `watch --session`
+# recorded, which is the transcript's file name.
 is_scheduled() {
-  [[ -n "${1:-}" && -f "$1" ]] && head -c 8192 "$1" 2>/dev/null | grep -q '<scheduled-task'
+  [[ -n "${1:-}" ]] || return 1
+  if [[ -s "$WATCHER_FILE" ]]; then
+    local cli; cli="$(jq -r '.cli // empty' "$WATCHER_FILE" 2>/dev/null)"
+    [[ -n "$cli" && "$(basename "$1" .jsonl)" == "$cli" ]] && return 0
+  fi
+  [[ -f "$1" ]] && head -c 8192 "$1" 2>/dev/null | grep -q '<scheduled-task'
 }
 
 # phases_done FILE — number of task sections (## / ### headings) whose tasks are all checked.
@@ -442,10 +461,41 @@ sweep() {
   ' "$1"
 }
 
+# snapshot [DAYS] — a list_sessions-shaped array read from the desktop app's
+# own session files (one local_*.json per session), with no agent involved.
+# The app keeps titles in memory, so these files are read-only for us: writing
+# a title there changes nothing in the sidebar. Archived sessions are dropped
+# before jq parses anything. Scheduled-task runs stay: the working hook titles
+# them too ("🟠 ✅ Closed · Balayage pastilles"), so their dots must age.
+# DAYS limits the scan to files modified within that many days. The
+# files carry no isRunning flag, so a working-dot title active in the last
+# 5 minutes counts as running; a crashed turn still ages past that. The app
+# flushes lastActivityAt late: a file read 10:48:10 while get_session said
+# 10:48:19.7, so 15 s are added to keep a dot from turning early. A
+# snapshot is a trigger, never the authority.
+snapshot() {
+  local days="${1:-}" wdot; wdot="$(jq -r '.freshness.workingDot' "$TEMPLATES")"
+  [[ -d "$APP_DIR" ]] || { echo '[]'; return 0; }
+  {
+    if [[ -n "$days" ]]; then
+      find "$APP_DIR" -type f -name 'local_*.json' -mtime "-$days" -print0
+    else
+      find "$APP_DIR" -type f -name 'local_*.json' -print0
+    fi
+  } 2>/dev/null \
+    | xargs -0 grep -L '"isArchived":true' 2>/dev/null \
+    | tr '\n' '\0' \
+    | xargs -0 jq -c --arg w "$wdot " --argjson now "$(date +%s)" 'select(.title | type == "string")
+      | ((.lastActivityAt // 0) / 1000 | floor | . + 15) as $at
+      | {sessionId, title, cwd, branch, isArchived: (.isArchived // false), lastActivityAt: ($at | todate),
+         isRunning: ((.title | startswith($w)) and ($now - $at) < 300)}' 2>/dev/null \
+    | jq -s .
+}
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 cmd="${1:-}"; [[ $# -gt 0 ]] && shift
 repo="$(pwd)"; session=""; subject=""; pr=""; progress=""; status_arg=""
-transcript=""; lastfile=""; mode_arg=""; sessions_file=""
+transcript=""; lastfile=""; mode_arg=""; sessions_file=""; days=""; interval=60; once=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;;
@@ -457,6 +507,9 @@ while [[ $# -gt 0 ]]; do
     --last-message-file) lastfile="$2"; shift 2 ;;
     --mode) mode_arg="$2"; shift 2 ;;
     --sessions) sessions_file="$2"; shift 2 ;;
+    --days) days="$2"; shift 2 ;;
+    --interval) interval="$2"; shift 2 ;;
+    --once) once=1; shift ;;
     -*) die "unknown option: $1" ;;
     *) status_arg="$1"; shift ;;
   esac
@@ -536,6 +589,49 @@ case "$cmd" in
   sweep)
     [[ -n "$sessions_file" && -f "$sessions_file" ]] || die "sweep needs --sessions FILE (list_sessions JSON)"
     sweep "$sessions_file"
+    ;;
+  snapshot) snapshot "$days" ;;
+  watch)
+    # The deterministic half of the sweep, with no agent: every --interval
+    # seconds, snapshot + sweep, and print each {sessionId,title} rename not
+    # printed before. Silence costs nothing, so a watcher session sleeps until
+    # a dot really changes. A printed line is a hint: the woken agent runs the
+    # authoritative sweep (list_sessions knows isRunning; the files do not).
+    # The seen set persists in the cache and holds only the renames still
+    # pending, so a declined rename or a session list_sessions reports as
+    # running wakes nobody twice, even across --once relaunches.
+    # The first pass ever scans every file (~8 s for 3,700 files), later
+    # passes only files touched in the last 6 days: older ones are already ⚫
+    # or carry no template title.
+    # --once exits after the first pass that prints, for a background Bash
+    # that wakes the agent on exit.
+    [[ "$interval" =~ ^[0-9]+$ ]] && (( interval >= 1 )) || die "--interval must be a positive integer"
+    mkdir -p "$CACHE_DIR" 2>/dev/null || die "cannot create $CACHE_DIR"
+    # Remember the watcher's session so the title hooks stay silent in it: its
+    # turns are wakes, and a title judged at each one costs two extra steps.
+    if [[ -n "$session" ]]; then
+      own="$(find "$APP_DIR" -type f -name "$session.json" 2>/dev/null | head -1)"
+      cli=""; [[ -n "$own" ]] && cli="$(jq -r '.cliSessionId // empty' "$own" 2>/dev/null)"
+      jq -n --arg l "$session" --arg c "$cli" '{local: $l, cli: $c}' >"$WATCHER_FILE"
+    fi
+    snap="$CACHE_DIR/watch-snapshot.$$.json"; seen_file="$CACHE_DIR/watch-seen.txt"; scope=6
+    [[ -f "$seen_file" ]] || { scope=""; : >"$seen_file"; }
+    trap 'rm -f "$snap" "$seen_file.$$"' EXIT
+    while :; do
+      snapshot "$scope" >"$snap" || echo '[]' >"$snap"
+      scope=6
+      # The watcher's own session never counts: each wake re-titles it, so it
+      # would turn 🟡 five minutes later and wake itself forever.
+      sweep "$snap" 2>/dev/null | grep -v '^$' | { if [[ -n "$session" ]]; then grep -vF "\"$session\"" || true; else cat; fi; } >"$seen_file.$$"
+      fresh_lines="$(grep -vxF -f "$seen_file" "$seen_file.$$")"
+      [[ -s "$seen_file" ]] || fresh_lines="$(cat "$seen_file.$$")"
+      mv "$seen_file.$$" "$seen_file"
+      if [[ -n "$fresh_lines" ]]; then
+        printf '%s\n' "$fresh_lines"
+        (( once )) && exit 0
+      fi
+      sleep "$interval"
+    done
     ;;
   progress)
     # Mid-turn live counter: prints the new "🔨 À implémenter D/T" title when
@@ -618,5 +714,5 @@ case "$cmd" in
   config)
     config | jq --arg f "$CONFIG_FILE" --arg c "$(sweep_cron)" '. + {file: $f, cron: $c}'
     ;;
-  *) sed -n '2,51p' "$0"; exit 2 ;;
+  *) sed -n '2,56p' "$0"; exit 2 ;;
 esac
