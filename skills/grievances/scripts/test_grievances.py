@@ -208,6 +208,47 @@ class TestDeriveId(unittest.TestCase):
             g.check_new_id(ident)
             self.assertLessEqual(len(ident), g.ID_MAX_LEN, ident)
 
+    def test_word_count_sweep_never_mints_an_invalid_id(self):
+        """The fixtures above all sit at 5 significant words or fewer, which is
+        exactly the segment ceiling — so this class went green while `add` was
+        minting 6-, 7- and 8-segment names that every later command refused.
+        The sweep is the point: the boundary must be crossed, not touched."""
+        for n in range(2, 13):
+            short = " ".join(f"wrd{k}" for k in range(n))
+            ident = g.derive_id(short)
+            self.assertRegex(ident, g.SLUG_ID_RE, f"{n} words -> {ident}")
+            self.assertLessEqual(len(ident), g.ID_MAX_LEN, ident)
+
+    def test_field_reported_descriptions_mint_valid_ids(self):
+        """Shaped like descriptions seen in downstream ledgers. Every one minted
+        an id its own validator rejected. The third is the sharp one — 8
+        segments at 38 characters, so tightening ID_MAX_LEN alone would not
+        have moved it. The last minted a 6-segment id that this copy then
+        refused to reload."""
+        reported = [
+            "alpha beta gamma delta epsilon zeta",
+            "docs corpus drift gate merge order",
+            "the api key is not read from the env any more so the job dies at boot",
+            "the orders e2e still clicks a button renamed six weeks ago, "
+            "so one spec is red on staging",
+            "One OAuth token request per account per sweep makes the token "
+            "endpoint 500 under fan-out",
+            "shop item list wrong default tax shown",
+        ]
+        for short in reported:
+            ident = g.derive_id(short)
+            self.assertRegex(ident, g.SLUG_ID_RE, short)
+
+    def test_the_two_bounds_are_stated_once(self):
+        """The defect was two bounds in two units, only one enforced. The
+        pattern must be built from ID_MAX_SEGMENTS, not hard-coded beside it."""
+        self.assertEqual(g.ID_MAX_SEGMENTS, 5)
+        for n in range(2, g.ID_MAX_SEGMENTS + 1):
+            self.assertRegex("GRV-" + "-".join(["w"] * n), g.SLUG_ID_RE)
+        self.assertNotRegex(
+            "GRV-" + "-".join(["w"] * (g.ID_MAX_SEGMENTS + 1)), g.SLUG_ID_RE
+        )
+
     def test_deterministic(self):
         short = "the asset registry description drifts from the skill frontmatter title"
         self.assertEqual(len({g.derive_id(short) for _ in range(5)}), 1)
@@ -309,6 +350,20 @@ class TestLedgerIntegrity(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("GRV-worker", message)
         self.assertIn("unusable id", message)
+
+    def test_a_too_many_segments_marker_gets_a_concrete_replacement(self):
+        """Ledgers written before ID_MAX_SEGMENTS was enforced at mint time
+        hold 6-segment ids, e.g. GRV-alpha-beta-gamma-delta-epsilon-1a2b. The
+        refusal names the id to rename it to, built the way derive_id now
+        builds one: the first readable segments plus the existing
+        discriminator, so the rename is mechanical."""
+        stale = "GRV-alpha-beta-gamma-delta-epsilon-1a2b"
+        path = written(ledger_text(block(LEGACY_ID), block(stale)))
+        with self.assertRaises(g.UserError) as caught:
+            g.Ledger.load(path)
+        message = str(caught.exception)
+        self.assertIn(f"{stale} -> GRV-alpha-beta-gamma-delta-1a2b", message)
+        self.assertRegex("GRV-alpha-beta-gamma-delta-1a2b", g.SLUG_ID_RE)
 
     def test_an_overlong_stored_identifier_is_rejected(self):
         """T033, review finding 3: the ceiling must hold on the read path."""

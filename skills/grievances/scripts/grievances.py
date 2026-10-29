@@ -85,6 +85,13 @@ GENERATED_NOTE = (
 ID_PREFIX = "GRV-"
 ID_MAX_LEN = 40
 ID_DISCRIMINATOR_LEN = 4
+# The descriptive form carries 2 to ID_MAX_SEGMENTS segments after the prefix.
+# derive_id and SLUG_ID_RE BOTH read this constant, because they used to state
+# the bound in two different units — derive_id in characters, the pattern in
+# segments — and only the pattern was enforced. Six short words fit inside the
+# 40-char ceiling and mint a 6-segment name, so `add` wrote an identifier that
+# every later command refused, including the `rebuild` its own error recommends.
+ID_MAX_SEGMENTS = 5
 
 # Two identifier forms coexist, and they are deliberately DISJOINT: the legacy
 # form is exactly four digits and therefore carries no hyphen after the prefix,
@@ -93,10 +100,12 @@ ID_DISCRIMINATOR_LEN = 4
 #   legacy       GRV-0007                     read-only, never minted again
 #   descriptive  GRV-worker-hosted-api-scale  minted from the short description
 LEGACY_ID_RE = re.compile(r"^GRV-\d{4}$")
-SLUG_ID_RE = re.compile(r"^GRV-[a-z0-9]+(?:-[a-z0-9]+){1,4}$")
+SLUG_ID_RE = re.compile(rf"^GRV-[a-z0-9]+(?:-[a-z0-9]+){{1,{ID_MAX_SEGMENTS - 1}}}$")
 # Unanchored, for embedding in BLOCK_RE only. Never assign this to a validator:
 # without ^...$ a suffix-padded identifier passes.
-ANY_ID_PATTERN = r"GRV-(?:\d{4}|[a-z0-9]+(?:-[a-z0-9]+){1,4})"
+ANY_ID_PATTERN = (
+    rf"GRV-(?:\d{{4}}|[a-z0-9]+(?:-[a-z0-9]+){{1,{ID_MAX_SEGMENTS - 1}}})"
+)
 
 # Words never worth putting in an identifier. The first 48 are taken verbatim
 # from this repository's own branch-name generator
@@ -360,13 +369,23 @@ class Ledger:
         parsed = {m.group(1) for m in BLOCK_RE.finditer(text)}
         unparsed = [gid for gid in MARKER_OPEN_RE.findall(text) if gid not in parsed]
         if unparsed:
+            renames = [
+                f"  {gid} -> {fixed}"
+                for gid in unparsed
+                if (fixed := shortened_id(gid)) is not None
+            ]
             raise UserError(
                 f"{path}: {len(unparsed)} grievance marker(s) carry an unusable id: "
                 f"{', '.join(repr(g) for g in unparsed[:3])}\n"
-                "each id must be GRV-NNNN (legacy) or GRV- plus 2 to 5 lowercase "
-                "alphanumeric segments; fix the marker, its JSON header and its "
-                "heading, then run: "
-                f"{Path(sys.argv[0]).name} rebuild"
+                "each id must be GRV-NNNN (legacy) or GRV- plus 2 to "
+                f"{ID_MAX_SEGMENTS} lowercase alphanumeric segments; "
+                + (
+                    "rename (replace every occurrence in the file, if the new id "
+                    "is not already taken):\n" + "\n".join(renames) + "\nthen run: "
+                    if renames
+                    else "fix the marker, its JSON header and its heading, then run: "
+                )
+                + f"{Path(sys.argv[0]).name} rebuild"
             )
         for match in BLOCK_RE.finditer(text):
             gid, raw_meta, body = match.group(1), match.group(2), match.group(3)
@@ -633,12 +652,17 @@ def derive_id(short: str) -> str:
         )
     kept: list[str] = []
     for word in words:
+        # Both bounds, in the loop. Characters alone let six short words through.
+        if len(kept) >= ID_MAX_SEGMENTS:
+            break
         if len(ID_PREFIX + "-".join(kept + [word])) > ID_MAX_LEN:
             break
         kept.append(word)
     if len(kept) == len(words) and len(kept) >= 2:
         return ID_PREFIX + "-".join(kept)
-    # Words were dropped, so the readable part is not unique on its own.
+    # Words were dropped, so the readable part is not unique on its own. The
+    # discriminator occupies a segment, so the readable part gets one fewer.
+    del kept[ID_MAX_SEGMENTS - 1:]
     disc = hashlib.sha256(" ".join(words).encode("utf-8")).hexdigest()[:ID_DISCRIMINATOR_LEN]
     while kept and len(ID_PREFIX + "-".join(kept) + "-" + disc) > ID_MAX_LEN:
         kept.pop()
@@ -648,7 +672,36 @@ def derive_id(short: str) -> str:
             f"already exceed the {ID_MAX_LEN}-char ceiling\n"
             "shorten --short, or name it yourself with --id GRV-two-or-more-words"
         )
-    return ID_PREFIX + "-".join(kept) + "-" + disc
+    derived = ID_PREFIX + "-".join(kept) + "-" + disc
+    if not SLUG_ID_RE.match(derived):
+        # Unreachable by construction. Kept because the unreachability is what
+        # broke: the two bounds were stated separately and drifted, and `add`
+        # wrote the result before anything checked it.
+        raise UserError(
+            f"internal: derived id {derived!r} fails the identifier pattern; "
+            "name it yourself with --id GRV-two-or-more-words and report this"
+        )
+    return derived
+
+
+def shortened_id(gid: str) -> str | None:
+    """Suggest a valid replacement for a stored id that has too many segments.
+
+    Ledgers written before derive_id enforced ID_MAX_SEGMENTS hold ids such as
+    GRV-alpha-beta-gamma-delta-epsilon-1a2b. The suggestion keeps the leading
+    readable segments and the trailing one — the discriminator, when there is
+    one — which is how derive_id now shapes a truncated name. Returns None for
+    an id this cannot repair (wrong case, stray characters, too few segments).
+    """
+    if not gid.startswith(ID_PREFIX):
+        return None
+    segments = gid[len(ID_PREFIX):].split("-")
+    if len(segments) <= ID_MAX_SEGMENTS:
+        return None
+    fixed = ID_PREFIX + "-".join(segments[: ID_MAX_SEGMENTS - 1] + segments[-1:])
+    if not SLUG_ID_RE.match(fixed) or len(fixed) > ID_MAX_LEN:
+        return None
+    return fixed
 
 
 def find_conflict_markers(text: str) -> list[str]:
