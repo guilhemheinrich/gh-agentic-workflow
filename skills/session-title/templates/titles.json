@@ -7,10 +7,12 @@
     "workingDot": "🔵",
     "levels": [
       { "dot": "🟢", "belowMinutes": 5 },
-      { "dot": "🟡", "belowMinutes": 90 },
-      { "dot": "🟠", "belowMinutes": 1440 },
-      { "dot": "🔴", "belowMinutes": 5760 },
-      { "dot": "⚫" }
+      { "dot": "🟡", "belowMinutes": 60 },
+      { "dot": "🟠", "belowMinutes": 480 },
+      { "dot": "🔴", "belowMinutes": 2880 },
+      { "dot": "🟤", "belowMinutes": 5760 },
+      { "dot": "⚫", "belowMinutes": 20160 },
+      { "dot": "⚪" }
     ]
   },
   "activities": {

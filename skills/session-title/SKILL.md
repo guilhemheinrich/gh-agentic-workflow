@@ -9,9 +9,10 @@ description: >-
   `scripts/session-title.sh` (spec or free session, spec-kit stage, git state,
   PR state, whether the turn ended on a question) and, once per new set of
   facts, asks the agent to judge the human's next action and rename the
-  session; only the agent can call the app's `set_session_title` tool. A
-  scheduled sweep prefixes an age dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4
-  days), at a frequency set in one user-level config file. Works
+  session; only the agent can call the app's `set_session_title` tool. An age
+  dot (🟢 under 5 min, 🟡, 🟠, 🔴, 🟤, ⚫, ⚪ over 2 weeks) is kept current by a watcher
+  session that a bash loop over the app's session files wakes only when a dot
+  must change, with a timed scheduled sweep as fallback. Works
   for spec-kit sessions (any spec-kit flow, not only /dev-it) and for free
   "vibe coding" sessions alike. Use when installing the title hook, when the
   hook asks for a title update, when a session's title no longer says what to
@@ -39,6 +40,7 @@ the agent is doing — it names what the **human** does next.
 | `session-title-sync.sh` (Stop hook) | at the end of a turn, blocks the stop **once per new set of facts** with the facts and the allowed statuses |
 | `session-title-ask.sh` (PreToolUse hook, `AskUserQuestion`) | before a click-to-answer question, denies the call **once** so the agent sets `decide` first |
 | the agent | judges the status, picks the topic of a free session, calls `set_session_title` |
+| `session-title.sh watch` (in a watcher session) | while sessions sit idle, wakes its agent only when an age dot or a merged PR changes a title |
 
 The script proposes and the agent decides. The facts cannot tell a merged
 webhook (to test on staging) from a merged README (to close). Only the
@@ -217,8 +219,9 @@ runs, so no hook fires, and the title keeps saying "🔀 To merge #12". The
 desktop app's PR bar does notice, but it covers GitHub only. Bitbucket
 repositories such as `modelo-broker-pa` get no PR bar at all.
 
-The sweep closes that gap for every forge. For each session whose title is
-`to-merge`, it reads `cwd` and `branch` from `list_sessions`, then checks:
+The sweep closes that gap for every forge, in the watcher and the scheduled
+task alike. For each session whose title is `to-merge`, it reads `cwd` and
+`branch` (from the session files, or from `list_sessions`), then checks:
 
 - **GitHub** (`origin` on github.com, `gh` installed): `gh pr view <branch>`
   reports `MERGED`, and the PR number comes from there.
@@ -235,32 +238,103 @@ judges `to-test` or `to-close` as usual. Every network call is bounded
 ## Freshness dot: how long the session has waited
 
 Every title starts with a dot that ages with the session:
-"🟠 🔀 À merger #12 · 042-webhook" means this PR has waited more than 1 h 30.
+"🟠 🔀 À merger #12 · 042-webhook" means this PR has waited 1 to 8 hours.
 
 | Age since the session's last activity | Dot |
 |---|---|
 | under 5 min | 🟢 |
-| 5 min to 1 h 30 | 🟡 |
-| 1 h 30 to 1 day | 🟠 |
-| 1 day to 4 days | 🔴 |
-| over 4 days | ⚫ |
+| 5 min to 1 h | 🟡 |
+| 1 h to 8 h | 🟠 |
+| 8 h to 2 days | 🔴 |
+| 2 days to 4 days | 🟤 |
+| 4 days to 2 weeks | ⚫ |
+| over 2 weeks | ⚪ |
+
+Unicode has 9 coloured circles and no shade between two of them, so the
+scale uses 7 of them (🔵 marks a running turn). The levels live in
+`templates/titles.json` (`freshness.levels`); no dot may be a prefix of
+another, or stripping the old dot would eat part of the title.
 
 No hook fires on an idle session, so two pieces share the work:
 
 1. `set` always renders 🟢, because the turn has just ended.
-2. A scheduled task, `session-title-freshness`, runs `sweep` and repaints idle
-   sessions. Its prompt is `templates/freshness-sweep.md`.
+2. A **watcher session** repaints idle sessions, and wakes only when a dot
+   has to change. Its prompt is `templates/freshness-watch.md`.
 
-`sweep` reads the `lastActivityAt` field of `list_sessions`. A rename leaves
-that field unchanged: renaming `local_3f5a96d8…` kept `14:13:50.723Z`. It only
-repaints titles built from the templates, and skips running and archived
-sessions. A title the human typed, such as "Horloge de fraîcheur du titre",
-stays as it is.
+A rename leaves `lastActivityAt` unchanged: renaming `local_3f5a96d8…` kept
+`14:13:50.723Z`. Only titles built from the templates are repainted; running
+and archived sessions are skipped. A title the human typed, such as "Horloge
+de fraîcheur du titre", stays as it is.
 
-The levels live in `templates/titles.json` under `freshness`. The sweep
-frequency lives in **one** user-level file,
-`~/.config/session-title/config.json` (`SESSION_TITLE_CONFIG` overrides the
-path):
+### The watcher session (default)
+
+The watcher splits the sweep in two halves:
+
+1. **The trigger is pure bash.** `session-title.sh watch` reads the app's own
+   session files, one `local_*.json` per session, which carry `title` and
+   `lastActivityAt`. It runs `sweep` on them every 60 seconds and prints a
+   line only for a rename not printed before. Silence costs no token.
+2. **The rename stays with an agent.** One open desktop session runs
+   `watch --once` in a background Bash call. The command exits on the first
+   pending rename, which wakes the agent. The agent checks each printed
+   session with `get_session` (running? archived? re-titled meanwhile?),
+   renames, and relaunches the watch.
+
+Example: a session goes idle at 10:00 with "🟢 💬 To read · x". At 10:05 the
+watch prints `{"sessionId":"local_…","title":"🟡 💬 To read · x"}` and exits.
+The watcher wakes once, renames it, and sleeps until 11:00 (🟠). Each session
+costs at most 6 wakes, one per level change, against 288 runs a day for a
+5-minute scheduled task.
+
+**Start it once**: open a desktop session with the prompt "Read and follow
+~/.agents/skills/session-title/templates/freshness-watch.md". Leave it open.
+If a `session-title-freshness` scheduled task exists, disable it.
+
+| Platform | Session files (`SESSION_TITLE_APP_DIR` overrides) |
+|---|---|
+| macOS | `~/Library/Application Support/Claude/claude-code-sessions/<org>/<account>/` |
+| Windows (Git Bash) | `%APPDATA%\Claude\claude-code-sessions\<org>\<account>\` |
+
+Facts measured on 2026-10-29 shape the design:
+
+- **The files are read-only for us.** A title written into a session file
+  with `jq` never reached the sidebar: `get_session` kept the old title, so
+  the app holds titles in memory. Only `set_session_title` renames.
+- **The files carry no `isRunning`, and lag behind the app.** `snapshot`
+  treats a 🔵 title active in the last 5 minutes as running. A crashed turn
+  still ages past that. The app does not rewrite the file during a turn: a
+  session running at 11:03 still read `lastActivityAt` 10:57:20 on disk. A
+  turn longer than 5 minutes therefore costs one false wake, and the
+  agent's `get_session` check (`isRunning: true`) skips it. The file also
+  trails the app by up to 10 s after a turn, so `snapshot` adds 15 s to
+  `lastActivityAt`.
+- **Most files are scheduled runs, and they still need dots.** On the
+  author's machine, 3,270 of 3,723 files carry `scheduledTaskId`. Runs carry
+  template titles too, such as "🟡 ✅ Closed · Balayage pastilles".
+  `snapshot` drops only archived sessions, with `grep` before `jq` parses
+  anything. The first pass scans every file (12 s for 3,336), later passes
+  only files touched in the last 6 days (0.3 s for 170).
+- **The watcher only ages dots.** A prompt bumps `lastActivityAt` before the
+  working hook re-titles the session, so a 🟡 title briefly looks 🟢-fresh.
+  The live run woke once for that. A younger dot is always the Stop hook's
+  job, so `watch` drops any rename that would make a dot younger.
+- **The watcher must not watch itself.** Each wake re-titles the watcher
+  session, which would turn 🟡 five minutes later and wake it forever.
+  `watch --session <its local id>` excludes it, and records its CLI id in
+  `~/.cache/session-title/watcher.json` so the title hooks stay silent there,
+  as they do in scheduled runs.
+
+The pending set persists in `~/.cache/session-title/watch-seen.txt`. A
+declined rename, or a session `get_session` reports as running, therefore
+wakes nobody twice.
+
+### Fallback: the scheduled task
+
+Without an open watcher, a scheduled task can sweep on a timer instead. It
+costs one full agent run per tick, even when no dot moves (limit 5). Its
+prompt is `templates/freshness-sweep.md`, and its frequency lives in **one**
+user-level file, `~/.config/session-title/config.json`
+(`SESSION_TITLE_CONFIG` overrides the path):
 
 ```json
 { "freshness": { "enabled": true, "sweepMinutes": 5 } }
@@ -268,12 +342,11 @@ path):
 
 Without the file, the sweep runs every 5 minutes. Accepted values are 1 to 59
 minutes, or a whole number of hours (120 → `0 */2 * * *`). Each run checks its
-own cron against `session-title.sh cron` and corrects it. A change to the file
-therefore takes effect at the next run, with no reinstall. `"enabled": false`
-makes the next run strip every dot.
+own cron against `session-title.sh cron` and corrects it. `"enabled": false`
+strips every dot, for the task and the watcher alike.
 
-Install the task once, from a desktop session: ask the agent to create a
-scheduled task with `taskId: "session-title-freshness"`, the cron printed by
+Install it from a desktop session: ask the agent to create a scheduled task
+with `taskId: "session-title-freshness"`, the cron printed by
 `session-title.sh cron`, and the prompt "Read and follow
 ~/.agents/skills/session-title/templates/freshness-sweep.md".
 
@@ -313,6 +386,8 @@ session-title.sh render to-merge --subject 042-webhook --pr 12
 session-title.sh list --mode free
 session-title.sh forget --session <id>                                 # drop the cache
 session-title.sh sweep --sessions list-sessions.json                   # renames the freshness dot needs
+session-title.sh snapshot --days 6                                     # list_sessions-shaped JSON from the app's files
+session-title.sh watch --once --interval 60                            # exits on the first pending rename
 session-title.sh cron                                                  # schedule from the user config
 session-title.sh config                                                # effective config, file path, cron
 ```
@@ -333,13 +408,18 @@ session-title.sh config                                                # effecti
    `custom-title` entries. That format is undocumented, so a missing title only
    disables the `UNCHANGED` shortcut.
 
-5. **Each sweep is one agent run, on the app's default model.** A scheduled
-   task cannot pick its model: all 3,412 scheduled runs recorded on the
-   author's machine ran on Opus with a 1M context. At 5 minutes, that makes
-   288 Opus runs a day, even when no dot changes. The app also delays
-   recurring tasks by a few minutes, so a dot can turn late by that much.
-6. **Sweep runs show in the sidebar.** A scheduled run cannot archive
-   itself: `archive_session` blocks when nobody attends the session.
+5. **The watcher reads an undocumented format.** The session file layout may
+   change with any app update. An empty or missing directory makes `watch`
+   silent, never wrong. The Windows path is derived from `%APPDATA%` and has
+   not been tested on a Windows machine yet.
+6. **The watcher session must stay open.** If the app quits or closes it,
+   no dot moves until it is started again.
+7. **Fallback only: each scheduled sweep is one agent run, on the app's
+   default model.** A scheduled task cannot pick its model: all 3,412
+   scheduled runs recorded on the author's machine ran on Opus with a 1M
+   context. At 5 minutes, that makes 288 Opus runs a day, even when no dot
+   changes. Its runs also show in the sidebar, since a scheduled run cannot
+   archive itself.
 
 ## Implementation Status
 
@@ -368,6 +448,16 @@ Working dot: tested on the same fixture. A spec prompt gave
 "🔵 🔨 À implémenter 3/4 · 295-parent-acts" twice in a row, and `restore`
 gave back the 🟢 title once. A stray `--subject` in spec mode kept the slug.
 A crashed "🔵 🛠️ Coding 4/5" aged to 🟠. A free session with unchanged facts got JUDGE (full re-title), a spec one its 🟢 title back; the counter kept the status "working".
+
+Watcher: `watch` tested on 7 fixture session files. It printed the
+10-minute-old answer and the crashed 🔵 turn. It skipped a fresh one, an
+archived one, a running 🔵 turn and a typed title. A second pass stayed
+silent, and a later aging printed only the new rename. Then a live run on
+2026-10-29, scheduled task disabled, from 11:48 to 13:56: 33 wakes, each
+from an idle session, with no wake between dot changes. It turned 🟢→🟡,
+🟡→🟠, 🟠→🔴 and 🔀→🏁, each within 15 s plus one interval of its level. One
+session went 🟢→🟡→🟠 across the run. `get_session` skipped an archived
+session and two long running turns. Not tested: ⚫, and Windows.
 
 Merged PR: on a fake Bitbucket (a local bare origin, no `gh`), the sweep turned
 the merged branch into "🏁 Merged" and left the open one and a session without

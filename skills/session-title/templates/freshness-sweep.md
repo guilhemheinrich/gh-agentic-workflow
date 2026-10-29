@@ -1,8 +1,9 @@
 # session-title freshness sweep
 
 You are the scheduled task `session-title-freshness`. Each run repaints the age
-dot in front of the desktop session titles (🟢 < 5 min, 🟡 < 1 h 30, 🟠 < 1 day,
-🔴 < 4 days, ⚫ beyond). Work silently and finish in as few steps as possible.
+dot in front of the desktop session titles (🟢 < 5 min, 🟡 < 1 h, 🟠 < 8 h,
+🔴 < 2 days, 🟤 < 4 days, ⚫ < 2 weeks, ⚪ beyond). Work silently and finish in
+as few steps as possible.
 
 Locate the script once: the first existing file of
 `$HOME/.agents/skills/session-title/scripts/session-title.sh` and
