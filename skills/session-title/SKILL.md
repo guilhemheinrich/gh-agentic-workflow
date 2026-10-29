@@ -10,7 +10,7 @@ description: >-
   PR state, whether the turn ended on a question) and, once per new set of
   facts, asks the agent to judge the human's next action and rename the
   session; only the agent can call the app's `set_session_title` tool. An age
-  dot (🟢 under 5 min, 🟡, 🟠, 🔴, ⚫ over 4 days) is kept current by a watcher
+  dot (🟢 under 5 min, 🟡, 🟠, 🔴, 🟤, ⚫, ⚪ over 2 weeks) is kept current by a watcher
   session that a bash loop over the app's session files wakes only when a dot
   must change, with a timed scheduled sweep as fallback. Works
   for spec-kit sessions (any spec-kit flow, not only /dev-it) and for free
@@ -238,15 +238,22 @@ judges `to-test` or `to-close` as usual. Every network call is bounded
 ## Freshness dot: how long the session has waited
 
 Every title starts with a dot that ages with the session:
-"🟠 🔀 À merger #12 · 042-webhook" means this PR has waited more than 1 h 30.
+"🟠 🔀 À merger #12 · 042-webhook" means this PR has waited 1 to 8 hours.
 
 | Age since the session's last activity | Dot |
 |---|---|
 | under 5 min | 🟢 |
-| 5 min to 1 h 30 | 🟡 |
-| 1 h 30 to 1 day | 🟠 |
-| 1 day to 4 days | 🔴 |
-| over 4 days | ⚫ |
+| 5 min to 1 h | 🟡 |
+| 1 h to 8 h | 🟠 |
+| 8 h to 2 days | 🔴 |
+| 2 days to 4 days | 🟤 |
+| 4 days to 2 weeks | ⚫ |
+| over 2 weeks | ⚪ |
+
+Unicode has 9 coloured circles and no shade between two of them, so the
+scale uses 7 of them (🔵 marks a running turn). The levels live in
+`templates/titles.json` (`freshness.levels`); no dot may be a prefix of
+another, or stripping the old dot would eat part of the title.
 
 No hook fires on an idle session, so two pieces share the work:
 
@@ -275,9 +282,9 @@ The watcher splits the sweep in two halves:
 
 Example: a session goes idle at 10:00 with "🟢 💬 To read · x". At 10:05 the
 watch prints `{"sessionId":"local_…","title":"🟡 💬 To read · x"}` and exits.
-The watcher wakes once, renames it, and sleeps until 11:30 (🟠). Each session
-costs at most 4 wakes, one per level, against 288 runs a day for a 5-minute
-scheduled task.
+The watcher wakes once, renames it, and sleeps until 11:00 (🟠). Each session
+costs at most 6 wakes, one per level change, against 288 runs a day for a
+5-minute scheduled task.
 
 **Start it once**: open a desktop session with the prompt "Read and follow
 ~/.agents/skills/session-title/templates/freshness-watch.md". Leave it open.
