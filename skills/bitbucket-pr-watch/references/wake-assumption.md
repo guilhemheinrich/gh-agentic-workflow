@@ -7,7 +7,7 @@ measurements, in the Claude desktop app (Code tab), macOS.
 | # | Check | Date | Result |
 |---|---|---|---|
 | 1 | `sleep 90; echo …` with `run_in_background`, session idle | 2026-10-30 | **Pass.** Command ended 17:13:50Z; the session took a turn at 17:13:55Z with no human input. |
-| 2 | `sleep 3700; echo …` — does a background command survive past one hour? | 2026-10-30 | Pending at the time of writing; see the line below once measured. |
+| 2 | `sleep 3700; echo …` — does a background command survive past one hour? | 2026-10-30 | **Pass.** Armed about 17:12Z, exited after 3700 s; the session took a turn at 18:14:04Z with no human input. |
 | 3 | Does `session_id` survive an app restart and a session reopen? | — | Not measured: needs the human to quit and reopen the app. If it changes, the SessionStart hook must re-key subscriptions by repo and branch of the cwd. |
 
 How to re-measure check 1 in any harness: arm `sleep 90; echo WAKE` the way
