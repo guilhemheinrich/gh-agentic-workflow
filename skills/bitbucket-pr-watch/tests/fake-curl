@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# fake-curl — stands in for curl in the bbw tests. Serves fixture files from
+# $FAKE_CURL_DIR and logs every requested URL to $FAKE_CURL_LOG.
+#
+# Understands the options bbw uses: -o FILE, -D FILE, -w '%{http_code}', -K -.
+# The -K config arrives on stdin; it is read and discarded, never logged, so a
+# test can grep the log for the token and prove it never left the process.
+set -u
+out="" hdr="" write="" url=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift ;;
+    -D) hdr="$2"; shift ;;
+    -w) write="$2"; shift ;;
+    -K) [ "$2" = "-" ] && cat >/dev/null; shift ;;
+    --max-time|-H|-u) shift ;;
+    -*) ;;
+    *) url="$1" ;;
+  esac
+  shift
+done
+printf '%s\n' "$url" >>"${FAKE_CURL_LOG:-/dev/null}"
+tail="${url#"$BBW_API_BASE"/}"
+key="$(printf '%s' "$tail" | LC_ALL=C sed 's/[^A-Za-z0-9._-]/_/g')"
+body="$FAKE_CURL_DIR/$key.json"
+code=200
+if [ -f "$FAKE_CURL_DIR/$key.code" ]; then code="$(cat "$FAKE_CURL_DIR/$key.code")"
+elif [ ! -f "$body" ]; then code=404; fi
+if [ -n "$out" ]; then
+  if [ -f "$body" ]; then cat "$body" >"$out"; else printf '{}' >"$out"; fi
+fi
+if [ -n "$hdr" ]; then
+  if [ -f "$FAKE_CURL_DIR/$key.headers" ]; then cat "$FAKE_CURL_DIR/$key.headers" >"$hdr"; else : >"$hdr"; fi
+fi
+[ "$write" = '%{http_code}' ] && printf '%s' "$code"
+exit 0

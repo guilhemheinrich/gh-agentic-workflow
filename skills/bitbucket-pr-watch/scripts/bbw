@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# bbw — bitbucket-pr-watch. Wakes the agent session that owns a Bitbucket PR
+# when the PR really changes: pipeline end, comment, review, conflict, merge.
+#
+# Read-only on Bitbucket. bash 3.2 compatible (macOS system bash).
+# Run `bbw help` for the subcommands.
+set -uo pipefail
+
+BBW_SELF="$0"
+case "$BBW_SELF" in /*) ;; *) BBW_SELF="$PWD/$BBW_SELF" ;; esac
+BBW_LIB="$(cd "$(dirname "$BBW_SELF")/lib" && pwd)"
+for lib in "$BBW_LIB"/*.sh; do
+  # shellcheck disable=SC1090
+  . "$lib"
+done
+
+usage() {
+  cat <<'EOF'
+bbw — wake the session that owns a Bitbucket PR, once per real change.
+
+  bbw setup [--non-interactive] [--rotate] [--claude]
+  bbw doctor [--quiet]
+  bbw subscribe (WS/REPO PR | --branch B [--repo WS/REPO]) --session ID [--harness NAME] [--head SHA]
+  bbw unsubscribe WS/REPO PR --session ID
+  bbw ignore-comment WS/REPO PR COMMENT_ID --session ID
+  bbw list [--session ID]
+  bbw wait --session ID [--timeout S]
+  bbw status [WS/REPO PR]
+  bbw daemon run|once|start|stop
+  bbw uninstall --claude
+  bbw --version
+EOF
+}
+
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  --version|version) echo "bbw $BBW_VERSION" ;;
+  help|-h|--help) usage ;;
+  *)
+    fn="cmd_$(printf '%s' "$cmd" | tr '-' '_')"
+    if [ "$(type -t "$fn" 2>/dev/null)" = "function" ]; then
+      "$fn" "$@"
+    else
+      echo "bbw: unknown command '$cmd'" >&2
+      exit 64
+    fi
+    ;;
+esac
