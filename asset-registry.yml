@@ -1010,6 +1010,24 @@ assets:
       automatic port allocation, managed .env sections, and Docker-based services (PostgreSQL, S3, custom). Use when
       onboarding a project for parallel-branch development or Claude Code worktrees.
     category: devx-and-agentic
+  - path: skills/apiconv/
+    type: skill
+    category: tools-and-configurations
+    tags:
+      - docker
+      - testing
+      - tooling
+      - verification
+    description: >-
+      Convert Insomnia v4 export collections into Postman (Collection v2.1) and Bruno (.bru) collections, then prove the
+      three agree. `convert` is deterministic (two runs give byte-identical files) and aborts on any construct it cannot
+      map; `verify` parses the output back with each client's own library (postman-collection SDK plus the official JSON
+      schema, @usebruno/lang) and requires deep equality with the Insomnia source, request by request, with secrets
+      redacted in diffs; `runtime-check.sh` sends a read-only plan of requests through newman and bru against a live API
+      and requires the same HTTP status from both. Docker-only, nothing needs host Node. Use when shipping an API
+      collection to people who use another client, converting an Insomnia collection to Postman or Bruno, checking
+      collection parity across clients, or generating .bru files. Triggers on "Insomnia", "Postman", "Bruno", ".bru",
+      "convert collection", "collection parity", "newman", "bru run".
   - path: skills/app-version-surface/
     type: skill
     tags:

@@ -1,0 +1,15 @@
+{
+  "name": "apiconv",
+  "private": true,
+  "type": "module",
+  "description": "Deterministic Insomnia v4 export to Postman v2.1 and Bruno conversion, with a round-trip verifier.",
+  "dependencies": {
+    "@usebruno/cli": "4.3.0",
+    "@usebruno/lang": "0.41.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "newman": "6.2.3",
+    "postman-collection": "5.3.1",
+    "ajv-draft-04": "1.0.0"
+  }
+}
