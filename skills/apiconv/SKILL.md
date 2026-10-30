@@ -69,7 +69,9 @@ skills/apiconv/scripts/apiconv.sh verify  <bundle-dir> <identity-file-name> <ide
 ```
 
 The launcher builds a `node:22-alpine` image tagged by the hash of its sources. Editing a tool file rebuilds
-it on the next run; nothing else does. Dependencies are pinned by `package-lock.json`.
+it on the next run; nothing else does. Dependencies are pinned by `package-lock.json`. The full list of host
+tools, image packages and network calls is in `references/dependencies.md`; read it only when installing,
+debugging a build, or running offline.
 
 `APICONV_LABEL` prefixes the Postman environment names. Unset, the environment of identity `demo` is named
 `staging — demo`; with `APICONV_LABEL="Acme"` it is `Acme staging — demo`. The Postman environment id derives
