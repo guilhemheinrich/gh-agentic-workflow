@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/bitbucket-pr-watch-push.sh" }]
+      },
+      {
+        "matcher": "mcp__bitbucket__add_pull_request_comment",
+        "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/bitbucket-pr-watch-comment.sh" }]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/bitbucket-pr-watch-session-start.sh" }]
+      }
+    ]
+  }
+}
