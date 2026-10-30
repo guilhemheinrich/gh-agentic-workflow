@@ -26,9 +26,11 @@ diff_snapshots() {
         (select($o.head != $n.head and (own($n.head) | not))
          | {kind: "head", wake: true, urgent: false,
             text: "\($id) new commit \($n.head[0:7]) pushed outside this session"}),
-        # commit statuses (pipelines and external builds)
+        # commit statuses (pipelines and external builds). Statuses belong to
+        # a commit: on a new head every status is new, so a build that fails
+        # again on the fix commit still wakes.
         ($n.statuses | to_entries[] | .key as $k | .value as $s
-         | ($o.statuses[$k].state // "new") as $was
+         | (if $o.head == $n.head then ($o.statuses[$k].state // "new") else "new" end) as $was
          | select($was != $s.state)
          | {kind: "status", wake: ($s.state | terminal), urgent: ($s.state == "FAILED"),
             text: "\($id) pipeline \"\($s.name)\" \($was)→\($s.state) · \($n.url)"}),

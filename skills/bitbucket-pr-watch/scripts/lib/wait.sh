@@ -21,18 +21,44 @@ cmd_wait() {
     shift
   done
   [ -n "$session" ] || { echo "bbw wait: --session is required" >&2; return 64; }
+
+  # One doorbell per session: two waits would both deliver the same line and
+  # both advance the cursor, losing the next one. A second wait exits at once.
+  local lock pid
+  lock="$(bbw_state_dir)/waits/$(safe_name "$session").lock"
+  mkdir -p "$(dirname "$lock")"
+  if ! mkdir "$lock" 2>/dev/null; then
+    pid="$(cat "$lock/pid" 2>/dev/null)"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      echo "already waiting (pid $pid)"
+      return 4
+    fi
+    rm -rf "$lock"
+    mkdir "$lock" 2>/dev/null || { echo "already waiting"; return 4; }
+  fi
+  printf '%s\n' "$$" >"$lock/pid"
+  # shellcheck disable=SC2064
+  trap "rm -rf '$lock'" EXIT
+  trap 'exit 143' INT TERM
+
   start="$(date +%s)"
   while :; do
     lines="$(events_unread "$session")"
+    # The daemon appends the released lines before it drops the queue, and
+    # closes the subscription before it releases: once the session has no
+    # work left, a second read sees anything released in between.
+    if [ -z "$lines" ] && ! session_has_work "$session"; then
+      lines="$(events_unread "$session")"
+      if [ -z "$lines" ]; then
+        echo "no open subscription"
+        return 3
+      fi
+    fi
     if [ -n "$lines" ]; then
       n="$(printf '%s\n' "$lines" | wc -l | tr -d ' ')"
       printf '%s\n' "$lines" | jq -r '.text'
       events_ack "$session" "$n"
       return 0
-    fi
-    if ! session_has_work "$session"; then
-      echo "no open subscription"
-      return 3
     fi
     if [ -n "$timeout" ] && [ $(( $(date +%s) - start )) -ge "$timeout" ]; then
       return 2

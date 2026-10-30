@@ -56,6 +56,11 @@ daemon_resolve_pending() {
         continue
       fi
       pr="$(pr_for_branch "$repo" "$branch" 2>/dev/null)"
+      case $? in
+        0) ;;
+        10) daemon_log "auth error: credential rejected"; continue ;;
+        *) daemon_log "branch lookup error $repo@$branch"; continue ;;
+      esac
       [ -n "$pr" ] || continue
       cmd_subscribe "$repo" "$pr" --branch "$branch" --session "$session" --harness "$harness" >/dev/null \
         && daemon_log "pending $repo@$branch resolved to #$pr for $session"
@@ -81,9 +86,15 @@ daemon_once() {
     tmp="$snap.new"
     snapshot_fetch "$repo" "$pr" "$snap" >"$tmp" 2>/dev/null; rc=$?
     if [ "$rc" = 10 ]; then
+      # 401: the credential itself is rejected; every other call would fail too.
       daemon_log "auth error: credential rejected"
       rm -f "$tmp"
       break
+    elif [ "$rc" = 14 ]; then
+      # 403: valid credential, no access to this repo; the others still poll.
+      daemon_log "no access to $repo#$pr (403)"
+      rm -f "$tmp"
+      continue
     elif [ "$rc" != 0 ]; then
       daemon_log "fetch error $repo#$pr (code $rc)"
       rm -f "$tmp"
@@ -132,22 +143,36 @@ daemon_any_running() {
   return 1
 }
 
+# daemon_pid_is_ours PID — PID is alive AND runs `bbw daemon run`. After a
+# reboot the pidfile may name a PID reused by an unrelated process.
+daemon_pid_is_ours() {
+  local cmd
+  kill -0 "$1" 2>/dev/null || return 1
+  cmd="$(ps -p "$1" -o command= 2>/dev/null)"
+  [ -n "$cmd" ] || cmd="$(tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null)"
+  case "$cmd" in *"daemon run"*) return 0 ;; esac
+  return 1
+}
+
 daemon_run() {
   local pidfile pid
   pidfile="$(bbw_state_dir)/daemon.pid"
   if [ -f "$pidfile" ]; then
     pid="$(cat "$pidfile")"
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    if [ -n "$pid" ] && daemon_pid_is_ours "$pid"; then
       echo "already running (pid $pid)"
       return 1
     fi
   fi
   printf '%s\n' "$$" >"$pidfile"
+  # `sleep & wait` so TERM from launchd runs the trap at once instead of after
+  # the sleep, and the pidfile does not go stale.
   trap 'rm -f "$pidfile"; exit 0' INT TERM
   daemon_log "daemon started (pid $$)"
   while :; do
     daemon_once || true
-    if daemon_any_running; then sleep "${BBW_FAST_POLL_SECONDS:-20}"; else sleep "${BBW_POLL_SECONDS:-60}"; fi
+    if daemon_any_running; then sleep "${BBW_FAST_POLL_SECONDS:-20}" & else sleep "${BBW_POLL_SECONDS:-60}" & fi
+    wait $!
   done
 }
 
@@ -181,8 +206,9 @@ cmd_daemon() {
   case "${1:-}" in
     run) daemon_run ;;
     once) daemon_once ;;
+    alive) daemon_alive ;;
     start) daemon_start ;;
     stop) daemon_stop ;;
-    *) echo "bbw daemon run|once|start|stop" >&2; return 64 ;;
+    *) echo "bbw daemon run|once|alive|start|stop" >&2; return 64 ;;
   esac
 }

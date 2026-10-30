@@ -49,8 +49,17 @@ claude_uninstall() {
   local settings hooks_dir
   settings="$(claude_settings)"; hooks_dir="$(claude_hooks_dir)"
   if [ -f "$settings" ]; then
-    jq '(.hooks // {}) |= with_entries(.value |= map(select(any(.hooks[]?; .command | test("bitbucket-pr-watch-")) | not))
-         | select(.value | length > 0))' "$settings" >"$settings.tmp" && mv "$settings.tmp" "$settings"
+    # Settings first: deleting the scripts while settings still names them
+    # would make every later tool call report a hook error.
+    if ! jq 'if has("hooks") then
+               .hooks |= (with_entries(.value |= map(select(any(.hooks[]?; (.command? // "") | test("bitbucket-pr-watch-")) | not)))
+                          | with_entries(select(.value | length > 0)))
+             else . end' "$settings" >"$settings.tmp"; then
+      rm -f "$settings.tmp"
+      echo "bbw: could not edit $settings; nothing removed" >&2
+      return 1
+    fi
+    mv "$settings.tmp" "$settings"
   fi
   rm -f "$hooks_dir"/bitbucket-pr-watch-*.sh
   echo "Claude hooks removed"

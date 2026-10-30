@@ -97,10 +97,12 @@ repo_from_remote() {
 }
 
 # pr_for_branch WS/REPO BRANCH — print the open PR id, or nothing.
+# Returns bb_get's code when the lookup itself fails.
 pr_for_branch() {
-  local q
+  local q body
   q="$(urlencode "source.branch.name=\"$2\" AND state=\"OPEN\"")"
-  bb_get "repositories/$1/pullrequests?q=$q" | jq -r '.values[0].id // empty'
+  body="$(bb_get "repositories/$1/pullrequests?q=$q")" || return $?
+  printf '%s' "$body" | jq -r '.values[0].id // empty'
 }
 
 cmd_subscribe() {

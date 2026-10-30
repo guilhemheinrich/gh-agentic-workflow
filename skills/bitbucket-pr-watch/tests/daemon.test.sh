@@ -74,9 +74,11 @@ check "a rejected credential is logged" 'grep -q "auth error: credential rejecte
 check "a rejected credential wakes nobody" '[ "$(unread s3)" = "$before" ]'
 
 # Single instance.
-sleep 30 & live=$!
+printf 'sleep 30\n' >"$WORK/fakebbw"
+bash "$WORK/fakebbw" daemon run & live=$!
+sleep 0.3
 printf '%s\n' "$live" >"$BBW_STATE_DIR/daemon.pid"
-out="$("$BBW" daemon run 2>&1)"; rc=$?
+out="$(timeout 5 "$BBW" daemon run 2>&1)"; rc=$?
 kill "$live" 2>/dev/null
 check "a second daemon refuses to start" '[ "$rc" = 1 ] && [ "$out" = "already running (pid $live)" ]' "rc=$rc $out"
 

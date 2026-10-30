@@ -79,6 +79,7 @@ cmd_doctor() {
     case "$rc" in
       0) report ok "credential accepted by Bitbucket" ;;
       10) report FAIL "credential rejected ($BB_HTTP_CODE)" ;;
+      14) report FAIL "credential lacks a scope (403): see bbw setup for the three read scopes" ;;
       *) report FAIL "Bitbucket API unreachable (HTTP $BB_HTTP_CODE)" ;;
     esac
   else

@@ -41,8 +41,10 @@ one "approval wakes" '.participants["acc-1"] = {name:"Julien Boutet",state:"appr
 one "changes requested wakes" '.participants["acc-1"] = {name:"Julien Boutet",state:"changes_requested"}' review true false \
   "modelo-bill-e#229 Julien Boutet requested changes"
 one "conflict appears" '.conflict = true' conflict true false "modelo-bill-e#229 merge conflict appeared"
-one "foreign head wakes" '.head = "999888777666"' head true false \
-  "modelo-bill-e#229 new commit 9998887 pushed outside this session"
+# A new head also makes every status "new" (statuses belong to a commit), so
+# head cases look at the head line and at wake lines only.
+out="$(diff_with '.head = "999888777666"')"
+check "foreign head wakes" '[ "$(printf "%s" "$out" | jq -r "select(.kind == \"head\") | [.wake, .text] | @tsv")" = "$(printf "true\tmodelo-bill-e#229 new commit 9998887 pushed outside this session")" ]' "$out"
 one "merge wakes" '.state = "MERGED"' state true false "modelo-bill-e#229 merged"
 one "decline wakes" '.state = "DECLINED"' state true false "modelo-bill-e#229 declined"
 one "supersede wakes" '.state = "SUPERSEDED"' state true false "modelo-bill-e#229 superseded"
@@ -62,7 +64,7 @@ out="$(diff_with '.head = "abc123def456"')"
 check "unchanged head yields nothing" '[ -z "$out" ]' "$out"
 base >"$WORK/old.json"; jq '.head = "000000000000"' "$WORK/old.json" >"$WORK/o2.json"; mv "$WORK/o2.json" "$WORK/old.json"
 out="$(diff_with '.head = "abc123def456"')"
-check "own head (short hash vs full hash) yields nothing" '[ -z "$out" ]' "$out"
+check "own head (short hash vs full hash) wakes nobody" '[ -z "$(printf "%s" "$out" | jq -c "select(.wake)")" ]' "$out"
 base >"$WORK/old.json"
 out="$(diff_with '.comments["4500"].author = "Guilhem Heinrich"')"
 check "comment edit yields nothing" '[ -z "$out" ]' "$out"

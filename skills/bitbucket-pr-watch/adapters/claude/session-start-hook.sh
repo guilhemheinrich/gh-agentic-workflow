@@ -17,7 +17,9 @@ payload="$(cat)"
 session="$(printf '%s' "$payload" | jq -r '.session_id // empty')"
 [ -n "$session" ] || exit 0
 
-bash "$BBW" doctor --quiet >/dev/null 2>&1 || bash "$BBW" daemon start >/dev/null 2>&1 || true
+# Heartbeat only: no network call at session start, and a network or
+# credential failure never restarts a healthy daemon.
+bash "$BBW" daemon alive >/dev/null 2>&1 || bash "$BBW" daemon start >/dev/null 2>&1 || true
 
 prs="$(bash "$BBW" list --session "$session" 2>/dev/null | awk '{print $1}' | tr '\n' ' ' | sed 's/ $//')"
 [ -n "$prs" ] || exit 0

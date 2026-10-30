@@ -4,7 +4,8 @@
 BBW_API_BASE="${BBW_API_BASE:-https://api.bitbucket.org/2.0}"
 
 # bb_get PATH_OR_URL — print the response body on stdout.
-# Returns 0 on 2xx, 10 on 401/403 (stderr "auth"), 11 on 404, 12 on 429 that
+# Returns 0 on 2xx, 10 on 401 (credential rejected, stderr "auth"), 14 on 403
+# (credential valid but no access to that resource), 11 on 404, 12 on 429 that
 # persists after one Retry-After wait, 13 on any other failure. Sets
 # BB_HTTP_CODE when not run in a subshell. The credential travels in a curl
 # config read from stdin (-K -), never in argv, so `ps` and logs never see it.
@@ -28,7 +29,8 @@ bb_get() {
   BB_HTTP_CODE="$code"
   case "$code" in
     2??) cat "$body"; rm -f "$body" "$hdr"; return 0 ;;
-    401|403) echo "auth" >&2; rm -f "$body" "$hdr"; return 10 ;;
+    401) echo "auth" >&2; rm -f "$body" "$hdr"; return 10 ;;
+    403) rm -f "$body" "$hdr"; return 14 ;;
     404) rm -f "$body" "$hdr"; return 11 ;;
     429) rm -f "$body" "$hdr"; return 12 ;;
     *) rm -f "$body" "$hdr"; return 13 ;;
