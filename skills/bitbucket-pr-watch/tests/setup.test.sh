@@ -35,6 +35,7 @@ check "--rotate replaces the token" 'grep -q "tok-NEW-456" "$ENVF" && ! grep -q 
 mkdir -p "$WORK/fx"
 use_fixture "$WORK/fx"
 printf '{"display_name":"Dev"}' >"$WORK/fx/user.json"
+mkdir -p "$BBW_STATE_DIR" && date -u +%s >"$BBW_STATE_DIR/heartbeat"
 out="$("$BBW" doctor 2>&1)"; rc=$?
 check "doctor accepts a valid credential" 'printf "%s" "$out" | grep -q "^ok credential accepted" && [ "$rc" = 0 ]' "rc=$rc $out"
 check "doctor never prints the token" '! printf "%s" "$out" | grep -q "SECRET"' "$out"
