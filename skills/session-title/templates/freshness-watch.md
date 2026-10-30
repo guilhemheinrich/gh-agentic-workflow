@@ -14,9 +14,20 @@ If neither exists, stop.
 
 ## Once, at start
 
-Rename this session to `🛰️ Session title watcher` with
-`mcp__ccd_session_mgmt__set_session_title` (`session_id: "self"`). That title
-is not built from the templates, so no sweep ever repaints it.
+1. Run `bash "$ST" watcher-status`. If it prints `"state":"alive"` with a
+   `local` id that is not this session's, another watcher already runs: end
+   with one line saying so, and arm nothing. Two watchers would rename every
+   session twice.
+2. Call `mcp__ccd_session_mgmt__detach_session` with `session_id: "self"`.
+   A watcher started from another session (the card that
+   `session-title-watcher-check.sh` proposes) would otherwise report each
+   wake back to it, and be archived along with it. An error saying the
+   session was not started by another one is fine: carry on. An error saying
+   it shares its parent's checkout means it was started without its own
+   worktree: tell the user in one line, then carry on.
+3. Rename this session to `🛰️ Session title watcher` with
+   `mcp__ccd_session_mgmt__set_session_title` (`session_id: "self"`). That
+   title is not built from the templates, so no sweep ever repaints it.
 
 ## Arm the trigger
 

@@ -21,6 +21,7 @@
 #   session-title.sh watch [--interval S] [--once] [--session LOCAL_ID]
 #                                                   # agent-free trigger: one line per new rename the sweep wants;
 #                                                   # --session excludes the watcher's own session
+#   session-title.sh watcher-status                 # {state: alive|down|never|off, ageSeconds, local}
 #   session-title.sh cron                           # cron expression of the freshness sweep
 #   session-title.sh config                         # effective user config
 #   session-title.sh progress --session ID [--repo DIR]  # live "🔨 D/T" title, or nothing
@@ -69,6 +70,7 @@ elif [[ -n "${APPDATA:-}" ]]; then
   APP_DIR="$(cygpath -u "$APPDATA" 2>/dev/null || printf '%s' "$APPDATA")/Claude/claude-code-sessions"
 else APP_DIR="$HOME/Library/Application Support/Claude/claude-code-sessions"; fi
 WATCHER_FILE="$CACHE_DIR/watcher.json"
+HEARTBEAT_FILE="$CACHE_DIR/watch-heartbeat.json"
 
 die() { printf 'session-title: %s\n' "$*" >&2; exit 1; }
 
@@ -635,6 +637,10 @@ case "$cmd" in
     [[ -f "$seen_file" ]] || { scope=""; : >"$seen_file"; }
     trap 'rm -f "$snap" "$seen_file.$$"' EXIT
     while :; do
+      # Heartbeat: proves a watcher is alive to `watcher-status`, without ps
+      # (absent from Git Bash on Windows).
+      jq -n --argjson at "$(date +%s)" --argjson i "$interval" --arg l "$session" \
+        '{at: $at, interval: $i, local: $l}' >"$HEARTBEAT_FILE" 2>/dev/null || true
       snapshot "$scope" >"$snap" || echo '[]' >"$snap"
       scope=6
       # The watcher's own session never counts: each wake re-titles it, so it
@@ -650,6 +656,26 @@ case "$cmd" in
       fi
       sleep "$interval"
     done
+    ;;
+  watcher-status)
+    # Is a freshness watcher alive on this machine? Read from the heartbeat
+    # that each `watch` pass writes. Between a `--once` exit and its relaunch
+    # the watcher agent renames for a minute or two and writes nothing, so the
+    # heartbeat may lag up to 3 intervals plus 5 minutes before "down".
+    #   off   — freshness disabled in the user config
+    #   never — no watcher ever ran here (a fresh device)
+    #   down  — the heartbeat stopped: the app quit, or the watcher was archived
+    #   alive — a watch pass ran recently
+    now="$(date +%s)"
+    if ! freshness_on; then jq -nc '{state: "off"}'
+    elif [[ ! -s "$HEARTBEAT_FILE" ]]; then jq -nc '{state: "never"}'
+    else
+      jq -c --argjson now "$now" '
+        ($now - (.at // 0)) as $age
+        | {state: (if $age <= (3 * (.interval // 60) + 300) then "alive" else "down" end),
+           ageSeconds: $age, local: (.local // "")}' "$HEARTBEAT_FILE" 2>/dev/null \
+        || jq -nc '{state: "down"}'
+    fi
     ;;
   progress)
     # Mid-turn live counter: prints the new "🔨 À implémenter D/T" title when

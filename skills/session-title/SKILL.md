@@ -41,6 +41,7 @@ the agent is doing — it names what the **human** does next.
 | `session-title-ask.sh` (PreToolUse hook, `AskUserQuestion`) | before a click-to-answer question, denies the call **once** so the agent sets `decide` first |
 | the agent | judges the status, picks the topic of a free session, calls `set_session_title` |
 | `session-title.sh watch` (in a watcher session) | while sessions sit idle, wakes its agent only when an age dot or a merged PR changes a title |
+| `session-title-watcher-check.sh` (SessionStart hook) | when no watcher is alive on the machine, asks the agent to propose one as a card |
 
 The script proposes and the agent decides. The facts cannot tell a merged
 webhook (to test on staging) from a merged README (to close). Only the
@@ -286,9 +287,39 @@ The watcher wakes once, renames it, and sleeps until 11:00 (🟠). Each session
 costs at most 6 wakes, one per level change, against 288 runs a day for a
 5-minute scheduled task.
 
-**Start it once**: open a desktop session with the prompt "Read and follow
-~/.agents/skills/session-title/templates/freshness-watch.md". Leave it open.
-If a `session-title-freshness` scheduled task exists, disable it.
+**Starting it needs nothing from the human but a click.** Every new desktop
+session runs `session-title-watcher-check.sh` at start. The hook reads the
+heartbeat that each `watch` pass writes (`watch-heartbeat.json`, through
+`session-title.sh watcher-status`). When no watcher is alive, the agent of
+that session proposes one as a "New task" card. Example: on a fresh device,
+the first session opened shows a card titled "Guetteuse pastilles de
+fraîcheur"; one click starts the watcher.
+
+| `watcher-status` | Meaning | Hook |
+|---|---|---|
+| `never` | no watcher ever ran on this machine | proposes one |
+| `down` | heartbeat older than 3 intervals + 5 min: app restarted, watcher archived | proposes one |
+| `alive` | a `watch` pass ran recently | silent |
+| `off` | `"enabled": false` in the user config | silent |
+
+Three rules keep this from misfiring, all measured on 2026-10-29:
+
+1. **The watcher gets its own worktree.** A side session sharing its parent's
+   checkout cannot be detached ("A session that shares its parent's checkout
+   can't be moved to top level"), even when started in the main checkout.
+   The card therefore passes `use_worktree: true`.
+2. **The watcher detaches itself at start.** An attached watcher reports each
+   wake to the session that started it, which reopens a turn there every
+   5 minutes, and is archived along with it. `freshness-watch.md` calls
+   `detach_session("self")` first.
+3. **One watcher per machine.** The watcher checks `watcher-status` at start
+   and stands down when another one is alive. The hook proposes at most once
+   per `SESSION_TITLE_NAG_TTL` seconds (default 1800) machine-wide, so
+   opening five sessions shows one card, not five.
+
+By hand, open a desktop session with the prompt "Read and follow
+~/.agents/skills/session-title/templates/freshness-watch.md" and leave it
+open. If a `session-title-freshness` scheduled task exists, disable it.
 
 | Platform | Session files (`SESSION_TITLE_APP_DIR` overrides) |
 |---|---|
@@ -352,9 +383,29 @@ with `taskId: "session-title-freshness"`, the cron printed by
 
 ## Install (Claude Code, user scope)
 
+On a device that has never run it, asking an agent to "install the
+session-title skill" means these steps, in order:
+
+1. From a clone of this repository, run `bash install.sh` (macOS, Linux) or
+   `.\install.ps1` (Windows). It copies the skill, the five hooks, and
+   registers them. Check `jq` is installed: every hook exits silently without it.
+2. Check the copy: `bash ~/.agents/skills/session-title/scripts/session-title.sh watcher-status`
+   prints `{"state":"never"}` on a fresh device.
+3. If `mcp__scheduled-tasks__list_scheduled_tasks` shows a
+   `session-title-freshness` task, disable it: the watcher replaces it.
+4. Restart the desktop app, or open a new session: hooks load at session start.
+   That first session proposes the watcher card. Click it and leave the
+   watcher session open.
+5. Check: within 2 minutes, `watcher-status` prints `"state":"alive"`, and
+   the watcher session is titled `🛰️ Session title watcher` at top level of
+   the sidebar.
+
+An update is the same `install.sh` run. A running watcher keeps the old
+script in memory until its next wake relaunches `watch`.
+
 `install.sh` / `install.ps1` copy the skill to `~/.claude/skills/` (and to the
 other agent directories), copy `hooks/` to `~/.agents/hooks/` and `scripts/` to
-`~/.agents/scripts/`, then register the four hooks in `~/.claude/settings.json`
+`~/.agents/scripts/`, then register the five hooks in `~/.claude/settings.json`
 through `scripts/hooktools/merge-claude-hooks.cjs` (requires Node.js). The merge
 is idempotent and leaves every other setting and hook untouched; pass
 `--no-claude-hooks` (`-NoClaudeHooks` on PowerShell) to skip it. The manifest is
@@ -367,7 +418,8 @@ is idempotent and leaves every other setting and hook untouched; pass
     "Stop": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-sync.sh" }] }],
     "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-ask.sh" }] }],
     "PostToolUse": [{ "matcher": "Agent|Task|Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-progress.sh" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-working.sh" }] }]
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-working.sh" }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-watcher-check.sh" }] }]
   }
 }
 ```
@@ -388,6 +440,7 @@ session-title.sh forget --session <id>                                 # drop th
 session-title.sh sweep --sessions list-sessions.json                   # renames the freshness dot needs
 session-title.sh snapshot --days 6                                     # list_sessions-shaped JSON from the app's files
 session-title.sh watch --once --interval 60                            # exits on the first pending rename
+session-title.sh watcher-status                                        # alive, down, never or off, from the heartbeat
 session-title.sh cron                                                  # schedule from the user config
 session-title.sh config                                                # effective config, file path, cron
 ```
@@ -412,8 +465,9 @@ session-title.sh config                                                # effecti
    change with any app update. An empty or missing directory makes `watch`
    silent, never wrong. The Windows path is derived from `%APPDATA%` and has
    not been tested on a Windows machine yet.
-6. **The watcher session must stay open.** If the app quits or closes it,
-   no dot moves until it is started again.
+6. **The watcher session must stay open.** If the app quits or the watcher
+   is archived, no dot moves until it is started again. Nothing restarts it
+   by itself: the next session opened proposes a card, and a human clicks it.
 7. **Fallback only: each scheduled sweep is one agent run, on the app's
    default model.** A scheduled task cannot pick its model: all 3,412
    scheduled runs recorded on the author's machine ran on Opus with a 1M

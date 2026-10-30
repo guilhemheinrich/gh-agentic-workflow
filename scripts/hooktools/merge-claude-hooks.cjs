@@ -5,8 +5,9 @@
  *
  * Registers the hooks listed in a manifest into a Claude Code settings.json,
  * preserving every other key and every hook already present in the target.
- * Idempotent: a hook whose exact `command` already exists under the same event
- * is skipped, and the target is not rewritten when nothing changed.
+ * Idempotent: a hook whose `command` already exists under the same event is
+ * skipped (`~/` and `$HOME/` count as one spelling), and the target is not
+ * rewritten when nothing changed.
  *
  * Usage:
  *   node merge-claude-hooks.cjs --source <manifest.json> --target <settings.json>
@@ -45,6 +46,12 @@ function readJson(file, label) {
     console.error(`Error parsing JSON from ${file}: ${err.message}`);
     process.exit(1);
   }
+}
+
+// Spellings of one command: `bash ~/x`, `bash "$HOME/x"` and `bash $HOME/x`
+// run the same file, so a manual setup must not get the hook a second time.
+function commandKey(command) {
+  return command.replace(/"\$HOME\/([^"\s]*)"/g, '~/$1').replace(/\$HOME\//g, '~/');
 }
 
 function isObject(value) {
@@ -93,14 +100,14 @@ for (const [event, groups] of Object.entries(manifest.hooks)) {
   for (const group of targetGroups) {
     if (group && Array.isArray(group.hooks)) {
       for (const hook of group.hooks) {
-        if (hook && typeof hook.command === 'string') existingCommands.add(hook.command);
+        if (hook && typeof hook.command === 'string') existingCommands.add(commandKey(hook.command));
       }
     }
   }
 
   for (const group of groups) {
     const hooks = Array.isArray(group.hooks) ? group.hooks : [];
-    const wanted = hooks.filter((hook) => !(hook && existingCommands.has(hook.command)));
+    const wanted = hooks.filter((hook) => !(hook && existingCommands.has(commandKey(hook.command))));
     if (wanted.length === 0) continue;
 
     // Same matcher (both absent counts as equal): append to that group
@@ -113,7 +120,7 @@ for (const [event, groups] of Object.entries(manifest.hooks)) {
       targetGroups.push({ ...group, hooks: wanted });
     }
     for (const hook of wanted) {
-      existingCommands.add(hook.command);
+      existingCommands.add(commandKey(hook.command));
       added.push(`${event}${group.matcher ? ` [${group.matcher}]` : ''}: ${hook.command}`);
     }
   }
