@@ -82,6 +82,12 @@ out="$(timeout 5 "$BBW" daemon run 2>&1)"; rc=$?
 kill "$live" 2>/dev/null
 check "a second daemon refuses to start" '[ "$rc" = 1 ] && [ "$out" = "already running (pid $live)" ]' "rc=$rc $out"
 
+# A daemon waiting for its credential is alive: it still beats.
+rm -f "$BBW_STATE_DIR/heartbeat"
+env -u BITBUCKET_WATCH_TOKEN BBW_NOW=$((T0 + 300000)) BBW_ENV_FILE="$WORK/none" "$BBW" daemon once
+check "a missing credential is logged" 'grep -q "credential missing" "$BBW_STATE_DIR/daemon.log"'
+check "a daemon without credential still writes its heartbeat" '[ "$(cat "$BBW_STATE_DIR/heartbeat" 2>/dev/null)" = "$((T0 + 300000))" ]'
+
 # doctor sees the heartbeat.
 export BBW_POLL_SECONDS=60
 printf '%s\n' "$(date -u +%s)" >"$BBW_STATE_DIR/heartbeat"

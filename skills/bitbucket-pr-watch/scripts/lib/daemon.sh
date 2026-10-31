@@ -73,6 +73,10 @@ daemon_once() {
   now="$(bbw_now)"
   root="$(bbw_state_dir)"
   mkdir -p "$root/snapshots"
+  # The heartbeat says "the daemon runs", not "the credential works": doctor
+  # checks the credential separately, and a missing beat would make every
+  # SessionStart restart a daemon that is only waiting for `bbw setup`.
+  printf '%s\n' "$now" >"$root/heartbeat"
   if ! bbw_load_credentials 2>/dev/null; then
     daemon_log "credential missing: run bbw setup"
     return 1
