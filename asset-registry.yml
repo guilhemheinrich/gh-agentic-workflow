@@ -1046,6 +1046,26 @@ assets:
       model, writing authorization architecture decisions, or implementing/configuring OPA Rego policies or Casbin
       models, policies, adapters, and enforcers.
     category: architecture
+  - path: skills/bitbucket-pr-watch/
+    type: skill
+    tags:
+      - ci-cd
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Wake the agent session that owns a Bitbucket Cloud pull request when that PR really changes — a pipeline ends or
+      fails, a reviewer comments, approves or requests changes, a merge conflict appears, a commit lands from elsewhere,
+      the PR is merged or declined — at zero token cost outside that one session. Ships `scripts/bbw`, a bash/curl/jq
+      CLI whose launchd daemon polls the subscribed PRs read-only, diffs them, holds wake lines for a 30 s settle window
+      (failures go out at once) and appends them to a per-session events file; the session arms `bbw wait --session
+      <id>` as a background command and its exit is the wake. `bbw setup` stores a read-only Atlassian API token in a
+      0600 env file wired into bash, zsh and fish; `bbw doctor` verifies deps, credential, daemon and hooks. Defines the
+      three-point adapter contract any harness implements (subscribe on push, arm the wake, ensure the daemon) and ships
+      the Claude Code adapter as the worked example. Use when a session must learn about its PR without the human
+      checking Bitbucket, when installing or configuring the watcher on a machine, when building the adapter for another
+      harness (pi, Cursor, …), or when a session is woken by a `bbw wait` exit.
+    category: devx-and-agentic
   - path: skills/change-projection/
     type: skill
     tags:
