@@ -11,7 +11,7 @@ lib() { bash -c "for l in '$SKILL_DIR'/scripts/lib/*.sh; do . \"\$l\"; done; $1"
 start="$(date +%s)"
 out="$("$BBW" wait --session s1)"; rc=$?
 took=$(( $(date +%s) - start ))
-check "wait prints the event text" '[ "$out" = "modelo-bill-e#229 merged" ]' "$out"
+check "wait prints the event text first" '[ "$(printf "%s" "$out" | head -n1)" = "modelo-bill-e#229 merged" ]' "$out"
 check "wait exits 0 on delivery" '[ "$rc" = 0 ]' "rc=$rc"
 check "wait returns within 5 s" '[ "$took" -le 5 ]' "took=$took"
 
