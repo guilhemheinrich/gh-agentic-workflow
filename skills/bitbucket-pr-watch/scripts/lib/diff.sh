@@ -59,3 +59,41 @@ diff_snapshots() {
               if .value.path then " on \(.value.path):\(.value.line)" else "" end) (id \(.key))"})
       ] | .[]'
 }
+
+# build_transitions OLD_FILE NEW_FILE — one log text per status that moved on
+# a followed commit. Never a wake: the build phase wakes once, at its end.
+build_transitions() {
+  [ -f "$1" ] || return 0
+  jq -rn --slurpfile o "$1" --slurpfile n "$2" '
+    $o[0] as $o | $n[0] as $n
+    | $n.statuses | to_entries[] | ($o.statuses[.key].state // "new") as $was
+    | select($was != .value.state)
+    | "\($n.repo)@\($n.commit[0:7]) pipeline \"\(.value.name)\" \($was)→\(.value.state)"'
+}
+
+# build_verdict SNAPSHOT_FILE SUBSCRIPTION_JSON NOW — one {"urgent","text"}
+# line once the build phase of SUBSCRIPTION is over, nothing while it runs.
+# Over means: every status on the commit is terminal (one wake, urgent when
+# one FAILED), or no status appeared within BBW_BUILD_FIRST_SECONDS (a branch
+# without pipeline), or the phase outlived BBW_BUILD_MAX_SECONDS.
+build_verdict() {
+  jq -c --argjson sub "$2" --argjson now "$3" \
+    --argjson first "${BBW_BUILD_FIRST_SECONDS:-900}" --argjson max "${BBW_BUILD_MAX_SECONDS:-21600}" '
+    def terminal: . == "SUCCESSFUL" or . == "FAILED" or . == "STOPPED";
+    ($sub.repo | split("/") | last) as $r
+    | (if $sub.pr then "\($r)#\($sub.pr)" else $r end) as $id
+    | (if $sub.origin == "merge" then "after merge into \($sub.build_branch // "?")"
+       else "push to \($sub.build_branch // "?")" end) as $what
+    | "\($id) \($what) @\(($sub.commit // "unknown")[0:7])" as $head
+    | [.statuses[]?] as $st
+    | ($now - ($sub.build_since // $now)) as $age
+    | ([$st[] | "\"\(.name)\" \(.state)"] | join(", ")) as $list
+    | (([$st[] | select(.state == "FAILED") | .url] + [$st[] | .url]) | map(select(. != null)) | first) as $url
+    | if ($st | length) > 0 and all($st[]; .state | terminal) then
+        {urgent: any($st[]; .state == "FAILED"), text: "\($head): \($list)\(if $url then " · \($url)" else "" end)"}
+      elif ($st | length) == 0 and $age >= $first then
+        {urgent: false, text: "\($head): no pipeline reported within \($first / 60 | floor) min — watch closed"}
+      elif $age >= $max then
+        {urgent: false, text: "\($head): still running after \($max / 3600 | floor) h (\($list)) — watch closed"}
+      else empty end' "$1"
+}

@@ -70,6 +70,11 @@ cmd_wait() {
 # status_line SNAPSHOT_FILE — one human line from the last snapshot.
 status_line() {
   jq -r '
+    if .phase == "build" then
+      ((.repo | split("/") | last) + "@" + .commit[0:7]) as $id
+      | ([.statuses[] | "\(.name) \(.state)"] | join(", ")) as $st
+      | [$id + " build", (if $st != "" then $st else "no pipeline yet" end), "as of \(.fetched_at)"] | join(" · ")
+    else
     (.repo | split("/") | last) + "#" + (.pr | tostring) as $id
     | ([.statuses[] | "\(.name) \(.state)"] | join(", ")) as $st
     | ([.participants[] | if .state == "approved" then "approved by \(.name)" else "changes requested by \(.name)" end] | join(", ")) as $rv
@@ -80,14 +85,17 @@ status_line() {
       + ["\($nc) comment\(if $nc == 1 then "" else "s" end)",
          "conflict \(if .conflict then "YES" else "no" end)",
          "as of \(.fetched_at)"]
-    | join(" · ")' "$1"
+    | join(" · ")
+    end' "$1"
 }
 
 cmd_status() {
-  local filter repo pr snap
+  local filter repo pr snap targets
+  # A PR line, plus a build line while a commit is followed.
+  targets='(select(.pr != null) | "\(.repo) \(.pr)"), (select(.status == "build" and .commit != null) | "\(.repo) commit-\(.commit)")'
   case "${1:-}" in
-    --session) filter='.[] | select(.session == $s and .pr != null) | "\(.repo) \(.pr)"' ;;
-    "") repo="$(repo_from_remote)"; filter='.[] | select(.repo == $r and .pr != null) | "\(.repo) \(.pr)"' ;;
+    --session) filter=".[] | select(.session == \$s) | $targets" ;;
+    "") repo="$(repo_from_remote)"; filter=".[] | select(.repo == \$r) | $targets" ;;
     *) repo="$1"; pr="${2:-}" ;;
   esac
   if [ -n "${pr:-}" ]; then

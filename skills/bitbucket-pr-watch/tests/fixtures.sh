@@ -13,11 +13,12 @@ fx_put() { # URL_TAIL JSON [CODE]
   if [ -n "${3:-}" ]; then printf '%s' "$3" >"$FX/$k.code"; else rm -f "$FX/$k.code"; fi
 }
 
-# fx_pr STATE HEAD DEST PARTICIPANTS_JSON_ARRAY
+# fx_pr STATE HEAD DEST PARTICIPANTS_JSON_ARRAY [MERGE_COMMIT]
 fx_pr() {
   fx_put "repositories/$FX_REPO/pullrequests/$FX_PR" "$(jq -n \
-    --arg s "$1" --arg h "$2" --arg d "$3" --argjson p "${4:-[]}" '{
+    --arg s "$1" --arg h "$2" --arg d "$3" --argjson p "${4:-[]}" --arg m "${5:-}" '{
       id: 229, title: "Cockpit cascade filters", state: $s,
+      merge_commit: (if $m == "" then null else {hash: $m} end),
       source: {branch: {name: "feat/cascade"}, commit: {hash: $h}},
       destination: {branch: {name: "staging"}, commit: {hash: $d}},
       links: {html: {href: "https://bitbucket.org/septeo-immobilier/modelo-bill-e/pull-requests/229"}},

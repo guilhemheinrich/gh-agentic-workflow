@@ -37,17 +37,42 @@ snapshot_fetch() {
     ($p[0]) as $pr_ | {
       repo: $repo, pr: $pr, state: $pr_.state,
       head: $pr_.source.commit.hash, dest_head: $pr_.destination.commit.hash,
+      dest_branch: ($pr_.destination.branch.name // null), merge_commit: ($pr_.merge_commit.hash // null),
       title: $pr_.title, url: $pr_.links.html.href,
       participants: ([$pr_.participants[]?
         | {key: .user.account_id,
            value: {name: .user.display_name,
                    state: (if .approved then "approved" elif .state == "changes_requested" then "changes_requested" else null end)}}
         | select(.value.state != null)] | from_entries),
-      statuses: ([$s[0].values[]? | {key: .key, value: {name: .name, state: .state}}] | from_entries),
+      statuses: ([$s[0].values[]? | {key: .key, value: {name: .name, state: .state, updated: (.updated_on // null)}}] | from_entries),
       comments: ([$c[0][] | {key: (.id | tostring),
                    value: {author: .user.display_name, path: (.inline.path // null),
                            line: (.inline.to // .inline.from // null), deleted: (.deleted // false)}}] | from_entries),
       conflict: $conflict, fetched_at: $now }'
+  rc=$?
+  rm -rf "$t"
+  return "$rc"
+}
+
+# build_fetch WS/REPO COMMIT [PR_SNAPSHOT_FILE] — print the build snapshot of
+# one commit: the statuses Bitbucket Pipelines and external builds report on
+# it. A fast-forward merge keeps the PR head as the merge commit: a status the
+# PR phase already saw there, same key and same updated_on, is the finished
+# PR pipeline and must not pass for the branch pipeline, so it is dropped.
+build_fetch() {
+  local repo="$1" commit="$2" prsnap="${3:-}" t rc
+  t="$(mktemp -d)"
+  bb_get "repositories/$repo/commit/$commit/statuses?pagelen=100" >"$t/s" || { rc=$?; rm -rf "$t"; return "$rc"; }
+  if [ -n "$prsnap" ] && [ -f "$prsnap" ]; then cp "$prsnap" "$t/p"; else printf '{}' >"$t/p"; fi
+  jq -n --arg repo "$repo" --arg commit "$commit" --arg now "$(bbw_iso)" \
+    --slurpfile s "$t/s" --slurpfile p "$t/p" '
+    ($p[0]) as $p | ($p.head // "") as $h
+    | ($h != "" and (($h | startswith($commit)) or ($commit | startswith($h)))) as $same
+    | {repo: $repo, commit: $commit, phase: "build",
+       statuses: ([$s[0].values[]?
+         | select(($same and .updated_on != null and ($p.statuses[.key].updated // null) == .updated_on) | not)
+         | {key: .key, value: {name: .name, state: .state, url: (.url // null)}}] | from_entries),
+       fetched_at: $now}'
   rc=$?
   rm -rf "$t"
   return "$rc"

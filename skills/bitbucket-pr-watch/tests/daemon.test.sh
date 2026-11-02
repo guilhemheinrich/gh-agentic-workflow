@@ -42,12 +42,19 @@ check "the running pipeline is logged" 'grep -q "INPROGRESS" "$BBW_STATE_DIR/dae
 
 "$BBW" subscribe "$FX_REPO" 229 --session s2 >/dev/null
 : >"$FAKE_CURL_LOG"
-fx_pr MERGED abc123 def456 "[$(fx_participant acc-1 'Julien Boutet' true approved)]"
+fx_pr MERGED abc123 def456 "[$(fx_participant acc-1 'Julien Boutet' true approved)]" mrg999
+fx_statuses mrg999 '[{"key":"branch","name":"Pipeline staging","state":"INPROGRESS"}]'
 cycle $((T0 + 90))
 check "two sessions on one PR share one fetch" '[ "$(grep -c "pullrequests/229$" "$FAKE_CURL_LOG")" = 1 ]' "$(cat "$FAKE_CURL_LOG")"
+check "two sessions on one merge commit share one fetch" '[ "$(grep -c "commit/mrg999/statuses" "$FAKE_CURL_LOG")" = 1 ]' "$(cat "$FAKE_CURL_LOG")"
 check "merge is released at once to s1" 'lib "events_unread s1" | grep -q "modelo-bill-e#229 merged"'
 check "merge is released at once to s2" 'lib "events_unread s2" | grep -q "modelo-bill-e#229 merged"'
-check "merge closes both subscriptions" '[ "$(jq "[.[] | select(.status != \"closed\")] | length" "$SUBS")" = 0 ]'
+check "merge moves both subscriptions to the build phase" '[ "$(jq "[.[] | select(.status == \"build\" and .commit == \"mrg999\")] | length" "$SUBS")" = 2 ]' "$(cat "$SUBS")"
+lib 'events_ack s1 1'; lib 'events_ack s2 1'
+fx_statuses mrg999 '[{"key":"branch","name":"Pipeline staging","state":"SUCCESSFUL"}]'
+cycle $((T0 + 95))
+check "the merge pipeline end wakes both sessions" 'lib "events_unread s1" | jq -r .text | grep -q "after merge into staging @mrg999: .Pipeline staging. SUCCESSFUL" && lib "events_unread s2" | grep -q SUCCESSFUL' "$(lib "events_unread s1")"
+check "the build phase closes both subscriptions" '[ "$(jq "[.[] | select(.status != \"closed\")] | length" "$SUBS")" = 0 ]'
 
 : >"$FAKE_CURL_LOG"
 cycle $((T0 + 100))

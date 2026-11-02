@@ -2,9 +2,14 @@
 # store.sh — subscriptions, the lock that guards them, and per-session events.
 #
 # subscriptions.json is an array of
-#   {repo, pr|null, branch|null, session, harness, since, own_heads[],
-#    ignored_comments[], status: "pending"|"open"|"closed", pending_since}
-# keyed by (repo, pr, session) once open, (repo, branch, session) while pending.
+#   {repo, pr|null, branch|null, session, harness, since, since_epoch,
+#    own_heads[], ignored_comments[], pending_since,
+#    status: "pending"|"open"|"build"|"closed",
+#    commit, build_branch, build_since, origin: "merge"|"push"}
+# keyed by (repo, pr, session) once open, (repo, branch, session) while
+# pending. "build" follows the statuses of one commit until they end: the
+# merge commit of a merged PR (origin "merge"), or a pushed commit given to
+# `bbw subscribe --commit` (origin "push", pr null).
 
 store_file() { printf '%s/subscriptions.json\n' "$(bbw_state_dir)"; }
 
@@ -106,10 +111,11 @@ pr_for_branch() {
 }
 
 cmd_subscribe() {
-  local repo="" pr="" branch="" session="" harness="cli" head=""
+  local repo="" pr="" branch="" session="" harness="cli" head="" commit=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --branch) branch="$2"; shift ;;
+      --commit) commit="$2"; shift ;;
       --repo) repo="$2"; shift ;;
       --session) session="$2"; shift ;;
       --harness) harness="$2"; shift ;;
@@ -122,6 +128,22 @@ cmd_subscribe() {
   [ -n "$session" ] || { echo "bbw subscribe: --session is required" >&2; return 64; }
   [ -n "$repo" ] || repo="$(repo_from_remote)"
   [ -n "$repo" ] || { echo "bbw subscribe: no Bitbucket origin remote here; pass --repo WS/REPO" >&2; return 1; }
+  if [ -n "$commit" ]; then
+    # A push without PR (a direct push to staging, say): follow the statuses
+    # of that one commit until they end, like the merge commit of a PR.
+    case "$commit" in *[!0-9a-f]*) echo "bbw subscribe: --commit wants a hex SHA" >&2; return 64 ;; esac
+    store_update_jq '
+      if any(.[]; .repo == $repo and .status == "build" and .commit == $commit and .session == $session) then .
+      else . + [{repo: $repo, pr: null, branch: null, build_branch: (if $branch == "" then null else $branch end),
+                 commit: $commit, origin: "push", status: "build", build_since: $epoch,
+                 session: $session, harness: $harness, since: $now, since_epoch: $epoch,
+                 own_heads: [], ignored_comments: []}]
+      end' \
+      --arg repo "$repo" --arg commit "$commit" --arg branch "$branch" --arg session "$session" \
+      --arg harness "$harness" --arg now "$(bbw_iso)" --argjson epoch "$(bbw_now)" || return 1
+    echo "following $repo@${commit:0:12}"
+    return 0
+  fi
   if [ -z "$pr" ]; then
     [ -n "$branch" ] || { echo "bbw subscribe: give a PR number or --branch" >&2; return 64; }
     bbw_load_credentials || return 1
@@ -131,24 +153,24 @@ cmd_subscribe() {
 
   if [ -n "$pr" ]; then
     store_update_jq '
-      ([.[] | select(.repo == $repo and .pr == null and .branch == $branch and .session == $session and $branch != "")]
+      ([.[] | select(.repo == $repo and .status == "pending" and .branch == $branch and .session == $session and $branch != "")]
         | map(.own_heads) | add // []) as $carried
-      | map(select((.repo == $repo and .pr == null and .branch == $branch and .session == $session and $branch != "") | not))
+      | map(select((.repo == $repo and .status == "pending" and .branch == $branch and .session == $session and $branch != "") | not))
       | if any(.[]; .repo == $repo and .pr == $pr and .session == $session) then
           map(if .repo == $repo and .pr == $pr and .session == $session
               then .own_heads = ((.own_heads + $carried + [$head | select(. != "")]) | unique_by(.) ) | .status = "open"
               else . end)
         else . + [{repo: $repo, pr: $pr, branch: (if $branch == "" then null else $branch end),
-                   session: $session, harness: $harness, since: $now, status: "open",
+                   session: $session, harness: $harness, since: $now, since_epoch: $epoch, status: "open",
                    own_heads: (($carried + [$head | select(. != "")]) | unique_by(.)), ignored_comments: []}]
         end' \
       --arg repo "$repo" --argjson pr "$pr" --arg branch "$branch" --arg session "$session" \
-      --arg harness "$harness" --arg head "$head" --arg now "$(bbw_iso)" || return 1
+      --arg harness "$harness" --arg head "$head" --arg now "$(bbw_iso)" --argjson epoch "$(bbw_now)" || return 1
     echo "subscribed $repo#$pr"
   else
     store_update_jq '
-      if any(.[]; .repo == $repo and .pr == null and .branch == $branch and .session == $session) then
-        map(if .repo == $repo and .pr == null and .branch == $branch and .session == $session
+      if any(.[]; .repo == $repo and .status == "pending" and .branch == $branch and .session == $session) then
+        map(if .repo == $repo and .status == "pending" and .branch == $branch and .session == $session
             then .own_heads = ((.own_heads + [$head | select(. != "")]) | unique_by(.)) else . end)
       else . + [{repo: $repo, pr: null, branch: $branch, session: $session, harness: $harness,
                  since: $now, pending_since: $epoch, status: "pending",
@@ -162,6 +184,13 @@ cmd_subscribe() {
 
 cmd_unsubscribe() {
   local repo="$1" pr="$2" session=""
+  if [ "$pr" = "--commit" ]; then
+    [ "${4:-}" = "--session" ] && session="${5:-}"
+    [ -n "$session" ] || { echo "bbw unsubscribe: WS/REPO --commit SHA --session ID" >&2; return 64; }
+    store_update_jq 'map(select((.repo == $repo and .status == "build" and .commit == $c and .session == $session) | not))' \
+      --arg repo "$repo" --arg c "${3:-}" --arg session "$session"
+    return
+  fi
   [ "${3:-}" = "--session" ] && session="${4:-}"
   [ -n "$session" ] || { echo "bbw unsubscribe: WS/REPO PR --session ID" >&2; return 64; }
   store_update_jq 'map(select((.repo == $repo and .pr == $pr and .session == $session) | not))' \
@@ -181,6 +210,8 @@ cmd_list() {
   local session=""
   [ "${1:-}" = "--session" ] && session="${2:-}"
   store_subscriptions_jq -r '.[] | select(.status != "closed") | select($s == "" or .session == $s)
-    | if .pr == null then "\(.repo)@\(.branch) pending \(.session)" else "\(.repo)#\(.pr) \(.status) \(.session)" end' \
+    | if .status == "pending" then "\(.repo)@\(.branch) pending \(.session)"
+      elif .status == "build" then "\(.repo)\(if .pr then "#\(.pr)" else "" end) build \(.build_branch // "?")@\((.commit // "?")[0:12]) \(.session)"
+      else "\(.repo)#\(.pr) \(.status) \(.session)" end' \
     --arg s "$session"
 }

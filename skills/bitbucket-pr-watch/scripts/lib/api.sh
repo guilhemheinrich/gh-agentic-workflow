@@ -7,7 +7,7 @@ BBW_API_BASE="${BBW_API_BASE:-https://api.bitbucket.org/2.0}"
 # Returns 0 on 2xx, 10 on 401 (credential rejected, stderr "auth"), 14 on 403
 # (credential valid but no access to that resource), 11 on 404, 12 on 429 that
 # persists after one Retry-After wait, 13 on any other failure. Sets
-# BB_HTTP_CODE when not run in a subshell. The credential travels in a curl
+# BB_HTTP_CODE and BB_HTTP_URL when not run in a subshell. The credential travels in a curl
 # config read from stdin (-K -), never in argv, so `ps` and logs never see it.
 # -L: Bitbucket answers a PR diffstat with a 302 to the repository diffstat on
 # the same host (measured 2026-11-02); curl keeps the credential on same-host
@@ -29,7 +29,7 @@ bb_get() {
     fi
     break
   done
-  BB_HTTP_CODE="$code"
+  BB_HTTP_CODE="$code" BB_HTTP_URL="$url"
   case "$code" in
     2??) cat "$body"; rm -f "$body" "$hdr"; return 0 ;;
     401) echo "auth" >&2; rm -f "$body" "$hdr"; return 10 ;;

@@ -16,6 +16,26 @@ daemon_alive() {
 snapshot_path() { printf '%s/snapshots/%s__%s.json\n' "$(bbw_state_dir)" "$(printf '%s' "$1" | sed 's#/#__#g')" "$2"; }
 pending_path() { printf '%s/pending/%s\n' "$(bbw_state_dir)" "$(safe_name "$1")"; }
 
+# daemon_fetch_error RC LABEL SNAPSHOT — log one failed fetch with its HTTP
+# code and URL, and count it next to SNAPSHOT (SNAPSHOT.err) for doctor; a
+# success removes the count. Returns 1 when the credential itself is
+# rejected (401): every other call would fail too.
+daemon_fetch_error() {
+  local rc="$1" label="$2" err="$3.err" n url
+  n="$(jq -r '.count // 0' "$err" 2>/dev/null)" || n=0
+  case "$n" in ''|*[!0-9]*) n=0 ;; esac
+  url="${BB_HTTP_URL:-}"; url="${url#"$BBW_API_BASE"/}"
+  jq -cn --argjson n "$((n + 1))" --argjson rc "$rc" --arg http "${BB_HTTP_CODE:-}" \
+    --arg url "$url" --arg at "$(bbw_iso)" \
+    '{count: $n, code: $rc, http: $http, url: $url, last: $at}' >"$err"
+  case "$rc" in
+    10) daemon_log "auth error: credential rejected"; return 1 ;;
+    14) daemon_log "no access to $label (403)" ;;
+    *) daemon_log "fetch error $label (code $rc, HTTP ${BB_HTTP_CODE:-?} on $url)" ;;
+  esac
+  return 0
+}
+
 # daemon_hold SESSION NOW URGENT TEXT — queue one wake line for SESSION.
 daemon_hold() {
   local p; p="$(pending_path "$1")"
@@ -69,7 +89,7 @@ daemon_resolve_pending() {
 
 # daemon_once — one poll cycle over every open subscription.
 daemon_once() {
-  local now root pairs repo pr snap tmp rc sub session lines closed="" state
+  local now root pairs repo pr snap tmp rc sub session lines closed="" state mc db authfail=0
   now="$(bbw_now)"
   root="$(bbw_state_dir)"
   mkdir -p "$root/snapshots"
@@ -88,22 +108,15 @@ daemon_once() {
     [ -n "$repo" ] || continue
     snap="$(snapshot_path "$repo" "$pr")"
     tmp="$snap.new"
+    BB_HTTP_CODE="" BB_HTTP_URL=""
     snapshot_fetch "$repo" "$pr" "$snap" >"$tmp" 2>/dev/null; rc=$?
-    if [ "$rc" = 10 ]; then
-      # 401: the credential itself is rejected; every other call would fail too.
-      daemon_log "auth error: credential rejected"
+    if [ "$rc" != 0 ]; then
+      # 403 on one repo does not starve the others; 401 stops the cycle.
       rm -f "$tmp"
-      break
-    elif [ "$rc" = 14 ]; then
-      # 403: valid credential, no access to this repo; the others still poll.
-      daemon_log "no access to $repo#$pr (403)"
-      rm -f "$tmp"
-      continue
-    elif [ "$rc" != 0 ]; then
-      daemon_log "fetch error $repo#$pr (code $rc)"
-      rm -f "$tmp"
+      daemon_fetch_error "$rc" "$repo#$pr" "$snap" || { authfail=1; break; }
       continue
     fi
+    rm -f "$snap.err"
 
     while IFS= read -r sub; do
       session="$(printf '%s' "$sub" | jq -r '.session')"
@@ -123,6 +136,22 @@ EOF
     case "$state" in
       MERGED|DECLINED|SUPERSEDED)
         closed="$closed $(store_subscriptions_jq -r '.[] | select(.status == "open" and .repo == $r and .pr == $p) | .session' --arg r "$repo" --argjson p "$pr" | tr '\n' ' ')"
+        ;;
+    esac
+    case "$state" in
+      MERGED)
+        # The pipeline Bitbucket runs on the destination branch is the one
+        # that deploys: follow the merge commit until it ends.
+        mc="$(jq -r '.merge_commit // empty' "$snap")"
+        db="$(jq -r '.dest_branch // empty' "$snap")"
+        store_update_jq 'map(if .status == "open" and .repo == $r and .pr == $p
+            then .status = "build" | .origin = "merge" | .build_since = $now
+                 | .commit = (if $c == "" then null else $c end) | .build_branch = $b
+            else . end)' \
+          --arg r "$repo" --argjson p "$pr" --arg c "$mc" --arg b "$db" --argjson now "$now"
+        daemon_log "$repo#$pr MERGED — following merge commit ${mc:-(not known yet)} on ${db:-?}"
+        ;;
+      DECLINED|SUPERSEDED)
         store_update_jq 'map(if .status == "open" and .repo == $r and .pr == $p then .status = "closed" else . end)' \
           --arg r "$repo" --argjson p "$pr"
         daemon_log "$repo#$pr ${state} — subscriptions closed"
@@ -132,9 +161,76 @@ EOF
 $pairs
 EOF
 
+  BBW_BUILD_CLOSED=""
+  [ "$authfail" = 1 ] || daemon_builds "$now"
+
   # shellcheck disable=SC2086
-  daemon_release "$now" $closed
+  daemon_release "$now" $closed $BBW_BUILD_CLOSED
   printf '%s\n' "$now" >"$root/heartbeat"
+}
+
+# daemon_builds NOW — poll every followed commit (a merge commit after MERGED,
+# or a pushed commit from `bbw subscribe --commit`) and close each build-phase
+# subscription whose verdict is in. Appends to BBW_BUILD_CLOSED the sessions
+# whose wake line must be released in this cycle.
+daemon_builds() {
+  local now="$1" targets repo commit pr snap tmp rc sub session v prsnap
+  targets="$(store_subscriptions_jq -r '[.[] | select(.status == "build") | "\(.repo) \(.commit // "-") \(.pr // "-")"] | unique[]')"
+  while read -r repo commit pr; do
+    [ -n "$repo" ] || continue
+    if [ "$commit" = "-" ] && [ "$pr" != "-" ]; then
+      # MERGED without merge_commit yet: ask the PR again.
+      commit="$(bb_get "repositories/$repo/pullrequests/$pr" 2>/dev/null | jq -r '.merge_commit.hash // empty')"
+      if [ -n "$commit" ]; then
+        store_update_jq 'map(if .status == "build" and .repo == $r and .pr == $p and .commit == null then .commit = $c else . end)' \
+          --arg r "$repo" --argjson p "$pr" --arg c "$commit"
+      else
+        commit="-"
+      fi
+    fi
+    if [ "$commit" = "-" ]; then
+      # No commit to follow: only the "no pipeline" timeout can end it.
+      snap="$(snapshot_path "$repo" "pr-$pr-merge")"
+      printf '%s\n' '{"statuses":{}}' >"$snap"
+    else
+      snap="$(snapshot_path "$repo" "commit-$commit")"
+      tmp="$snap.new"
+      prsnap=""
+      [ "$pr" != "-" ] && prsnap="$(snapshot_path "$repo" "$pr")"
+      BB_HTTP_CODE="" BB_HTTP_URL=""
+      build_fetch "$repo" "$commit" "$prsnap" >"$tmp" 2>/dev/null; rc=$?
+      if [ "$rc" != 0 ]; then
+        rm -f "$tmp"
+        daemon_fetch_error "$rc" "$repo@$commit" "$snap" || break
+        continue
+      fi
+      rm -f "$snap.err"
+      build_transitions "$snap" "$tmp" | while IFS= read -r t; do daemon_log "$t"; done
+      mv "$tmp" "$snap"
+    fi
+
+    while IFS= read -r sub; do
+      [ -n "$sub" ] || continue
+      v="$(build_verdict "$snap" "$sub" "$now")"
+      [ -n "$v" ] || continue
+      session="$(printf '%s' "$sub" | jq -r '.session')"
+      daemon_hold "$session" "$now" "$(printf '%s' "$v" | jq '.urgent')" "$(printf '%s' "$v" | jq -r '.text')"
+      daemon_log "$(printf '%s' "$v" | jq -r '.text') -> $session"
+      store_update_jq 'map(if .status == "build" and .repo == $r and .session == $s
+          and (.commit // "-") == $c and (.pr // "-" | tostring) == $p then .status = "closed" else . end)' \
+        --arg r "$repo" --arg s "$session" --arg c "$commit" --arg p "$pr"
+      BBW_BUILD_CLOSED="$BBW_BUILD_CLOSED $session"
+    done <<EOF
+$(store_subscriptions_jq -c '.[] | select(.status == "build" and .repo == $r and (.commit // "-") == $c and (.pr // "-" | tostring) == $p)' --arg r "$repo" --arg c "$commit" --arg p "$pr")
+EOF
+    # Nobody follows this commit any more: drop its snapshot, so a build
+    # closed while still running does not keep the fast poll on forever.
+    if [ "$(store_subscriptions_jq '[.[] | select(.status == "build" and .repo == $r and (.commit // "-") == $c)] | length' --arg r "$repo" --arg c "$commit")" = 0 ]; then
+      rm -f "$snap" "$snap.err"
+    fi
+  done <<EOF
+$targets
+EOF
 }
 
 # daemon_any_running — some subscribed PR has a status still in progress.
@@ -142,7 +238,7 @@ daemon_any_running() {
   local f
   for f in "$(bbw_state_dir)/snapshots"/*.json; do
     [ -f "$f" ] || continue
-    jq -e '.state == "OPEN" and any(.statuses[]?; .state == "INPROGRESS")' "$f" >/dev/null 2>&1 && return 0
+    jq -e '(.state == "OPEN" or .phase == "build") and any(.statuses[]?; .state == "INPROGRESS")' "$f" >/dev/null 2>&1 && return 0
   done
   return 1
 }
@@ -158,17 +254,38 @@ daemon_pid_is_ours() {
   return 1
 }
 
+file_mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }
+
+# daemon_scripts — the files a running daemon has sourced.
+daemon_scripts() { printf '%s\n' "$(dirname "$BBW_LIB")/bbw" "$BBW_LIB"/*.sh; }
+
+# daemon_newer_script — print the first script modified after the daemon
+# loaded its code (the daemon.started marker), if any.
+daemon_newer_script() {
+  local m f
+  m="$(bbw_state_dir)/daemon.started"
+  [ -f "$m" ] && [ -n "${BBW_LIB:-}" ] || return 1
+  while IFS= read -r f; do
+    [ "$f" -nt "$m" ] && { printf '%s\n' "$f"; return 0; }
+  done <<EOF
+$(daemon_scripts)
+EOF
+  return 1
+}
+
 daemon_run() {
-  local pidfile pid
+  local pidfile pid changed
   pidfile="$(bbw_state_dir)/daemon.pid"
   if [ -f "$pidfile" ]; then
     pid="$(cat "$pidfile")"
-    if [ -n "$pid" ] && daemon_pid_is_ours "$pid"; then
+    # Our own pid is a re-exec, not a second daemon.
+    if [ -n "$pid" ] && [ "$pid" != "$$" ] && daemon_pid_is_ours "$pid"; then
       echo "already running (pid $pid)"
       return 1
     fi
   fi
   printf '%s\n' "$$" >"$pidfile"
+  : >"$(bbw_state_dir)/daemon.started"
   # `sleep & wait` so TERM from launchd runs the trap at once instead of after
   # the sleep, and the pidfile does not go stale.
   trap 'rm -f "$pidfile"; exit 0' INT TERM
@@ -177,7 +294,46 @@ daemon_run() {
     daemon_once || true
     if daemon_any_running; then sleep "${BBW_FAST_POLL_SECONDS:-20}" & else sleep "${BBW_POLL_SECONDS:-60}" & fi
     wait $!
+    # A long-running bash never re-sources its libraries: after an update on
+    # disk it would keep polling with the old code (2026-11-02: two hours of
+    # 302s from a pre-fix api.sh). Replace the process with the new code.
+    if changed="$(daemon_newer_script)"; then
+      daemon_log "scripts changed on disk ($changed) — re-exec (pid $$)"
+      exec "${BASH:-bash}" "$(dirname "$BBW_LIB")/bbw" daemon run
+    fi
   done
+}
+
+# daemon_health — one line per problem doctor must report: a target with
+# repeated fetch errors, a subscription the daemon never snapshotted, or a
+# daemon still running code older than the scripts on disk.
+daemon_health() {
+  local now poll repo key since snap f
+  now="$(date -u +%s)"
+  poll="${BBW_POLL_SECONDS:-60}"
+  store_subscriptions_jq -r '.[]
+      | select(.status == "open" or (.status == "build" and .commit != null))
+      | if .status == "open" then [.repo, (.pr | tostring), (.since_epoch // 0 | tostring)]
+        else [.repo, "commit-\(.commit)", (.build_since // 0 | tostring)] end
+      | @tsv' | sort -u \
+  | while IFS="$(printf '\t')" read -r repo key since; do
+      snap="$(snapshot_path "$repo" "$key")"
+      if [ -f "$snap.err" ] && [ "$(jq '.count' "$snap.err")" -ge "${BBW_DOCTOR_ERRORS:-3}" ]; then
+        jq -r --arg t "$repo $key" '"\($t): \(.count) consecutive fetch errors (code \(.code), HTTP \(.http) on \(.url)), last \(.last)"' "$snap.err"
+      elif [ ! -f "$snap" ] && [ $((now - since)) -gt $((3 * poll)) ]; then
+        echo "$repo $key: no snapshot yet, subscribed $((now - since)) s ago"
+      fi
+    done
+  # A change younger than three polls is the re-exec still to come.
+  [ -f "$(bbw_state_dir)/daemon.started" ] && [ -n "${BBW_LIB:-}" ] || return 0
+  while IFS= read -r f; do
+    if [ "$f" -nt "$(bbw_state_dir)/daemon.started" ] && [ $((now - $(file_mtime "$f"))) -gt $((3 * poll)) ]; then
+      echo "daemon runs code older than $f: bbw daemon stop && bbw daemon start"
+      return 0
+    fi
+  done <<EOF
+$(daemon_scripts)
+EOF
 }
 
 LAUNCHD_LABEL="com.bitbucket-pr-watch.daemon"

@@ -96,6 +96,15 @@ cmd_doctor() {
 
   if [ "$(type -t daemon_alive 2>/dev/null)" = "function" ]; then
     if daemon_alive; then report ok "daemon alive"; else report FAIL "daemon not running: bbw daemon start"; fi
+    # A live heartbeat is not a working watch: on 2026-11-02 the daemon beat
+    # for two hours while every fetch of the one subscribed PR failed.
+    out="$(daemon_health)"
+    if [ -z "$out" ]; then report ok "subscriptions fetched"
+    else
+      while IFS= read -r l; do report FAIL "$l"; done <<EOF
+$out
+EOF
+    fi
   else report skip "daemon check"; fi
 
   if [ "$(type -t claude_hooks_wired 2>/dev/null)" = "function" ]; then

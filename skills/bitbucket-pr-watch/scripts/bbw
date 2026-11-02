@@ -27,7 +27,8 @@ bbw — wake the session that owns a Bitbucket PR, once per real change.
   bbw setup [--non-interactive] [--rotate] [--claude]
   bbw doctor [--quiet]
   bbw subscribe (WS/REPO PR | --branch B [--repo WS/REPO]) --session ID [--harness NAME] [--head SHA]
-  bbw unsubscribe WS/REPO PR --session ID
+  bbw subscribe --commit SHA [--branch B] [--repo WS/REPO] --session ID
+  bbw unsubscribe WS/REPO (PR | --commit SHA) --session ID
   bbw ignore-comment WS/REPO PR COMMENT_ID --session ID
   bbw list [--session ID]
   bbw wait --session ID [--timeout S]

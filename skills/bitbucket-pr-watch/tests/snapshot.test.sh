@@ -14,9 +14,10 @@ fx_diffstat true
 lib "snapshot_fetch $FX_REPO $FX_PR" >"$WORK/snap.json"; rc=$?
 check "snapshot_fetch succeeds" '[ "$rc" = 0 ]' "rc=$rc"
 expected='{"repo":"septeo-immobilier/modelo-bill-e","pr":229,"state":"OPEN","head":"abc123","dest_head":"def456",
+ "dest_branch":"staging","merge_commit":null,
  "title":"Cockpit cascade filters","url":"https://bitbucket.org/septeo-immobilier/modelo-bill-e/pull-requests/229",
  "participants":{"acc-1":{"name":"Julien Boutet","state":"approved"}},
- "statuses":{"pr-analysis":{"name":"PR analysis","state":"INPROGRESS"}},
+ "statuses":{"pr-analysis":{"name":"PR analysis","state":"INPROGRESS","updated":null}},
  "comments":{"4521":{"author":"Julien Boutet","path":"src/a.ts","line":42,"deleted":false},
              "4522":{"author":"Guilhem Heinrich","path":null,"line":null,"deleted":true}},
  "conflict":true}'
