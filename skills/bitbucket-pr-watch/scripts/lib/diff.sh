@@ -17,7 +17,7 @@ diff_snapshots() {
     def terminal: . == "SUCCESSFUL" or . == "FAILED" or . == "STOPPED";
     def own($h): any($sub.own_heads[]?; . as $x | ($x | startswith($h)) or ($h | startswith($x)));
     $o[0] as $o | $n[0] as $n
-    | ($n.repo | split("/") | last) + "#" + ($n.pr | tostring) as $id
+    | (($n.repo | split("/") | last) + "#" + ($n.pr | tostring)) as $id
     | [
         # PR state
         (select($o.state != $n.state and ($n.state | IN("MERGED", "DECLINED", "SUPERSEDED")))

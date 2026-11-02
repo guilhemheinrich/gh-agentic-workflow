@@ -36,6 +36,34 @@ daemon_fetch_error() {
   return 0
 }
 
+# daemon_diff_all REPO PR OLD NEW — the transition lines of every open
+# subscription on REPO#PR, each tagged with its session, as JSONL on stdout.
+# On the first failed diff: log jq's own message, count it next to OLD
+# (OLD.differr) for doctor, and return 1 with nothing usable printed.
+daemon_diff_all() {
+  local repo="$1" pr="$2" old="$3" new="$4" sub session lines errf msg n
+  errf="$old.differr.msg"
+  while IFS= read -r sub; do
+    [ -n "$sub" ] || continue
+    session="$(printf '%s' "$sub" | jq -r '.session')"
+    if ! lines="$(diff_snapshots "$old" "$new" "$sub" 2>"$errf")"; then
+      msg="$(tr '\n' ' ' <"$errf" | cut -c1-300)"
+      rm -f "$errf"
+      n="$(jq -r '.count // 0' "$old.differr" 2>/dev/null)" || n=0
+      case "$n" in ''|*[!0-9]*) n=0 ;; esac
+      jq -cn --argjson n "$((n + 1))" --arg msg "$msg" --arg at "$(bbw_iso)" \
+        '{count: $n, msg: $msg, last: $at}' >"$old.differr"
+      daemon_log "diff error $repo#$pr (snapshot kept, retried next cycle): $msg"
+      return 1
+    fi
+    [ -n "$lines" ] && printf '%s\n' "$lines" | jq -c --arg s "$session" '. + {session: $s}'
+  done <<EOF
+$(store_subscriptions_jq -c '.[] | select(.status == "open" and .repo == $r and .pr == $p)' --arg r "$repo" --argjson p "$pr")
+EOF
+  rm -f "$errf"
+  return 0
+}
+
 # daemon_hold SESSION NOW URGENT TEXT — queue one wake line for SESSION.
 daemon_hold() {
   local p; p="$(pending_path "$1")"
@@ -118,18 +146,26 @@ daemon_once() {
     fi
     rm -f "$snap.err"
 
-    while IFS= read -r sub; do
-      session="$(printf '%s' "$sub" | jq -r '.session')"
-      lines="$(diff_snapshots "$snap" "$tmp" "$sub")"
-      [ -n "$lines" ] || continue
-      printf '%s\n' "$lines" | jq -r 'select(.wake | not) | .text' | while IFS= read -r t; do daemon_log "$t"; done
-      printf '%s\n' "$lines" | jq -c 'select(.wake)' | while IFS= read -r l; do
+    # Diff for every subscriber first, act only if all diffs succeeded. A
+    # failed diff must not advance the snapshot: on 2026-11-02 a jq 1.7
+    # parse difference failed every diff, the snapshot moved on anyway, and
+    # each comment and pipeline end was consumed without waking anyone.
+    if ! daemon_diff_all "$repo" "$pr" "$snap" "$tmp" >"$snap.lines"; then
+      rm -f "$tmp" "$snap.lines"
+      continue
+    fi
+    rm -f "$snap.differr"
+    while IFS= read -r l; do
+      [ -n "$l" ] || continue
+      session="$(printf '%s' "$l" | jq -r '.session')"
+      if [ "$(printf '%s' "$l" | jq '.wake')" = true ]; then
         daemon_hold "$session" "$now" "$(printf '%s' "$l" | jq '.urgent')" "$(printf '%s' "$l" | jq -r '.text')"
         daemon_log "$(printf '%s' "$l" | jq -r '.text') -> $session"
-      done
-    done <<EOF
-$(store_subscriptions_jq -c '.[] | select(.status == "open" and .repo == $r and .pr == $p)' --arg r "$repo" --argjson p "$pr")
-EOF
+      else
+        daemon_log "$(printf '%s' "$l" | jq -r '.text')"
+      fi
+    done <"$snap.lines"
+    rm -f "$snap.lines"
 
     state="$(jq -r '.state' "$tmp")"
     mv "$tmp" "$snap"
@@ -286,6 +322,10 @@ daemon_run() {
   fi
   printf '%s\n' "$$" >"$pidfile"
   : >"$(bbw_state_dir)/daemon.started"
+  # launchd appends stderr to daemon.out forever: remember where this run's
+  # output begins, so doctor reads only errors of the code now running.
+  wc -c <"$(bbw_state_dir)/daemon.out" 2>/dev/null | tr -d ' ' >"$(bbw_state_dir)/daemon.out.offset" \
+    || echo 0 >"$(bbw_state_dir)/daemon.out.offset"
   # `sleep & wait` so TERM from launchd runs the trap at once instead of after
   # the sleep, and the pidfile does not go stale.
   trap 'rm -f "$pidfile"; exit 0' INT TERM
@@ -304,6 +344,21 @@ daemon_run() {
   done
 }
 
+# daemon_out_errors — one line when the running daemon wrote an error to its
+# launchd stderr (daemon.out): a jq or bash error there means code that fails
+# outside every path the daemon logs itself.
+daemon_out_errors() {
+  local out off n last
+  out="$(bbw_state_dir)/daemon.out"
+  [ -f "$out" ] || return 0
+  off="$(cat "$(bbw_state_dir)/daemon.out.offset" 2>/dev/null)"
+  case "$off" in ''|*[!0-9]*) off=0 ;; esac
+  n="$(tail -c +"$((off + 1))" "$out" | grep -ci 'error')"
+  [ "${n:-0}" -gt 0 ] || return 0
+  last="$(tail -c +"$((off + 1))" "$out" | grep -i 'error' | tail -1 | cut -c1-200)"
+  echo "daemon.out: $n error line(s) since the daemon started, last: $last"
+}
+
 # daemon_health — one line per problem doctor must report: a target with
 # repeated fetch errors, a subscription the daemon never snapshotted, or a
 # daemon still running code older than the scripts on disk.
@@ -320,10 +375,13 @@ daemon_health() {
       snap="$(snapshot_path "$repo" "$key")"
       if [ -f "$snap.err" ] && [ "$(jq '.count' "$snap.err")" -ge "${BBW_DOCTOR_ERRORS:-3}" ]; then
         jq -r --arg t "$repo $key" '"\($t): \(.count) consecutive fetch errors (code \(.code), HTTP \(.http) on \(.url)), last \(.last)"' "$snap.err"
+      elif [ -f "$snap.differr" ]; then
+        jq -r --arg t "$repo $key" '"\($t): \(.count) failed diff(s), changes held back, last \(.last): \(.msg)"' "$snap.differr"
       elif [ ! -f "$snap" ] && [ $((now - since)) -gt $((3 * poll)) ]; then
         echo "$repo $key: no snapshot yet, subscribed $((now - since)) s ago"
       fi
     done
+  daemon_out_errors
   # A change younger than three polls is the re-exec still to come.
   [ -f "$(bbw_state_dir)/daemon.started" ] && [ -n "${BBW_LIB:-}" ] || return 0
   while IFS= read -r f; do
