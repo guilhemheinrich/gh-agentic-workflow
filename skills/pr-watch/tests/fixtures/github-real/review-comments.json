@@ -1,0 +1,22 @@
+[
+  {
+    "id": 4405206188,
+    "path": "acceptance/testdata/repo/repo-delete-private-forks.txtar",
+    "line": 15,
+    "original_line": 15,
+    "body": "🛑 Requirement: Poll for the fork count i",
+    "user": {
+      "login": "Copilot"
+    }
+  },
+  {
+    "id": 4406881516,
+    "path": "acceptance/testdata/repo/repo-delete-private-forks.txtar",
+    "line": 15,
+    "original_line": 15,
+    "body": "I mean, yeah but this is a problem with ",
+    "user": {
+      "login": "BagToad"
+    }
+  }
+]

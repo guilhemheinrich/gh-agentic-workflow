@@ -1046,28 +1046,6 @@ assets:
       model, writing authorization architecture decisions, or implementing/configuring OPA Rego policies or Casbin
       models, policies, adapters, and enforcers.
     category: architecture
-  - path: skills/bitbucket-pr-watch/
-    type: skill
-    tags:
-      - ci-cd
-      - claude
-      - hooks
-      - shell
-    description: >-
-      Wake the agent session that owns a Bitbucket Cloud pull request when that PR really changes — a pipeline ends or
-      fails, a reviewer comments, approves or requests changes, a merge conflict appears, a commit lands from elsewhere,
-      the PR is merged or declined, the pipeline the merge runs on the destination branch ends — at zero token cost
-      outside that one session; a pushed commit without PR can be followed the same way. Ships `scripts/bbw`, a bash/curl/jq
-      CLI whose launchd daemon polls the subscribed PRs read-only, diffs them, holds wake lines for a 30 s settle window
-      (failures go out at once) and appends them to a per-session events file; the session arms `bbw wait --session
-      <id>` as a background command and its exit is the wake. `bbw setup` stores a read-only Atlassian API token in a
-      0600 env file wired into bash, zsh and fish; `bbw doctor` verifies deps, credential, daemon, per-subscription
-      fetch health and hooks, and the daemon re-execs itself when its scripts change on disk. Defines the
-      three-point adapter contract any harness implements (subscribe on push, arm the wake, ensure the daemon) and ships
-      the Claude Code adapter as the worked example. Use when a session must learn about its PR without the human
-      checking Bitbucket, when installing or configuring the watcher on a machine, when building the adapter for another
-      harness (pi, Cursor, …), or when a session is woken by a `bbw wait` exit.
-    category: devx-and-agentic
   - path: skills/change-projection/
     type: skill
     tags:
@@ -1742,6 +1720,29 @@ assets:
       agent refuses to fill a password field, when adding a second environment or a second role to a suite, or when a
       storageState loads but the app still shows logged out.
     category: quality-assurance
+  - path: skills/pr-watch/
+    type: skill
+    tags:
+      - ci-cd
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Give the sessions of Claude Desktop (and any harness that re-invokes an idle session when a background command
+      exits) near-live news from the Git host that owns their pull request — Bitbucket Cloud and GitHub today, one
+      provider file per host. A session that pushed a branch hears, at zero token cost outside its own turn, when a
+      pipeline or check ends or fails, a reviewer comments, approves or requests changes, a merge conflict appears, a
+      commit lands from elsewhere, the PR is merged or declined, or the build the merge triggered ends. This skill is a
+      factory: invoking it instantiates the watcher on one machine — `prw plan` reads the machine (which hosts it pushes
+      to, which tokens exist, launchd or not, a legacy instance), `prw migrate` carries a legacy `bitbucket-pr-watch`
+      instance over, `prw setup` stores read-only tokens in one 0600 env file, `prw daemon start` installs the poller,
+      `prw setup --claude` registers the hooks. Ships `scripts/prw` (bash, curl, jq), the Bitbucket and GitHub providers
+      with their worked examples, the provider contract for adding a host, and the Claude Code adapter. Use when a
+      session must learn about its PR without the human checking the Git host, when instantiating or repairing the
+      watcher on a machine, when adding GitHub to a machine that already watches Bitbucket (or the reverse), when adding
+      a third host, or when a session is woken by a `prw wait` exit. Triggers on "pr watch", "prw", "réagir aux PR",
+      "news de GitHub / Bitbucket", "pipeline échoué", "commentaire de PR", "instancier le watcher".
+    category: devx-and-agentic
   - path: skills/project-philosophy/
     type: skill
     tags:
