@@ -75,7 +75,7 @@ status_line() {
       | ([.statuses[] | "\(.name) \(.state)"] | join(", ")) as $st
       | [$id + " build", (if $st != "" then $st else "no pipeline yet" end), "as of \(.fetched_at)"] | join(" · ")
     else
-    (.repo | split("/") | last) + "#" + (.pr | tostring) as $id
+    ((.repo | split("/") | last) + "#" + (.pr | tostring)) as $id
     | ([.statuses[] | "\(.name) \(.state)"] | join(", ")) as $st
     | ([.participants[] | if .state == "approved" then "approved by \(.name)" else "changes requested by \(.name)" end] | join(", ")) as $rv
     | ([.comments[] | select(.deleted | not)] | length) as $nc

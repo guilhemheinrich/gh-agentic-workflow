@@ -112,7 +112,7 @@ consecutive fetch errors), `pending/`, `events/`, `daemon.log`, `heartbeat`,
 | `bbw wait --session ID [--timeout S]` | block until a wake line; exit 0 with the lines, 2 on timeout, 3 when nothing is watched any more (PR declined, or the post-merge build phase ended), 4 when another wait already runs for this session (do not re-arm) |
 | `bbw status [--session ID \| WS/REPO PR]` | the last snapshot, one line per PR and per followed commit, no API call |
 | `bbw list [--session ID]` / `bbw unsubscribe WS/REPO (PR \| --commit SHA)` / `bbw ignore-comment` | maintenance; `list` shows `open`, `pending` or `build BRANCH@SHA` |
-| `bbw doctor [--quiet]` | deps, credential, daemon heartbeat, then per subscription: `FAIL` after 3 consecutive fetch errors (`BBW_DOCTOR_ERRORS`) with the HTTP code and URL, or when no snapshot exists 3 polls after subscribing; `FAIL` when the daemon runs code older than the scripts on disk |
+| `bbw doctor [--quiet]` | deps, credential, daemon heartbeat, then per subscription: `FAIL` after 3 consecutive fetch errors (`BBW_DOCTOR_ERRORS`) with the HTTP code and URL, or when no snapshot exists 3 polls after subscribing, or when a diff failed (change held back); `FAIL` on an `error` line in `daemon.out` since the daemon started, and when the daemon runs code older than the scripts on disk |
 | `bbw daemon run\|once\|alive\|start\|stop` | the poll loop (60 s, 20 s while a pipeline runs; `BBW_POLL_SECONDS`, `BBW_FAST_POLL_SECONDS`, `BBW_SETTLE_SECONDS`) |
 
 ## After the merge: the destination branch pipeline
@@ -171,6 +171,21 @@ said `ok`. Now:
 - `bbw doctor` reports the subscriptions that keep failing or never got a
   snapshot, not only the heartbeat.
 
+## A failed diff holds the change back
+
+On 2026-11-02 the host's jq 1.7 parsed `A + "#" + B as $id | …` as
+`A + "#" + (B as $id | …)`, so every diff that had something to report failed
+with `string … and object … cannot be added`. The daemon advanced the snapshot
+anyway: each comment and pipeline end was consumed and nobody woke. Now:
+
+- a diff that fails leaves the snapshot untouched, so the change is retried
+  next cycle and delivered once the cause is fixed: late, never lost;
+- the failure is logged with jq's message,
+  `diff error ws/repo#140 (snapshot kept, retried next cycle): jq: error …`,
+  and counted in `<snapshot>.differr`;
+- `bbw doctor` fails on that counter, and on any `error` line the running
+  daemon wrote to launchd's `daemon.out` since it started.
+
 ## The adapter contract (any harness)
 
 An adapter gives the harness three things:
@@ -220,7 +235,9 @@ bash skills/bitbucket-pr-watch/tests/run-in-docker.sh
 ```
 
 Runs every `tests/*.test.sh` under the `bash:3.2` image with a fake `curl`
-serving fixtures; no real API call.
+serving fixtures; no real API call. The suite runs twice, with jq 1.7 (what
+macOS ships) and jq 1.8, because the two parse some expressions differently;
+`BBW_JQ_MATRIX=1.7` runs one leg.
 
 ## Implementation Status
 
