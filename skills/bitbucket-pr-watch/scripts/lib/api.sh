@@ -9,13 +9,16 @@ BBW_API_BASE="${BBW_API_BASE:-https://api.bitbucket.org/2.0}"
 # persists after one Retry-After wait, 13 on any other failure. Sets
 # BB_HTTP_CODE when not run in a subshell. The credential travels in a curl
 # config read from stdin (-K -), never in argv, so `ps` and logs never see it.
+# -L: Bitbucket answers a PR diffstat with a 302 to the repository diffstat on
+# the same host (measured 2026-11-02); curl keeps the credential on same-host
+# redirects only.
 bb_get() {
   local url="$1" body hdr code wait attempt=0
   case "$url" in http*) ;; *) url="$BBW_API_BASE/$url" ;; esac
   body="$(mktemp)" hdr="$(mktemp)"
   while :; do
     code="$(printf 'user = "%s:%s"\n' "$BITBUCKET_WATCH_USER" "$BITBUCKET_WATCH_TOKEN" \
-      | curl -sS --max-time 30 -K - -D "$hdr" -o "$body" -w '%{http_code}' "$url" 2>/dev/null)" || code=000
+      | curl -sS -L --max-time 30 -K - -D "$hdr" -o "$body" -w '%{http_code}' "$url" 2>/dev/null)" || code=000
     if [ "$code" = 429 ] && [ "$attempt" -eq 0 ]; then
       attempt=1
       wait="$(tr -d '\r' <"$hdr" | awk -F': *' 'tolower($1)=="retry-after"{print $2}' | head -1)"

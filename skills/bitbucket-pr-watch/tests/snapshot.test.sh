@@ -35,6 +35,15 @@ jq '.head = "zzz999"' "$WORK/snap.json" >"$WORK/prev-moved.json"
 lib "snapshot_fetch $FX_REPO $FX_PR '$WORK/prev-moved.json'" >/dev/null
 check "moved head fetches the diffstat" 'grep -q diffstat "$FAKE_CURL_LOG"'
 
+# Bitbucket answers the PR diffstat with a 302 to the repository diffstat.
+dk="$(fixture_key "repositories/$FX_REPO/pullrequests/$FX_PR/diffstat?pagelen=500")"
+rm -f "$FX/$dk.json"
+printf '%s' "repositories/$FX_REPO/diffstat/abc123..def456?pagelen=500&from_pullrequest_id=229" >"$FX/$dk.location"
+fx_put "repositories/$FX_REPO/diffstat/abc123..def456?pagelen=500&from_pullrequest_id=229" '{"values":[{"status":"merge conflict"}]}'
+out="$(lib "snapshot_fetch $FX_REPO $FX_PR '$WORK/prev-moved.json'")"; rc=$?
+check "a redirected diffstat is followed" '[ "$rc" = 0 ] && [ "$(printf "%s" "$out" | jq .conflict)" = true ]' "rc=$rc"
+rm -f "$FX/$dk.location"; fx_diffstat true
+
 # Two pages of comments: 60 ids.
 p1="[$(for i in $(seq 1 50); do fx_comment "$((1000 + i))" Rev; [ "$i" -lt 50 ] && printf ','; done)]"
 p2="[$(for i in $(seq 51 60); do fx_comment "$((1000 + i))" Rev; [ "$i" -lt 60 ] && printf ','; done)]"

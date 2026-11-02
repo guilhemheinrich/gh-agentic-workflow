@@ -79,7 +79,9 @@ cmd_doctor() {
     case "$rc" in
       0) report ok "credential accepted by Bitbucket" ;;
       10) report FAIL "credential rejected ($BB_HTTP_CODE)" ;;
-      14) report FAIL "credential lacks a scope (403): see bbw setup for the three read scopes" ;;
+      # A scoped token without an account scope gets 403 on /user, yet it
+      # authenticated: a revoked or wrong token gets 401 (measured 2026-11-02).
+      14) report ok "credential accepted by Bitbucket (scoped token)" ;;
       *) report FAIL "Bitbucket API unreachable (HTTP $BB_HTTP_CODE)" ;;
     esac
   else

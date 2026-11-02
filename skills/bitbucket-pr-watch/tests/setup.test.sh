@@ -39,6 +39,9 @@ mkdir -p "$BBW_STATE_DIR" && date -u +%s >"$BBW_STATE_DIR/heartbeat"
 out="$("$BBW" doctor 2>&1)"; rc=$?
 check "doctor accepts a valid credential" 'printf "%s" "$out" | grep -q "^ok credential accepted" && [ "$rc" = 0 ]' "rc=$rc $out"
 check "doctor never prints the token" '! printf "%s" "$out" | grep -q "SECRET"' "$out"
+printf 403 >"$WORK/fx/user.code"
+out="$("$BBW" doctor 2>&1)"; rc=$?
+check "a scoped token (403 on /user) is accepted" 'printf "%s" "$out" | grep -q "^ok credential accepted" && [ "$rc" = 0 ]' "rc=$rc $out"
 printf 401 >"$WORK/fx/user.code"
 out="$("$BBW" doctor 2>&1)"; rc=$?
 check "doctor reports a rejected credential" 'printf "%s" "$out" | grep -q "^FAIL credential rejected (401)" && [ "$rc" = 1 ]' "rc=$rc $out"

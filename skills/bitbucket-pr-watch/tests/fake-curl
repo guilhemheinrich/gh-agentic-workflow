@@ -6,9 +6,10 @@
 # The -K config arrives on stdin; it is read and discarded, never logged, so a
 # test can grep the log for the token and prove it never left the process.
 set -u
-out="" hdr="" write="" url=""
+out="" hdr="" write="" url="" follow=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    -L) follow=1 ;;
     -o) out="$2"; shift ;;
     -D) hdr="$2"; shift ;;
     -w) write="$2"; shift ;;
@@ -22,6 +23,20 @@ done
 printf '%s\n' "$url" >>"${FAKE_CURL_LOG:-/dev/null}"
 tail="${url#"$BBW_API_BASE"/}"
 key="$(printf '%s' "$tail" | LC_ALL=C sed 's/[^A-Za-z0-9._-]/_/g')"
+# A <key>.location file makes the response a 302 to that URL tail; with -L
+# the fake follows it, like curl does.
+if [ -f "$FAKE_CURL_DIR/$key.location" ]; then
+  if [ "$follow" = 1 ]; then
+    tail="$(cat "$FAKE_CURL_DIR/$key.location")"
+    printf '%s\n' "$BBW_API_BASE/$tail" >>"${FAKE_CURL_LOG:-/dev/null}"
+    key="$(printf '%s' "$tail" | LC_ALL=C sed 's/[^A-Za-z0-9._-]/_/g')"
+  else
+    [ -n "$out" ] && : >"$out"
+    [ -n "$hdr" ] && : >"$hdr"
+    [ "$write" = '%{http_code}' ] && printf 302
+    exit 0
+  fi
+fi
 body="$FAKE_CURL_DIR/$key.json"
 code=200
 if [ -f "$FAKE_CURL_DIR/$key.code" ]; then code="$(cat "$FAKE_CURL_DIR/$key.code")"
