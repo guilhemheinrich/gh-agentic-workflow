@@ -9,7 +9,9 @@
 #      conversation's main subject? If so, propose a separate session with
 #      its own title before doing the work here.
 #   2. Closing summary: end the reply with one italic paragraph (2-3
-#      sentences, user language) naming the conversation's main subject.
+#      sentences, user language) naming the conversation's main subject,
+#      once per user message — not again in a continuation forced by
+#      another Stop hook, which conversation-focus-stop.sh lets through.
 #
 # Both are judged by the agent itself, which already holds the whole
 # conversation: no extra model call, no transcript parsing. The "after the
@@ -44,7 +46,7 @@ if [[ "${CONVERSATION_FOCUS_SPLIT:-1}" == "1" ]]; then
   lines+=("- Split check, before any work: if this message opens a subject unrelated to the conversation's main subject (it builds on nothing said, found or decided so far), $offer, and do not start that work here unless the user says so. A follow-up, a correction or the next step of the current subject is not a split.")
 fi
 if [[ "${CONVERSATION_FOCUS_SUMMARY:-1}" == "1" ]]; then
-  lines+=("- Closing summary: end the reply with one final paragraph wrapped in single asterisks (*…*), 2-3 sentences in the user's language, stating the conversation's main subject and where it stands — the whole conversation, not only this turn. Nothing after it.")
+  lines+=("- Closing summary: end the reply with one final paragraph wrapped in single asterisks (*…*), 2-3 sentences in the user's language, stating the conversation's main subject and where it stands — the whole conversation, not only this turn. Nothing after it. Write it once per user message: when a Stop hook makes you continue after it was written (e.g. a session-title update), do not write it again.")
 fi
 (( ${#lines[@]} > 1 )) || exit 0
 
