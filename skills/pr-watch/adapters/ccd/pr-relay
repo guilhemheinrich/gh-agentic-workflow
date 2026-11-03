@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# pr-relay — deliver pr-watch wake lines to Claude Desktop sessions whose own
+# `prw wait` / `bbw wait` is not armed, and subscribe the user's open PRs that
+# no session subscribed to.
+#
+# Deterministic half of the CCD relay. It never talks to a session itself: it
+# prints what to deliver, and the relay session (an LLM turn woken by
+# `pr-relay wait` exiting) sends each message with the CCD session tools, then
+# acks. Read-only on Bitbucket; writes only the watcher's cursors and, through
+# the watcher's own CLI, its subscriptions. bash 3.2 compatible.
+set -uo pipefail
+
+usage() {
+  cat <<'EOF'
+pr-relay — relay pr-watch news to Claude Desktop sessions that stopped listening.
+
+  pr-relay scan                 JSON: deliveries (sessions with unread lines and no live wait) and undeliverable ones
+  pr-relay ack CLI_SESSION N    advance that session's cursor by N lines (negative N undoes an ack)
+  pr-relay discover [--subscribe]
+                                JSON: your open PRs no subscription covers, with the session that owns each branch;
+                                --subscribe subscribes the ones with exactly one owner
+  pr-relay wait [--interval S]  every S seconds (default 300): discover --subscribe, then scan;
+                                exit 0 printing the scan as soon as something is deliverable
+EOF
+}
+
+API="${PR_RELAY_API_BASE:-https://api.bitbucket.org/2.0}"
+SESSIONS_DIR="${PR_RELAY_SESSIONS_DIR:-$HOME/Library/Application Support/Claude/claude-code-sessions}"
+RELAY_STATE="${PR_RELAY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-relay}"
+ORPHAN_TTL="${PR_RELAY_ORPHAN_TTL:-3600}"
+
+# watch_state — the watcher's state dir: the generic pr-watch one once it holds
+# subscriptions, else the legacy bitbucket-pr-watch one.
+watch_state() {
+  local base="${XDG_STATE_HOME:-$HOME/.local/state}"
+  if [ -n "${PR_RELAY_WATCH_STATE:-}" ]; then printf '%s\n' "$PR_RELAY_WATCH_STATE"
+  elif [ -f "$base/pr-watch/subscriptions.json" ]; then printf '%s\n' "$base/pr-watch"
+  else printf '%s\n' "$base/bitbucket-pr-watch"; fi
+}
+
+# watch_cli — the CLI that owns that state dir.
+watch_cli() {
+  if [ -n "${PR_RELAY_WATCH_CLI:-}" ]; then printf '%s\n' "$PR_RELAY_WATCH_CLI"
+  else case "$(watch_state)" in */pr-watch) echo prw ;; *) echo bbw ;; esac; fi
+}
+
+load_credential() {
+  [ -n "${BITBUCKET_WATCH_TOKEN:-}" ] && return 0
+  local f
+  for f in "$HOME/.config/pr-watch/env" "$HOME/.config/bitbucket-pr-watch/env"; do
+    # shellcheck disable=SC1090
+    [ -f "$f" ] && . "$f" && [ -n "${BITBUCKET_WATCH_TOKEN:-}" ] && return 0
+  done
+  echo "pr-relay: no BITBUCKET_WATCH_TOKEN (run prw setup)" >&2
+  return 1
+}
+
+bb_get() {
+  printf 'user = "%s:%s"\n' "$BITBUCKET_WATCH_USER" "$BITBUCKET_WATCH_TOKEN" \
+    | curl -sS -fL --max-time 30 -K - "$@"
+}
+
+safe_name() { printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_'; }
+
+# wait_alive CLI — true when a watcher `wait` for that session runs right now.
+wait_alive() {
+  local pid
+  pid="$(cat "$(watch_state)/waits/$(safe_name "$1").lock/pid" 2>/dev/null)"
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+# is_archived LOCAL — the app records archiving in the session file and in an
+# index next to it; either counts.
+is_archived() {
+  find "$SESSIONS_DIR" -maxdepth 3 -name archived-sessions.idx -print0 2>/dev/null \
+    | xargs -0 grep -qF "\"$1\"" 2>/dev/null
+}
+
+# session_files_with TEXT — the desktop session files that mention TEXT.
+# Only files touched in the last PR_RELAY_SESSION_DAYS days are read: the
+# folder holds thousands of sessions, most long finished, and reading them all
+# takes seconds per lookup.
+session_files_with() {
+  find "$SESSIONS_DIR" -maxdepth 3 -name 'local_*.json' -mtime "-${PR_RELAY_SESSION_DAYS:-30}" -print0 2>/dev/null \
+    | xargs -0 grep -lF -e "$1" 2>/dev/null
+}
+
+# ccd_session CLI — JSON {local, title, archived, last} of the desktop session
+# that runs (or ran, before a resume) that Claude Code session, or nothing.
+ccd_session() {
+  local f info
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    info="$(jq -c --arg c "$1" 'select(.cliSessionId == $c or ((.priorCliSessionIds // []) | index($c)))
+      | {local: .sessionId, title: (.title // ""), archived: (.isArchived // false), last: (.lastActivityAt // 0)}' "$f" 2>/dev/null)"
+    [ -n "$info" ] && break
+  done <<EOF
+$(session_files_with "$1")
+EOF
+  [ -n "$info" ] || return 0
+  if is_archived "$(jq -r .local <<<"$info")"; then info="$(jq -c '.archived = true' <<<"$info")"; fi
+  printf '%s\n' "$info"
+}
+
+unread_count() {
+  local st="$1" s="$2" f c n=0 total
+  f="$st/events/$(safe_name "$s").jsonl"; c="$st/events/$(safe_name "$s").cursor"
+  [ -f "$f" ] || { echo 0; return; }
+  [ -f "$c" ] && n="$(cat "$c")"
+  total="$(wc -l <"$f" | tr -d ' ')"
+  echo $(( total > n ? total - n : 0 ))
+}
+
+cmd_scan() {
+  local st f s n info lines out='[]'
+  st="$(watch_state)"
+  for f in "$st"/events/*.jsonl; do
+    [ -f "$f" ] || continue
+    s="$(basename "$f" .jsonl)"
+    n="$(unread_count "$st" "$s")"
+    [ "$n" -gt 0 ] || continue
+    wait_alive "$s" && continue
+    info="$(ccd_session "$s")"
+    [ -n "$info" ] || info='{"local":null,"title":"","archived":false}'
+    lines="$(tail -n "$n" "$f" | jq -sc '[.[].text]')"
+    out="$(jq -c --arg cli "$s" --argjson n "$n" --argjson info "$info" --argjson lines "$lines" \
+      '. + [$info + {cli: $cli, count: $n, lines: $lines}]' <<<"$out")"
+  done
+  jq --arg cli "$(watch_cli)" '
+    def message:
+      "pr-relay : ton `\($cli) wait` n’est plus armé, voici les nouvelles de ta PR que tu as manquées :\n"
+      + (.lines | map("- " + .) | join("\n"))
+      + "\n\nSi tu suis encore quelque chose (PR ouverte ou pipeline post-merge), relance `\($cli) wait --session \(.cli)` avec run_in_background.";
+    {
+      deliveries: [.[] | select(.local != null and (.archived | not)) | . + {message: message}],
+      undeliverable: [.[] | select(.local == null or .archived) | {cli, count, archived, reason: (if .local == null then "no desktop session" else "archived" end)}]
+    }' <<<"$out"
+}
+
+cmd_ack() {
+  local st s="${1:-}" n="${2:-}" c cur=0 lock
+  case "$n" in ''|*[!0-9-]*) echo "usage: pr-relay ack CLI_SESSION N" >&2; return 64 ;; esac
+  st="$(watch_state)"
+  # Take the watcher's own wait lock while moving the cursor, so a `wait`
+  # re-armed at this instant exits "already waiting" instead of reading the
+  # same lines.
+  lock="$st/waits/$(safe_name "$s").lock"
+  mkdir -p "$st/waits"
+  if ! mkdir "$lock" 2>/dev/null; then
+    if wait_alive "$s"; then echo "pr-relay: a wait is live for $s, it delivers itself" >&2; return 4; fi
+    rm -rf "$lock"; mkdir "$lock" 2>/dev/null || return 4
+  fi
+  printf '%s\n' "$$" >"$lock/pid"
+  c="$st/events/$(safe_name "$s").cursor"
+  [ -f "$c" ] && cur="$(cat "$c")"
+  cur=$(( cur + n )); [ "$cur" -lt 0 ] && cur=0
+  printf '%s\n' "$cur" >"$c.tmp" && mv "$c.tmp" "$c"
+  rm -rf "$lock"
+  echo "$s cursor $cur"
+}
+
+# my_uuid — the Bitbucket account of the credential. The scoped watch token
+# cannot read /user, so it is read once from the author of a watched PR.
+my_uuid() {
+  local cache="$RELAY_STATE/user-uuid" repo pr u
+  [ -n "${PR_RELAY_USER_UUID:-}" ] && { echo "$PR_RELAY_USER_UUID"; return; }
+  [ -s "$cache" ] && { cat "$cache"; return; }
+  read -r repo pr <<<"$(jq -r '[.[] | select(.pr != null)] | last | "\(.repo) \(.pr)"' "$(watch_state)/subscriptions.json")"
+  u="$(bb_get "$API/repositories/$repo/pullrequests/$pr" | jq -r '.author.uuid // empty')"
+  [ -n "$u" ] || { echo "pr-relay: cannot learn your account uuid; set PR_RELAY_USER_UUID" >&2; return 1; }
+  mkdir -p "$RELAY_STATE"; printf '%s\n' "$u" >"$cache"; echo "$u"
+}
+
+# owner_of REPO BRANCH PR_ID — JSON array of the desktop sessions (not
+# archived) that pushed that branch, from the app's own session files:
+# `prs` (a PR the app tied to the session) first, then `writtenBranches`
+# ("<repo path>\0<branch>"), most recent activity first.
+owner_of() {
+  local repo="$1" branch="$2" id="$3" f row out='[]'
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    row="$(jq -c --arg b "$branch" --arg r "${repo##*/}" --arg id "$id" '
+      ([(.prs // [])[] | select(.branch == $b and (.url | test("/" + $r + "/pull-requests/" + $id + "$")))] | length > 0) as $pr
+      | ([(.writtenBranches // [])[] | split("\u0000") | select(.[1] == $b)] | length > 0) as $wb
+      | select(($pr or $wb) and ((.isArchived // false) | not))
+      | {local: .sessionId, cli: .cliSessionId, title: (.title // ""), last: (.lastActivityAt // 0), cites_pr: $pr}' "$f" 2>/dev/null)"
+    [ -n "$row" ] || continue
+    is_archived "$(jq -r .local <<<"$row")" && continue
+    out="$(jq -c --argjson r "$row" '. + [$r]' <<<"$out")"
+  done <<EOF
+$(session_files_with "$branch")
+EOF
+  jq -c 'sort_by([(.cites_pr | not), -.last])' <<<"$out"
+}
+
+cmd_discover() {
+  local subscribe=false st uuid ws prs open key now orphans cands chosen out='[]'
+  [ "${1:-}" = --subscribe ] && subscribe=true
+  load_credential || return 1
+  st="$(watch_state)"
+  uuid="$(my_uuid)" || return 1
+  now="$(date +%s)"
+  mkdir -p "$RELAY_STATE"
+  orphans="$RELAY_STATE/orphans.json"
+  [ -f "$orphans" ] || echo '{}' >"$orphans"
+  open='[]'
+  for ws in ${PR_RELAY_WORKSPACES:-$(jq -r '[.[].repo | split("/")[0]] | unique | .[]' "$st/subscriptions.json")}; do
+    prs="$(bb_get -G "$API/workspaces/$ws/pullrequests/$(jq -rn --arg u "$uuid" '$u | @uri')" \
+      --data-urlencode state=OPEN --data-urlencode pagelen=50)" || { echo "pr-relay: cannot list PRs of $ws" >&2; continue; }
+    open="$(jq -c --argjson p "$prs" '. + [$p.values[] | {repo: .destination.repository.full_name, pr: .id, branch: .source.branch.name, title}]' <<<"$open")"
+  done
+  # A PR is covered by a live subscription on it, or a pending one on its branch.
+  open="$(jq -c --slurpfile s "$st/subscriptions.json" '
+    [.[] | . as $p
+      | select([$s[0][] | select(.status != "closed" and .repo == $p.repo
+          and (.pr == $p.pr or (.pr == null and .branch == $p.branch)))] | length == 0)]' <<<"$open")"
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    key="$(jq -r '"\(.repo)#\(.pr)"' <<<"$p")"
+    # An orphan stays one for an hour before it is looked up again.
+    if [ "$(jq -r --arg k "$key" --argjson now "$now" --argjson ttl "$ORPHAN_TTL" '(.[$k] // 0) > ($now - $ttl)' "$orphans")" = true ]; then
+      out="$(jq -c --argjson p "$p" '. + [$p + {owners: [], status: "orphan (cached)"}]' <<<"$out")"
+      continue
+    fi
+    cands="$(owner_of "$(jq -r .repo <<<"$p")" "$(jq -r .branch <<<"$p")" "$(jq -r .pr <<<"$p")")"
+    # The session the app tied the PR to, else the last one that pushed the branch.
+    chosen="$(jq -c '.[0] // empty' <<<"$cands")"
+    if [ -n "$chosen" ] && [ "$subscribe" = true ]; then
+      "$(watch_cli)" subscribe "$(jq -r .repo <<<"$p")" "$(jq -r .pr <<<"$p")" \
+        --session "$(jq -r .cli <<<"$chosen")" --harness claude >&2 \
+        && status=subscribed || status="subscribe failed"
+    elif [ -n "$chosen" ]; then status="would subscribe"
+    else
+      status=orphan
+      jq --arg k "$key" --argjson now "$now" '.[$k] = $now' "$orphans" >"$orphans.tmp" && mv "$orphans.tmp" "$orphans"
+    fi
+    out="$(jq -c --argjson p "$p" --argjson c "$cands" --arg st "$status" '. + [$p + {owners: $c, status: $st}]' <<<"$out")"
+  done <<EOF
+$(jq -c '.[]' <<<"$open")
+EOF
+  jq . <<<"$out"
+}
+
+cmd_wait() {
+  local interval=300 scan
+  [ "${1:-}" = --interval ] && interval="$2"
+  while :; do
+    cmd_discover --subscribe >/dev/null 2>&1 || true
+    scan="$(cmd_scan)"
+    if [ "$(jq '.deliveries | length' <<<"$scan")" -gt 0 ]; then
+      printf '%s\n' "$scan"
+      return 0
+    fi
+    sleep "$interval"
+  done
+}
+
+command -v jq >/dev/null || { echo "pr-relay: jq is required" >&2; exit 1; }
+case "${1:-help}" in
+  scan) shift; cmd_scan "$@" ;;
+  ack) shift; cmd_ack "$@" ;;
+  discover) shift; cmd_discover "$@" ;;
+  wait) shift; cmd_wait "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 64 ;;
+esac
