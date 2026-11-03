@@ -15,7 +15,8 @@ usage() {
 pr-relay — relay pr-watch news to Claude Desktop sessions that stopped listening.
 
   pr-relay scan                 JSON: deliveries (sessions with unread lines and no live wait) and undeliverable ones
-  pr-relay ack CLI_SESSION N    advance that session's cursor by N lines (negative N undoes an ack)
+  pr-relay ack CLI_SESSION N    advance that session's cursor by N lines (exit 4: its own wait is live, send nothing)
+  pr-relay park CLI_SESSION     skip that session until a new line arrives (after a send that failed)
   pr-relay discover [--subscribe]
                                 JSON: your open PRs no subscription covers, with the session that owns each branch;
                                 --subscribe subscribes the ones with exactly one owner
@@ -120,6 +121,8 @@ cmd_scan() {
     n="$(unread_count "$st" "$s")"
     [ "$n" -gt 0 ] || continue
     wait_alive "$s" && continue
+    # A parked session is skipped until a new line arrives for it.
+    [ "$(cat "$RELAY_STATE/parked/$(safe_name "$s")" 2>/dev/null)" = "$(wc -l <"$f" | tr -d ' ')" ] && continue
     info="$(ccd_session "$s")"
     [ -n "$info" ] || info='{"local":null,"title":"","archived":false}'
     lines="$(tail -n "$n" "$f" | jq -sc '[.[].text]')"
@@ -159,6 +162,18 @@ cmd_ack() {
   echo "$s cursor $cur"
 }
 
+# cmd_park CLI — a message that could not be sent must not wake the relay
+# again at once: remember how many lines the session has, and let scan skip it
+# until that number grows.
+cmd_park() {
+  local f
+  [ -n "${1:-}" ] || { echo "usage: pr-relay park CLI_SESSION" >&2; return 64; }
+  f="$(watch_state)/events/$(safe_name "$1").jsonl"
+  mkdir -p "$RELAY_STATE/parked"
+  wc -l <"$f" | tr -d ' ' >"$RELAY_STATE/parked/$(safe_name "$1")"
+  echo "$1 parked"
+}
+
 # my_uuid — the Bitbucket account of the credential. The scoped watch token
 # cannot read /user, so it is read once from the author of a watched PR.
 my_uuid() {
@@ -171,6 +186,23 @@ my_uuid() {
   mkdir -p "$RELAY_STATE"; printf '%s\n' "$u" >"$cache"; echo "$u"
 }
 
+# pushed_from_repo WS/REPO ROW — true when one of the row's pushed paths is a
+# clone (or a worktree of a clone) whose origin is WS/REPO. A deleted worktree
+# is resolved to its main clone.
+pushed_from_repo() {
+  local repo="$1" path url
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    [ -d "$path" ] || path="${path%%/.claude/worktrees/*}"
+    url="$(git -C "$path" remote get-url origin 2>/dev/null)" || continue
+    url="${url%.git}"
+    case "$url" in *[:/]"$repo") return 0 ;; esac
+  done <<EOF
+$(jq -r '.paths[]' <<<"$2")
+EOF
+  return 1
+}
+
 # owner_of REPO BRANCH PR_ID — JSON array of the desktop sessions (not
 # archived) that pushed that branch, from the app's own session files:
 # `prs` (a PR the app tied to the session) first, then `writtenBranches`
@@ -181,10 +213,13 @@ owner_of() {
     [ -n "$f" ] || continue
     row="$(jq -c --arg b "$branch" --arg r "${repo##*/}" --arg id "$id" '
       ([(.prs // [])[] | select(.branch == $b and (.url | test("/" + $r + "/pull-requests/" + $id + "$")))] | length > 0) as $pr
-      | ([(.writtenBranches // [])[] | split("\u0000") | select(.[1] == $b)] | length > 0) as $wb
-      | select(($pr or $wb) and ((.isArchived // false) | not))
-      | {local: .sessionId, cli: .cliSessionId, title: (.title // ""), last: (.lastActivityAt // 0), cites_pr: $pr}' "$f" 2>/dev/null)"
+      | [(.writtenBranches // [])[] | split("\u0000") | select(.[1] == $b) | .[0]] as $wb
+      | select(($pr or ($wb | length > 0)) and ((.isArchived // false) | not))
+      | {local: .sessionId, cli: .cliSessionId, title: (.title // ""), last: (.lastActivityAt // 0), cites_pr: $pr, paths: $wb}' "$f" 2>/dev/null)"
     [ -n "$row" ] || continue
+    # A branch name alone (staging, main) is shared by every repo: a pushed
+    # branch counts only from a clone of the PR's repository.
+    if [ "$(jq -r .cites_pr <<<"$row")" = false ] && ! pushed_from_repo "$repo" "$row"; then continue; fi
     is_archived "$(jq -r .local <<<"$row")" && continue
     out="$(jq -c --argjson r "$row" '. + [$r]' <<<"$out")"
   done <<EOF
@@ -259,6 +294,7 @@ command -v jq >/dev/null || { echo "pr-relay: jq is required" >&2; exit 1; }
 case "${1:-help}" in
   scan) shift; cmd_scan "$@" ;;
   ack) shift; cmd_ack "$@" ;;
+  park) shift; cmd_park "$@" ;;
   discover) shift; cmd_discover "$@" ;;
   wait) shift; cmd_wait "$@" ;;
   help|-h|--help) usage ;;

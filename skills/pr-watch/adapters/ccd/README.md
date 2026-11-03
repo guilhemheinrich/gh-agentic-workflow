@@ -26,7 +26,8 @@ Bitbucket: my open PRs ── discover ┘        │                           
 | Command | Does |
 |---|---|
 | `pr-relay scan` | JSON `deliveries` (sessions with unread lines, no live wait, a desktop session that is not archived) with a ready `message`, and `undeliverable` ones |
-| `pr-relay ack CLI N` | advance that session's cursor by N under its wait lock; a negative N undoes it |
+| `pr-relay ack CLI N` | advance that session's cursor by N under its wait lock; exit 4 when its own wait is live |
+| `pr-relay park CLI` | skip that session until a new line arrives for it |
 | `pr-relay discover [--subscribe]` | your open PRs (all workspaces of the subscriptions) no subscription covers, with their owner; `--subscribe` subscribes the PR to that owner |
 | `pr-relay wait [--interval S]` | loop: `discover --subscribe`, `scan`; exit 0 with the scan when something is deliverable |
 
@@ -43,7 +44,8 @@ Claude Desktop keeps one file per session under
   session pushed.
 
 The owner of a PR is the session whose `prs` holds that PR URL, else the most
-recently active one that pushed its branch. Archived sessions (`isArchived`, or
+recently active one that pushed its branch from a clone whose `origin` is the
+PR's repository (a branch name such as `staging` alone matches every repo). Archived sessions (`isArchived`, or
 listed in `archived-sessions.idx`) never own anything. A PR with no owner is
 an orphan, looked up again after `PR_RELAY_ORPHAN_TTL` seconds (3600).
 
@@ -58,9 +60,13 @@ pr-relay wait
 When it exits, for each entry of `deliveries`:
 
 1. `pr-relay ack <cli> <count>` first, so a wait the woken session re-arms
-   does not hand it the same lines again;
+   does not hand it the same lines again. Exit 4 means the session's own
+   wait came back to life and delivers by itself: send nothing;
 2. `send_message` to `<local>` with `<message>` verbatim;
-3. if the message was not delivered or queued, `pr-relay ack <cli> -<count>`.
+3. if the message was neither delivered nor queued, `pr-relay park <cli>`
+   and tell the human which PR news did not get through. Never undo the ack:
+   the wait would exit again at once and the relay would loop, one turn per
+   round.
 
 Then arm `pr-relay wait` again. `undeliverable` entries need no action.
 
