@@ -58,6 +58,12 @@ cmd_wait() {
       n="$(printf '%s\n' "$lines" | wc -l | tr -d ' ')"
       printf '%s\n' "$lines" | jq -r '.text'
       events_ack "$session" "$n"
+      # A wake line does not end the watch: after `merged` the daemon still
+      # follows the destination pipeline. Say so, or the session forgets to
+      # arm the next wait and never hears the verdict.
+      if session_has_work "$session"; then
+        echo "prw: still watching (post-merge pipeline or open PR) — run \`prw wait --session $session\` again with run_in_background."
+      fi
       return 0
     fi
     if [ -n "$timeout" ] && [ $(( $(date +%s) - start )) -ge "$timeout" ]; then

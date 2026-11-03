@@ -33,5 +33,5 @@ case "$res" in
   pending*) msg="pr-watch: $res (no open PR yet; the daemon resolves it once the PR exists)." ;;
   *) exit 0 ;;
 esac
-msg="$msg If no \`prw wait --session $session\` is already running, start \`bash $PRW wait --session $session\` now with run_in_background; its exit wakes you with the PR change."
+msg="$msg If no \`prw wait --session $session\` is already running, start \`bash $PRW wait --session $session\` now with run_in_background; its exit wakes you with the PR change. Every exit that is not 'no open subscription' (3) or 'already waiting' (4) — a review, a comment, the merge itself — must be followed by a new \`prw wait\`: after 'merged' the daemon still follows the destination pipeline and only that wait delivers its verdict."
 jq -cn --arg m "$msg" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $m}}'
