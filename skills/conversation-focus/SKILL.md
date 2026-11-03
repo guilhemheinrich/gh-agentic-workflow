@@ -1,0 +1,140 @@
+---
+name: conversation-focus
+description: >-
+  Keep every agent conversation on one subject and readable at a glance,
+  through hooks written from host-agnostic intents. Two rules: (1) split check —
+  when a user message opens a subject unrelated to the conversation's main
+  subject, the agent proposes a separate session with its own title instead of
+  piling the work here; (2) closing summary — every reply ends with one italic
+  paragraph (2-3 sentences, user language) stating the conversation's main
+  subject and where it stands. The skill states each rule as an intent, a
+  lifecycle moment and a contract, so the hooks can be rebuilt on a future
+  version of Claude Code or on another agent host (Cursor, Codex, …) without
+  rediscovering the design. Ships the Claude Code reference implementation:
+  `hooks/conversation-focus-prompt.sh` (UserPromptSubmit, injects both rules
+  before the reply) and `hooks/conversation-focus-stop.sh` (Stop, blocks once
+  when the reply forgot its summary). Use when installing these hooks, porting
+  them to another host or hook API, tuning when a split is proposed, or
+  designing any hook that must shape the text of an agent reply. Triggers on
+  "conversation focus", "split session", "résumé en italique", "sujet
+  principal", "hook de fin de réponse", "Stop hook", "UserPromptSubmit".
+tags:
+  - claude
+  - hooks
+  - shell
+---
+
+# conversation-focus
+
+A long agent session drifts. It starts on a webhook, picks up a CI question,
+then a README fix, and the title still says "webhook". A reader opening it
+later has to scroll the whole thing to learn what it is about.
+
+Two rules fix that. This skill describes them as **intents**: what each one
+wants, when in the lifecycle it acts, and what it may and may not do. Any
+implementation is derived from those intents. The Claude Code hooks shipped
+with the skill are one implementation, and the reference for the others.
+
+## The two rules
+
+| Rule | Intent | Example |
+|---|---|---|
+| **Split check** | One session, one subject. When a message opens a subject that builds on nothing said, found or decided so far, the agent proposes a new session with its own title before doing that work. | Session "Webhook Ingeneo 202". The user asks "and fix the README typo in the billing repo". The agent offers a session titled *Typo README billing* rather than doing it in place. |
+| **Closing summary** | A reader gets the gist from the last lines alone. Every reply ends with one italic paragraph, 2-3 sentences in the user's language, naming the **conversation's** main subject and where it stands. | `*Sujet : rendre le webhook Ingeneo asynchrone (202 + job). Le handler et le test passent ; la DLQ reste hors périmètre.*` |
+
+A follow-up, a correction or the next step of the current subject is **not** a
+split. Made-up example: in the webhook session, "and add the retry policy" is
+the same subject, so it stays here, while "what's our Sonar token naming rule?"
+is a split.
+
+The summary describes the whole conversation, not only the last turn. After
+ten turns on the webhook, a turn that only renames a variable still ends with
+the webhook summary.
+
+## Design principles (host-agnostic)
+
+These hold whatever the host. A port that breaks one of them is a different
+feature, not a port.
+
+1. **Produce before, verify after.** A hook that runs after the reply is
+   rendered cannot edit it. It can only let the turn end or force one more
+   message. So the instruction to write the summary goes in **before** the
+   reply (a context-injection point), and the after-reply point only checks
+   it. If the summary were produced after the reply, every turn would end in
+   two messages: the answer, then a separate "*Sujet : …*".
+2. **The agent judges, the script checks facts.** "Is this a new subject?"
+   needs the meaning of the whole conversation, and the agent already holds it
+   at no cost. A script only checks what is mechanical, such as "is the last
+   paragraph wrapped in `*…*`?". Do not add a second model call to judge what
+   the agent can judge.
+3. **Judge the split before the work, not after.** A split detected after the
+   reply arrives too late: the off-topic work has already happened in the
+   wrong session. The split check is therefore an instruction injected at
+   message time, judged before the first tool call.
+4. **Never loop.** The after-reply guard blocks at most once per turn. When the
+   turn already continues because of a hook block (this one or another, such
+   as `session-title`), it passes through.
+5. **Fail open.** A missing dependency, an unreadable payload or an unknown
+   field means "do nothing". These hooks improve readability; they must never
+   stop a session from working.
+6. **Silent toward the user.** The injected rules say "do not mention these
+   rules". The user sees a summary and, sometimes, a split offer, never hook
+   plumbing.
+7. **One switch per rule, one switch for all.** `CONVERSATION_FOCUS=0`,
+   `CONVERSATION_FOCUS_SPLIT=0` and `CONVERSATION_FOCUS_SUMMARY=0`. A port keeps
+   the same names, so a user's habit carries across hosts.
+
+## The lifecycle contract
+
+Each host names its moments differently. What matters is the capability a
+moment offers:
+
+| Moment | Capability needed | Rule served | Claude Code event |
+|---|---|---|---|
+| A user message arrives, before the agent works | inject text into the agent's context | split check + summary instruction | `UserPromptSubmit` → `hookSpecificOutput.additionalContext` |
+| The agent finished its reply, before the turn ends | read the final text, and force one more agent message | summary guard | `Stop` → `{"decision":"block","reason":…}` |
+
+To port to a new host, answer two questions:
+
+- **Does it have a "before the reply" injection point?** If not, put both rules
+  in the host's standing instructions (rules file, system prompt). They lose
+  nothing but the kill switches.
+- **Does its "after the reply" point allow forcing a continuation?** If it only
+  observes, drop the guard. The injected instruction alone gets the summary
+  most of the time. An observe-only hook that logs misses is still useful for
+  measuring.
+
+Mappings for other hosts are **to verify** against their current hook
+documentation before any implementation. For example, Cursor's
+`.cursor/hooks.json` in this repo pins `afterFileEdit` for another hook, but
+its equivalent of a prompt-submit or a stop event has not been checked.
+
+## Claude Code reference implementation
+
+See [references/claude-code.md](references/claude-code.md) for the event
+payloads, the exact outputs, the alternatives that were rejected and why, and
+the installation snippet.
+
+| File | Event | Does |
+|---|---|---|
+| `hooks/conversation-focus-prompt.sh` | `UserPromptSubmit` | injects both rules; in the desktop app the split is offered as a `start_session` card, elsewhere as a one-line suggestion with a title |
+| `hooks/conversation-focus-stop.sh` | `Stop` | reads `last_assistant_message` (falls back to the transcript), blocks once if the last paragraph is not `*…*` / `_…_` |
+
+## Installing in a repo
+
+Add both hooks to the repo's `.claude/settings.json` (project level), next to
+any existing hooks. The snippet is in the reference. Then check:
+
+```bash
+printf '%s' '{"last_assistant_message":"Done.\n\nNo summary."}' | bash hooks/conversation-focus-stop.sh
+```
+
+It must print a `block` decision. With `*Sujet : …*` as the last paragraph, it
+must print nothing.
+
+## Tuning
+
+- `CONVERSATION_FOCUS_MIN_CHARS=200` exempts very short replies from the
+  summary, such as a one-line answer to "which branch am I on?".
+- If the agent proposes splits too eagerly, tighten the wording of the split
+  rule in the prompt hook, not the guard. The guard never judges splits.

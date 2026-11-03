@@ -1,6 +1,28 @@
 {
-  "_comment": "Project-level Claude Code hooks for this repo. registry-sync-on-skill reminds the agent to register new skills in asset-registry.yml (see AGENTS.md). Disable with REGISTRY_SYNC=0. Requires bash on PATH (Git Bash on Windows).",
+  "_comment": "Project-level Claude Code hooks for this repo. registry-sync-on-skill reminds the agent to register new skills in asset-registry.yml (see AGENTS.md). Disable with REGISTRY_SYNC=0. conversation-focus-* inject the split check and italic closing summary, then guard the summary (skills/conversation-focus/). Disable with CONVERSATION_FOCUS=0. Requires bash on PATH (Git Bash on Windows).",
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash hooks/conversation-focus-prompt.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash hooks/conversation-focus-stop.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
