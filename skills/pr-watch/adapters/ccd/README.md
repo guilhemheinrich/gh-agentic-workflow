@@ -21,10 +21,32 @@ Bitbucket: my open PRs ── discover ┘        │                           
                                                                          session that owns the PR
 ```
 
+## The sweep: a routine that needs no subscription
+
+`pr-relay sweep` is the simplest way to use this adapter, and the one in use
+on the machine it was written on. It complements the watcher instead of
+relaying it:
+
+- it lists every open PR of the credential's account in the workspaces, plus
+  the ones merged in the last `PR_RELAY_MERGED_HOURS` (6), so the build of the
+  destination branch is heard too;
+- it keeps one coarse snapshot per PR under `~/.local/state/pr-relay/sweep/`:
+  state, CI of the head commit, CI of the merge commit, approvals, changes
+  requested, comment count. The first sight of a PR is a silent baseline;
+- it prints one French message per owning session, about what changed since
+  the last sweep: a pipeline that ended, a merge, an approval, new comments;
+- it leaves out a PR that the watcher follows for a session whose own wait is
+  armed, so that session does not hear the same news twice;
+- a PR with no owning session goes to `PR_RELAY_FALLBACK_SESSION`, if set.
+
+A Claude Desktop scheduled task runs it every 5 minutes and sends each message
+with `send_message`. The model only copies text: the script does the work.
+
 ## Commands
 
 | Command | Does |
 |---|---|
+| `pr-relay sweep` | one subscription-free pass; JSON `messages` (`to`, `title`, `text`) and `skipped` |
 | `pr-relay scan` | JSON `deliveries` (sessions with unread lines, no live wait, a desktop session that is not archived) with a ready `message`, and `undeliverable` ones |
 | `pr-relay ack CLI N` | advance that session's cursor by N under its wait lock; exit 4 when its own wait is live |
 | `pr-relay park CLI` | skip that session until a new line arrives for it |
