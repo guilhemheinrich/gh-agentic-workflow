@@ -7,7 +7,8 @@ description: >-
   subject, the agent proposes a separate session with its own title instead of
   piling the work here; (2) closing summary — every reply ends with one italic
   paragraph (2-3 sentences, user language) stating the conversation's main
-  subject and where it stands. The skill states each rule as an intent, a
+  subject and where it stands, ending with links to the Linear project, the
+  Linear issue or the pull request the conversation tracks. The skill states each rule as an intent, a
   lifecycle moment and a contract, so the hooks can be rebuilt on a future
   version of Claude Code or on another agent host (Cursor, Codex, …) without
   rediscovering the design. Ships the Claude Code reference implementation:
@@ -51,6 +52,27 @@ The summary describes the whole conversation, not only the last turn. After
 ten turns on the webhook, a turn that only renames a variable still ends with
 the webhook summary.
 
+### Summary references
+
+The summary also ends, inside the italics, with links to the objects the
+conversation tracks, so the reader never scrolls back to find them:
+
+| Session kind | Reference repeated in every summary |
+|---|---|
+| Pilot session | the Linear project it steers |
+| Coding session tied to Linear | the Linear issue it implements |
+| Any session with a pull request | the PR opened or reviewed |
+
+Example (real PR of this repo, made-up Linear URL):
+`*Sujet : épingler le sujet d'une session de pilotage. Fusionné ; reste la doc. · [ENG-42](https://linear.app/…) · [PR #28](https://github.com/guilhemheinrich/gh-agentic-workflow/pull/28)*`
+
+Rules: once a reference has appeared, it is repeated in every later summary
+while it still applies; only URLs seen in the conversation or returned by a
+tool are used, never a guessed one; no link at all when there is none. The
+agent picks them (principle 2): it already knows which project, issue or PR
+the conversation is about. `CONVERSATION_FOCUS_REFS=0` drops the links and
+keeps the summary.
+
 ## Design principles (host-agnostic)
 
 These hold whatever the host. A port that breaks one of them is a different
@@ -81,7 +103,8 @@ feature, not a port.
    rules". The user sees a summary and, sometimes, a split offer, never hook
    plumbing.
 7. **One switch per rule, one switch for all.** `CONVERSATION_FOCUS=0`,
-   `CONVERSATION_FOCUS_SPLIT=0` and `CONVERSATION_FOCUS_SUMMARY=0`. A port keeps
+   `CONVERSATION_FOCUS_SPLIT=0`, `CONVERSATION_FOCUS_SUMMARY=0` and
+   `CONVERSATION_FOCUS_REFS=0`. A port keeps
    the same names, so a user's habit carries across hosts.
 
 ## The lifecycle contract

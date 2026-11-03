@@ -1124,7 +1124,8 @@ assets:
     description: >-
       Keep every agent conversation on one subject and readable at a glance, through hooks written from host-agnostic
       intents: a split check that proposes a separate session when a message opens an unrelated subject, and an italic
-      2-3 sentence closing summary of the conversation's main subject on every reply. States each rule as an intent, a
+      2-3 sentence closing summary of the conversation's main subject on every reply, ending with links to the Linear
+      project, Linear issue or pull request the conversation tracks. States each rule as an intent, a
       lifecycle moment and a contract so the hooks can be ported to a future Claude Code or another agent host. Ships
       the Claude Code reference: `hooks/conversation-focus-prompt.sh` (UserPromptSubmit, injects both rules) and
       `hooks/conversation-focus-stop.sh` (Stop, blocks once when the summary is missing).
