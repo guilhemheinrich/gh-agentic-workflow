@@ -265,8 +265,12 @@ At Stop, the working title goes away:
   topic, such as "À tester · lancer Run now" long after the run.
 
 The activities and the `working` fallback are never offered at Stop. A
-session that crashed mid-turn keeps its activity and ages like any other, so
-an orange "🛠️ Coding" means a turn that never finished.
+working title is never aged while it may still be a live turn: the app
+does not flush `lastActivityAt` during a turn, and a session waiting on a
+background task or a Monitor is alive too. Only after
+`SESSION_TITLE_CHILD_STALE` (default 2 h) without activity does a 🔵 title
+count as a crashed turn and age like any other, so an orange "🛠️ Coding"
+means a turn that never finished.
 
 ## Live implementation counter
 
@@ -318,7 +322,7 @@ judges `to-test` or `to-close` as usual. Every network call is bounded
 Every title starts with a dot that ages with the session:
 "🟠 🔀 À merger #12 · 042-webhook" means this PR has waited 1 to 8 hours.
 
-| Age since the session's last activity | Dot |
+| Age since the latest news (the session's, or one of its side sessions') | Dot |
 |---|---|
 | under 5 min | 🟢 |
 | 5 min to 1 h | 🟡 |
@@ -338,6 +342,12 @@ No hook fires on an idle session, so two pieces share the work:
 1. `set` always renders 🟢, because the turn has just ended.
 2. A **watcher session** repaints idle sessions, and wakes only when a dot
    has to change. Its prompt is `templates/freshness-watch.md`.
+
+A dot ages only while the session is idle **and** has no news. Example:
+"🧭 Piloting 0/2 · Calendar" stays 🟢 as long as one of its side sessions
+wears 🔵, and its age afterwards counts from the latest child activity, not
+from the pilot's own last turn. A side session is any session file whose
+`spawnedFrom.sessionId` names the pilot; archived ones do not count.
 
 A rename leaves `lastActivityAt` unchanged: renaming `local_3f5a96d8…` kept
 `14:13:50.723Z`. Only titles built from the templates are repainted; running
@@ -411,9 +421,10 @@ Facts measured on 2026-10-29 shape the design:
 - **The files carry no `isRunning`, and lag behind the app.** `snapshot`
   treats a 🔵 title active in the last 5 minutes as running. A crashed turn
   still ages past that. The app does not rewrite the file during a turn: a
-  session running at 11:03 still read `lastActivityAt` 10:57:20 on disk. A
-  turn longer than 5 minutes therefore costs one false wake, and the
-  agent's `get_session` check (`isRunning: true`) skips it. The file also
+  session running at 11:03 still read `lastActivityAt` 10:57:20 on disk. So
+  `sweep` leaves every 🔵 title alone for `SESSION_TITLE_CHILD_STALE`
+  (2 h): before 2026-11-03 it aged them after 5 minutes, and a long turn
+  showed "🟡 🛠️ Coding" in the sidebar. The file also
   trails the app by up to 10 s after a turn, so `snapshot` adds 15 s to
   `lastActivityAt`.
 - **Most files are scheduled runs, and they still need dots.** On the
@@ -425,7 +436,9 @@ Facts measured on 2026-10-29 shape the design:
 - **The watcher only ages dots.** A prompt bumps `lastActivityAt` before the
   working hook re-titles the session, so a 🟡 title briefly looks 🟢-fresh.
   The live run woke once for that. A younger dot is always the Stop hook's
-  job, so `watch` drops any rename that would make a dot younger.
+  job, so `watch` drops any rename that would make a dot younger, except
+  one driven by side-session news (`"news": true` on the line): no turn of
+  the pilot runs when a child works, so only the watcher can turn it 🟢.
 - **The watcher must not watch itself.** Each wake re-titles the watcher
   session, which would turn 🟡 five minutes later and wake it forever.
   `watch --session <its local id>` excludes it, and records its CLI id in

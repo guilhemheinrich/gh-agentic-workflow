@@ -53,6 +53,7 @@
 #   SESSION_TITLE_GH_TTL=60        seconds a gh answer is reused
 #   SESSION_TITLE_GATE_TTL=300     seconds the question gate stays open after a deny
 #   SESSION_TITLE_APP_DIR=DIR      desktop app session files (default ~/Library/Application Support/Claude/claude-code-sessions)
+#   SESSION_TITLE_CHILD_STALE=7200 seconds a working-dot (🔵) title stays a live turn: not aged, child counted running
 
 set -uo pipefail
 
@@ -70,6 +71,8 @@ if [[ -n "${SESSION_TITLE_APP_DIR:-}" ]]; then APP_DIR="$SESSION_TITLE_APP_DIR"
 elif [[ -n "${APPDATA:-}" ]]; then
   APP_DIR="$(cygpath -u "$APPDATA" 2>/dev/null || printf '%s' "$APPDATA")/Claude/claude-code-sessions"
 else APP_DIR="$HOME/Library/Application Support/Claude/claude-code-sessions"; fi
+# Seconds a working-dot title counts as a live turn before it is a crashed one.
+STALE="${SESSION_TITLE_CHILD_STALE:-7200}"
 WATCHER_FILE="$CACHE_DIR/watcher.json"
 HEARTBEAT_FILE="$CACHE_DIR/watch-heartbeat.json"
 
@@ -267,7 +270,7 @@ children() {
     | xargs -0 grep -lF "\"spawnedFrom\":{\"sessionId\":\"$parent\"" 2>/dev/null \
     | tr '\n' '\0' \
     | xargs -0 jq -c --arg w "$wdot " --arg p "$parent" --argjson now "$(date +%s)" \
-        --argjson stale "${SESSION_TITLE_CHILD_STALE:-7200}" '
+        --argjson stale "$STALE" '
       select(.spawnedFrom.sessionId == $p and (.isArchived // false) == false)
       | {running: ((.title // "" | startswith($w)) and ($now - ((.lastActivityAt // 0) / 1000)) < $stale)}' 2>/dev/null \
     | jq -sc '{total: length, running: (map(select(.running)) | length)}'
@@ -479,16 +482,46 @@ merged_overrides() {
   printf '%s' "$ov"
 }
 
+# kids_activity — {parentLocalId: epoch} over the non-archived session files
+# that name a parent in spawnedFrom.sessionId: the latest news from that
+# parent's side sessions. A child still wearing the working dot within
+# $STALE seconds is busy, so it counts as news right now.
+kids_activity() {
+  local wdot; wdot="$(jq -r '.freshness.workingDot' "$TEMPLATES")"
+  [[ -d "$APP_DIR" ]] || { echo '{}'; return 0; }
+  find "$APP_DIR" -type f -name 'local_*.json' -mtime -6 -print0 2>/dev/null \
+    | xargs -0 grep -lF '"spawnedFrom":{"sessionId":"' 2>/dev/null \
+    | tr '\n' '\0' \
+    | xargs -0 jq -c --arg w "$wdot " --argjson now "$(date +%s)" --argjson stale "$STALE" '
+      select((.isArchived // false) == false and (.spawnedFrom.sessionId | type) == "string")
+      | ((.lastActivityAt // 0) / 1000 | floor) as $at
+      | {p: .spawnedFrom.sessionId,
+         at: (if ((.title // "") | startswith($w)) and ($now - $at) < $stale then $now else $at end)}' 2>/dev/null \
+    | jq -sc 'reduce .[] as $k ({}; .[$k.p] = ([.[$k.p] // 0, $k.at] | max))'
+  return 0
+}
+
 # sweep FILE — FILE is list_sessions output. Prints one {sessionId,title} line
 # per session whose age dot is stale, or whose "to-merge" PR got merged. Only
 # titles built from the templates are touched; running and archived sessions
 # are skipped. With freshness off, the dots are stripped instead, so turning
 # the feature off cleans the sidebar.
+# A dot ages only while the session is idle and has no news:
+# - a working-dot title ("🔵 🛠️ Coding · …") is a live turn, never aged before
+#   $STALE seconds: the app does not flush lastActivityAt during a turn, and a
+#   session waiting on a background task is alive too. Past that bound it is
+#   a crashed turn and ages like any other;
+# - a pilot's age is the youngest of its own and its side sessions' activity,
+#   so "🧭 Piloting 0/2" stays 🟢 while a child works. Such a rename may make
+#   the dot younger, and carries news: true so older_only keeps it.
 sweep() {
   local fresh=false; freshness_on && fresh=true
   local ov; ov="$(merged_overrides "$1")"; [[ -n "$ov" ]] || ov='{}'
-  jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --argjson ov "$ov" --slurpfile tpl "$TEMPLATES" '
+  local kids; kids="$(kids_activity)"; [[ -n "$kids" ]] || kids='{}'
+  jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --argjson ov "$ov" --argjson kids "$kids" \
+    --argjson stale "$STALE" --slurpfile tpl "$TEMPLATES" '
     ($tpl[0].freshness.levels) as $levels
+    | ($tpl[0].freshness.workingDot + " ") as $wdot
     | ([$levels[].dot, $tpl[0].freshness.workingDot] | map(. + " ")) as $dots
     | ([$tpl[0].statuses[].icon] + [$tpl[0].activities | to_entries[] | select(.key | startswith("$") | not) | .value.icon]) as $icons
     | (if type == "array" then . else (.sessions // []) end)[]
@@ -496,13 +529,16 @@ sweep() {
     | .title as $t
     | ($ov[.sessionId] // (reduce $dots[] as $p ($t; ltrimstr($p)))) as $base
     | select(any($icons[]; . as $i | $base | startswith($i)))
-    | ((.lastActivityAt // "") | sub("\\.[0-9]+Z$"; "Z") | try fromdateiso8601 catch null) as $at
-    | select($at != null)
+    | ((.lastActivityAt // "") | sub("\\.[0-9]+Z$"; "Z") | try fromdateiso8601 catch null) as $own
+    | select($own != null)
+    | select(($t | startswith($wdot) | not) or ($now - $own) >= $stale)
+    | ($kids[.sessionId] // 0) as $kid
+    | ([$own, $kid] | max) as $at
     | (($now - $at) / 60) as $age
     | (first($levels[] | select(.belowMinutes == null or $age < .belowMinutes)) | .dot) as $dot
     | (if $fresh then "\($dot) \($base)" else $base end) as $new
     | select($new != $t)
-    | {sessionId, title: $new}
+    | {sessionId, title: $new} + (if $kid > $own then {news: true} else {} end)
   ' "$1"
 }
 
@@ -510,14 +546,15 @@ sweep() {
 # when its dot is older than the current one (or the title loses its dot).
 # A prompt bumps lastActivityAt before the working hook re-titles the session,
 # so a 🟡 title can briefly look 🟢-fresh; turning a dot younger is the Stop
-# hook's job, and a watcher wake for it would be wasted.
+# hook's job, and a watcher wake for it would be wasted. The exception is
+# news from side sessions (news: true): no turn of the pilot runs for it.
 older_only() {
   jq -c --slurpfile snap "$1" --slurpfile tpl "$TEMPLATES" '
     ([$tpl[0].freshness.workingDot] + [$tpl[0].freshness.levels[].dot]) as $dots
     | (reduce ($snap[0][]) as $s ({}; .[$s.sessionId] = $s.title)) as $cur
     | def rank($t): [range(0; $dots | length) as $i | select($t | startswith($dots[$i] + " ")) | $i] | first // null;
       rank($cur[.sessionId] // "") as $old | rank(.title) as $new
-    | select($old == null or $new == null or $new > $old)'
+    | select(.news == true or $old == null or $new == null or $new > $old)'
 }
 
 # snapshot [DAYS] — a list_sessions-shaped array read from the desktop app's
