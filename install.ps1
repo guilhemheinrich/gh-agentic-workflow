@@ -4,16 +4,19 @@ $ErrorActionPreference = 'Stop'
 
 $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ExportMcp = $false
+$ClaudeHooks = $true
 
 function Show-Usage {
-    Write-Host "Usage: .\install.ps1 [--export-mcp]"
+    Write-Host "Usage: .\install.ps1 [--export-mcp] [--no-claude-hooks]"
     Write-Host ''
     Write-Host 'Copies resources to supported agent directories.'
     Write-Host ''
     Write-Host 'Options:'
-    Write-Host '  --export-mcp  Export Cursor MCP config to supported tools'
-    Write-Host '  -ExportMcp    PowerShell-style alias for --export-mcp'
-    Write-Host '  -h, --help    Show this help'
+    Write-Host '  --export-mcp         Export Cursor MCP config to supported tools'
+    Write-Host '  -ExportMcp           PowerShell-style alias for --export-mcp'
+    Write-Host '  --no-claude-hooks    Do not register hooks in ~/.claude/settings.json'
+    Write-Host '  -NoClaudeHooks       PowerShell-style alias for --no-claude-hooks'
+    Write-Host '  -h, --help           Show this help'
 }
 
 foreach ($arg in $args) {
@@ -23,6 +26,12 @@ foreach ($arg in $args) {
         }
         '-ExportMcp' {
             $ExportMcp = $true
+        }
+        '--no-claude-hooks' {
+            $ClaudeHooks = $false
+        }
+        '-NoClaudeHooks' {
+            $ClaudeHooks = $false
         }
         '-h' {
             Show-Usage
@@ -67,6 +76,7 @@ $CopyMap = @(
     @{ Src = 'skills';   Dst = "$CursorTarget\skills" }
     @{ Src = 'rules';    Dst = "$CursorTarget\rules" }
     @{ Src = 'hooks';    Dst = "$CursorTarget\hooks" }
+    @{ Src = 'scripts';  Dst = "$CursorTarget\scripts" }
     @{ Src = 'agents';   Dst = "$CursorTarget\agents" }
     @{ Src = 'commands'; Dst = "$CursorTarget\commands" }
 
@@ -93,6 +103,8 @@ $CopyMap = @(
 
     # ── Shared agents directory (generic fallback) ──────────────────────────
     @{ Src = 'skills';   Dst = "$AgentsShared\skills" }
+    @{ Src = 'hooks';    Dst = "$AgentsShared\hooks" }
+    @{ Src = 'scripts';  Dst = "$AgentsShared\scripts" }
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -133,10 +145,34 @@ foreach ($entry in $CopyMap) {
 Write-Host ''
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Claude Code hooks registration  (requires Node.js)
+#
+# Merges scripts/hooktools/claude-code-hooks.json into ~/.claude/settings.json
+# without touching existing keys or hooks. Idempotent.
+# ─────────────────────────────────────────────────────────────────────────────
+$NodeAvailable = $null -ne (Get-Command 'node' -ErrorAction SilentlyContinue)
+
+if (-not $ClaudeHooks) {
+    Write-Host "Skipping Claude Code hooks registration (--no-claude-hooks)."
+}
+elseif (-not $NodeAvailable) {
+    Write-Host "Warning: Node.js is required for Claude Code hooks registration but not found"
+    Write-Host "Claude Code hooks will not be registered"
+}
+else {
+    Write-Host "Registering Claude Code hooks…"
+    & node "$RepoDir\scripts\hooktools\merge-claude-hooks.cjs" `
+        --source "$RepoDir\scripts\hooktools\claude-code-hooks.json" `
+        --target (Join-Path $ClaudeCodeTarget 'settings.json')
+    if ($LASTEXITCODE -ne 0) { throw "Claude Code hooks registration failed" }
+}
+
+Write-Host ''
+
+# ─────────────────────────────────────────────────────────────────────────────
 # MCP config transformations  (requires Node.js)
 # ─────────────────────────────────────────────────────────────────────────────
 $CursorMcp = Join-Path $CursorTarget 'mcp.json'
-$NodeAvailable = $null -ne (Get-Command 'node' -ErrorAction SilentlyContinue)
 
 if (-not $ExportMcp) {
     Write-Host "Skipping MCP config export (pass --export-mcp to enable)."

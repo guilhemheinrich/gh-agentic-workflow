@@ -18,7 +18,7 @@ export default async function setup(_project: TestProject): Promise<void> {
     );
   }
   if (!env.DATABASE_URL) {
-    throw new Error(`TEST_ENV=${env.TEST_ENV}: DATABASE_URL missing in tests/env/.env.${env.TEST_ENV}`);
+    throw new Error(`TEST_ENV=${env.TEST_ENV}: DATABASE_URL missing in tests/env/.env.${env.TEST_ENV}.secret`);
   }
   // Optional: apply migrations here so every file starts from the same schema.
   // await runMigrations(env.DATABASE_URL);

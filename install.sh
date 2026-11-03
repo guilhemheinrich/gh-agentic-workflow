@@ -3,16 +3,18 @@ set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 EXPORT_MCP=0
+CLAUDE_HOOKS=1
 
 usage() {
 	cat <<EOF
-Usage: $(basename "$0") [--export-mcp]
+Usage: $(basename "$0") [--export-mcp] [--no-claude-hooks]
 
 Copies resources to supported agent directories.
 
 Options:
-  --export-mcp  Export Cursor MCP config to supported tools
-  -h, --help    Show this help
+  --export-mcp        Export Cursor MCP config to supported tools
+  --no-claude-hooks   Do not register hooks in ~/.claude/settings.json
+  -h, --help          Show this help
 EOF
 }
 
@@ -20,6 +22,9 @@ while [ "$#" -gt 0 ]; do
 	case "$1" in
 		--export-mcp)
 			EXPORT_MCP=1
+			;;
+		--no-claude-hooks)
+			CLAUDE_HOOKS=0
 			;;
 		-h | --help)
 			usage
@@ -140,6 +145,26 @@ for entry in "${COPY_MAP[@]}"; do
 	cp -Rf "$src"/* "$dst"/ 2>/dev/null || true
 	echo "  $src_name -> $dst"
 done
+
+echo ""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Claude Code hooks registration  (requires Node.js)
+#
+# Merges scripts/hooktools/claude-code-hooks.json into ~/.claude/settings.json
+# without touching existing keys or hooks. Idempotent.
+# ─────────────────────────────────────────────────────────────────────────────
+if [ "$CLAUDE_HOOKS" -eq 0 ]; then
+	echo "Skipping Claude Code hooks registration (--no-claude-hooks)."
+elif ! command -v node &>/dev/null; then
+	echo "Warning: Node.js is required for Claude Code hooks registration but not found"
+	echo "Claude Code hooks will not be registered"
+else
+	echo "Registering Claude Code hooks…"
+	node "$REPO_DIR/scripts/hooktools/merge-claude-hooks.cjs" \
+		--source "$REPO_DIR/scripts/hooktools/claude-code-hooks.json" \
+		--target "$CLAUDE_CODE_TARGET/settings.json"
+fi
 
 echo ""
 

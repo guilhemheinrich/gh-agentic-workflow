@@ -19,11 +19,13 @@ x-tag-descriptions:
   ddd: "[NEW] ddd"
   debugging: Debugging, investigation, troubleshooting
   devops: "[NEW] devops"
+  devtools: "[NEW] devtools"
   docker: Docker, Dockerfile, images
   docker-compose: Docker Compose orchestration
   documentation: Documentation, Diátaxis, JSDoc
   domain: "[NEW] domain"
   e2e: End-to-end testing (Playwright, Cypress)
+  environment: "[NEW] environment"
   eslint: Linting, static analysis
   fp-ts: fp-ts / Effect functional programming
   frontend: Frontend development, UI frameworks
@@ -37,6 +39,7 @@ x-tag-descriptions:
   interaction: "[NEW] interaction"
   keycloak: Keycloak identity and access management
   kubernetes: Kubernetes, Helm, orchestration
+  linear: Linear issue tracker, projects and issues
   lint: Linting, static analysis, code quality
   lit: Lit web components framework
   llm: LLM provider APIs, prompts, cross-model review
@@ -49,7 +52,9 @@ x-tag-descriptions:
   npm: npm, private registry, packages
   nuxt: Nuxt framework
   performance: "[NEW] performance"
+  philosophy: Project philosophies and guiding paradigms (PHILOSOPHY.md)
   playwright: Playwright browser automation, E2E testing
+  ports: "[NEW] ports"
   prisma: Prisma ORM
   process: "[NEW] process"
   purity: "[NEW] purity"
@@ -68,6 +73,7 @@ x-tag-descriptions:
   sql: SQL databases, migrations, schemas
   starlight: Starlight documentation framework
   svg: "[NEW] svg"
+  taskfile: Task (Taskfile.yml) runner patterns and conventions
   tdd: Test-Driven Development methodology
   testing: Testing, unit and integration tests
   tooling: "[NEW] tooling"
@@ -84,6 +90,24 @@ x-tag-descriptions:
   web-analysis: "[NEW] web-analysis"
   web-components: Web Components, Lit
   workflow: "[NEW] workflow"
+  worktree: "[NEW] worktree"
+x-bundle-descriptions:
+  common: Stack-agnostic minimum-viable starter set for any project
+x-category-descriptions:
+  architecture: Architecture patterns and structural principles
+  standards: Coding standards and conventions
+  programming-languages: Language-specific practices
+  frameworks-and-libraries: Framework and library usage
+  tools-and-configurations: Tooling, CLIs and configuration
+  workflows-and-processes: Development workflows and processes
+  templates-and-models: Templates and reusable models
+  quality-assurance: Testing, review and quality
+  domain-specific: Business-domain specific assets
+  philosophy: Project philosophies — paradigms written to PHILOSOPHY.md and referenced from AGENTS.md / CLAUDE.md
+  devx-and-agentic: >-
+    DevX & Agentic — developer experience and agent harness tooling (session titles, self-improving skills, skill
+    discovery, agent hooks)
+  other: Everything else
 assets:
   - path: .agents/skills/documentation-writer/
     type: skill
@@ -642,7 +666,7 @@ assets:
     category: workflows-and-processes
   - path: hooks/registry-sync-on-skill.sh
     type: hook
-    category: tools-and-configurations
+    category: devx-and-agentic
     tags:
       - claude
       - cursor
@@ -653,6 +677,71 @@ assets:
       referenced in asset-registry.yml. If not, it reminds the agent (per AGENTS.md) to register the skill in the same
       change; silent when already registered. Supports Claude PostToolUse and Cursor afterFileEdit. Reminder-only —
       never rewrites the registry. Disable with REGISTRY_SYNC=0.
+  - path: hooks/session-title-ask.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude PreToolUse hook (matcher AskUserQuestion) that denies the first click-to-answer question once, asking the
+      agent to rename the desktop session to "🙋 À trancher · <topic>" before asking again, since an interactive
+      question never ends the turn and the Stop hook never runs. Never denies twice within SESSION_TITLE_GATE_TTL
+      seconds; clears the Stop fingerprint so the next turn re-titles. Desktop and attended sessions only. Disable with
+      SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-progress.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude PostToolUse hook (matcher Agent|Task|Edit|Write|MultiEdit) that keeps the "🔨 À implémenter D/T" counter of
+      a spec session live during a long turn: when tasks.md finishes a phase (or a task, with progress.every = "task"),
+      it hands the agent the exact new title through additionalContext. Ignores tool calls made inside subagents, which
+      cannot rename their parent. Desktop and attended sessions only; silent in scheduled runs. Disable with
+      SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-sync.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+      - spec-kit
+    description: >-
+      Claude Stop hook that gathers the session's facts through the session-title skill (spec or free session, spec-kit
+      stage, git, PR, question ending) and, once per new set of facts, blocks the stop with a reason asking the agent to
+      judge the human's next action and rename the desktop session from the fixed templates ("À merger", "À tester", "À
+      clôturer"). Desktop and attended sessions only; never loops (honours stop_hook_active). Disable with
+      SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-watcher-check.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude SessionStart hook that reads the freshness watcher heartbeat (`session-title.sh watcher-status`) and, when
+      no watcher is alive on the machine (fresh device, app restarted, watcher archived), asks the agent to propose one
+      as a New task card in its own worktree, so the age dots never freeze silently. At most one proposal per
+      SESSION_TITLE_NAG_TTL seconds machine-wide; silent on compaction, /clear and scheduled runs. Desktop and attended
+      sessions only. Disable with SESSION_TITLE_SYNC=0.
+  - path: hooks/session-title-working.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Claude UserPromptSubmit hook that asks the agent to make its first tool call a rename to the working title as soon
+      as a message arrives — an activity from a fixed catalogue, "🔵 🛠️ Coding 3/14 · <subject>", with the spec slug
+      kept as subject in a spec session. The Stop hook restores or re-judges the title at the end of the turn. Desktop
+      and attended sessions only; silent in scheduled runs. Disable with SESSION_TITLE_SYNC=0.
   - path: rules/00-architecture/0-hexagonal-ddd.mdc
     type: rule
     description: >-
@@ -900,6 +989,40 @@ assets:
       modified UI surface MUST be observed in a real browser before the implementation is considered complete, and every
       newly introduced interactive element MUST be exercised and its observable outcome asserted against the spec.
     category: quality-assurance
+  - path: skills/adversarial-review-convergence/
+    type: skill
+    tags:
+      - llm
+      - meta
+      - process
+      - quality
+      - verification
+    description: >-
+      Drive a multi-round adversarial review to a decision instead of to an ever-larger document. An adversarial panel
+      finds real defects and never terminates on its own: every revision adds detail, detail adds attack surface, and a
+      reviewer charged to attack will always find something. This skill is the method that bounds it — charter the panel
+      against the objective rather than the artifact, hand it the settled arbitrations and forbid relitigating them,
+      declare a clean verdict a legitimate outcome, collapse findings into root causes before revising, read the trend
+      rather than the count, and terminate on a checklist rather than on a feeling. Ships the charter template with its
+      verdict vocabulary, the round ledger that makes the trend visible, and the dispositions contract that forces one
+      verdict per finding. Transport-agnostic: run the lanes through cursor-adversarial-review or
+      openrouter-adversarial-review. Use when a spec or plan is going through more than one round of external review,
+      when round N returns more findings than round N-1, when the panel and the author are arguing instead of
+      converging, or when deciding whether a review is finished.
+    category: quality-assurance
+  - path: skills/ai-igniter-setup/
+    type: skill
+    tags:
+      - devtools
+      - docker
+      - environment
+      - ports
+      - worktree
+    description: >-
+      Set up AI Igniter (ScreamZ/ai-igniter) in a project to manage isolated worktree-aware dev environments with
+      automatic port allocation, managed .env sections, and Docker-based services (PostgreSQL, S3, custom). Use when
+      onboarding a project for parallel-branch development or Claude Code worktrees.
+    category: devx-and-agentic
   - path: skills/app-version-surface/
     type: skill
     tags:
@@ -961,7 +1084,7 @@ assets:
       update propagation to installed users, and semantic-release automation that bumps plugin.json from Conventional
       Commits. Use when bumping a plugin version, testing a plugin locally before publishing, wiring release automation
       for a plugin repo, or debugging why users don't receive a plugin update.
-    category: tools-and-configurations
+    category: devx-and-agentic
   - path: skills/compose-env-ports/
     type: skill
     tags:
@@ -998,6 +1121,7 @@ assets:
       that returns a confident review of nothing.
   - path: skills/cursor-dot-glow/
     type: skill
+    category: frameworks-and-libraries
     tags:
       - animation
       - background
@@ -1052,7 +1176,9 @@ assets:
       - docker-compose
     description: >-
       Container orchestration with Docker Compose for multi-container applications, networking, volumes, and production
-      deployment
+      deployment. Enforces the secrets rule: no configuration value or secret in compose files (not even as a default or
+      in an example) — everything comes from an unversioned .env via ${VAR:?}, with a versioned .env.example holding
+      fake values.
     category: tools-and-configurations
   - path: skills/docker-containerization/
     type: skill
@@ -1091,8 +1217,8 @@ assets:
       - docker
     description: >-
       Write Dockerfiles with multi-stage builds for development and production. Use when creating a Dockerfile,
-      configuring dev vs production builds, handling lockfile generation via make lock, or debugging dependency install
-      issues in Docker.
+      configuring dev vs production builds, handling lockfile generation via make lock or task lock, or debugging
+      dependency install issues in Docker.
     category: tools-and-configurations
   - path: skills/dockerfile-multi-stage/
     type: skill
@@ -1114,6 +1240,16 @@ assets:
     category: standards
     bundles:
       - common
+  - path: skills/drizzle-pg-boss/
+    type: skill
+    tags:
+      - backend
+      - sql
+      - typescript
+    description: >-
+      Enqueue pg-boss jobs atomically inside a Drizzle ORM transaction on PostgreSQL with the built-in `fromDrizzle`
+      adapter (pg-boss >= 12.17.0), and write idempotent workers that run their own Drizzle transaction.
+    category: frameworks-and-libraries
   - path: skills/e2e-playwright/
     type: skill
     tags:
@@ -1175,7 +1311,7 @@ assets:
       Helps users discover and install agent skills when they ask questions like "how do I do X", "find a skill for X",
       "is there a skill that can...", or express interest in extending capabilities. This skill should be used when the
       user is looking for functionality that might exist as an installable skill.
-    category: other
+    category: devx-and-agentic
     bundles:
       - common
   - path: skills/fluid-architecture-scroll-mastery/
@@ -1267,6 +1403,7 @@ assets:
       - common
   - path: skills/grievances/
     type: skill
+    category: workflows-and-processes
     tags:
       - common
       - documentation
@@ -1299,6 +1436,28 @@ assets:
       - hub
     description: Modelo Hub documentation map
     category: domain-specific
+  - path: skills/integration-branch-discipline/
+    type: skill
+    tags:
+      - ci-cd
+      - devops
+      - git
+      - hooks
+      - process
+    description: >-
+      Lock a repository onto the branch its CI actually deploys — whatever that branch is called on it: `develop`,
+      `staging`, `preprod`, `recette` — so no worktree is cut from the default branch and no pull request targets it by
+      accident. Branch names are variables throughout: the roles are "integration branch" and "protected branch", and
+      `develop` / `staging` are only the two most frequent values. Covers the detection question first (which
+      repositories need this, and how you tell from the CI files rather than from folklore), then the enforcement: a
+      committed `.branch-policy`, a `pre-push` hook that refuses a protected target and names a branch cut from the
+      wrong base, a `reference-transaction` hook that notices a new deploy branch arriving by fetch, and the forge-side
+      rules that are the only real lock. Ships `branch-policy.sh` (detect · init · doctor · worktree · pr-base · drift),
+      the two hook templates, an AGENTS.md block, and a per-forge reference for the server-side settings. Use when a
+      repository has a deploy branch distinct from its default branch, when an agent or a human opened a pull request
+      against the default branch, when onboarding a repository whose merge rules live only in someone's head, or when a
+      hotfix needs a named exception.
+    category: workflows-and-processes
   - path: skills/javascript-resizable-panel/
     type: skill
     tags:
@@ -1329,6 +1488,28 @@ assets:
       Diagnose and resolve Kubernetes infrastructure issues using kubectl via Docker. Covers pod diagnostics, ConfigMap
       modifications, rollout management, and DevOps report generation for out-of-scope actions.
     category: tools-and-configurations
+  - path: skills/linear-tracker/
+    type: skill
+    tags:
+      - hooks
+      - linear
+      - mcp
+      - process
+      - spec-kit
+      - workflow
+    description: >-
+      Use Linear as the tracker a repository publishes findings to, through the Linear MCP. Covers the per-repository
+      configuration that names a team and a project (`.linear.json`), the mapping from a grievance record to a Linear
+      issue and the two mappings that silently corrupt data if taken literally, the publish contract this skill answers
+      on behalf of the `grievances` skill, and read-only triage across a workspace. It also installs, once, a repo-local
+      advisory Stop hook and per-phase templates that follow a spec-kit change in Linear — issue at specify, In Progress
+      at the first ticked task, In Review when a PR opens — from file, git and PR facts only, asking once per fact and
+      never blocking. `publish` is a verb of the `grievances` skill; this skill is one backend that answers it, and it
+      never writes a ledger. Use when wiring a repository to a Linear project, when a finding must leave a repository
+      and become an issue someone can own, when auditing which findings are already tracked, or when deciding what a
+      tracker can and cannot hold. Triggers on "Linear", "linear.json", "publish a grievance", "tracker", "issue from a
+      finding", "which project does this repo belong to", "follow a spec in Linear", "spec-kit lifecycle".
+    category: workflows-and-processes
   - path: skills/lit-web-components/
     type: skill
     tags:
@@ -1360,9 +1541,11 @@ assets:
       - docker
       - make
       - monorepo
+      - taskfile
     description: >-
-      Templates and procedures for a project-root Makefile: env vars, targets up, down, test, setup, db-*, coverage. Use
-      when authoring or debugging Makefiles.
+      Templates and procedures for the project-root task runner, Makefile or Taskfile.yml (Task): env vars, targets up,
+      down, test, lock, setup, db-*, coverage, plus the Make → Task mapping. Use when authoring, debugging or converting
+      Makefiles and Taskfiles.
     category: architecture
     bundles:
       - common
@@ -1488,6 +1671,17 @@ assets:
       model to attack your work, picking a reviewer without knowing model names, reviewing a spec or a diff outside the
       agent that produced it, setting up an OpenRouter key, calling the client from an agent or a hook where an
       inherited stdin never reaches EOF, or debugging a gateway that answers HTTP 200 with an error body.
+  - path: skills/philosophy-data-first/
+    type: skill
+    tags:
+      - architecture
+      - philosophy
+      - sql
+    description: >-
+      Data-First & State Transitions philosophy: every use case is an atomic database transaction from an initial state
+      to a committed final state; external or async effects go through a job orchestrator (pg-boss or equivalent)
+      enqueued in the same transaction; the data layer uses an ORM that exposes the physical model (e.g. Drizzle).
+    category: philosophy
   - path: skills/plain-explanation/
     type: skill
     tags:
@@ -1507,6 +1701,58 @@ assets:
       "debrief for the team", and implicitly whenever the reader is a human who must understand or decide rather than a
       reviewer or a tool that already holds the map.
     category: standards
+  - path: skills/playwright-auth-factory/
+    type: skill
+    tags:
+      - auth
+      - e2e
+      - playwright
+      - security
+    description: >-
+      Build the authentication script a Playwright suite needs, so no test — and no agent — ever types a credential into
+      a login form. A script reads a per-environment secrets file, obtains a session out of band, and writes a
+      Playwright `storageState` the browser starts from; the secret goes from disk to the network without passing
+      through a prompt, a transcript, or a page object. Ships a runnable Node template (`scripts/auth-state.mjs`, Node
+      20.12+, `util.parseEnv`) covering environment selection by `ENVIRONMENT=<name>`, mode-600 enforcement, session
+      reuse, atomic writes and redacted reporting, plus three recipes for the ways a session is actually obtained — a
+      credential endpoint, a JWT in localStorage, an existing cookie jar — and the browser-once recipe for logins that
+      cannot be scripted at all (MFA, CAPTCHA, consent). Use when writing or reviewing E2E authentication setup, when an
+      agent refuses to fill a password field, when adding a second environment or a second role to a suite, or when a
+      storageState loads but the app still shows logged out.
+    category: quality-assurance
+  - path: skills/pr-watch/
+    type: skill
+    tags:
+      - ci-cd
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Give the sessions of Claude Desktop (and any harness that re-invokes an idle session when a background command
+      exits) near-live news from the Git host that owns their pull request — Bitbucket Cloud and GitHub today, one
+      provider file per host. A session that pushed a branch hears, at zero token cost outside its own turn, when a
+      pipeline or check ends or fails, a reviewer comments, approves or requests changes, a merge conflict appears, a
+      commit lands from elsewhere, the PR is merged or declined, or the build the merge triggered ends. This skill is a
+      factory: invoking it instantiates the watcher on one machine — `prw plan` reads the machine (which hosts it pushes
+      to, which tokens exist, launchd or not, a legacy instance), `prw migrate` carries a legacy `bitbucket-pr-watch`
+      instance over, `prw setup` stores read-only tokens in one 0600 env file, `prw daemon start` installs the poller,
+      `prw setup --claude` registers the hooks. Ships `scripts/prw` (bash, curl, jq), the Bitbucket and GitHub providers
+      with their worked examples, the provider contract for adding a host, and the Claude Code adapter. Use when a
+      session must learn about its PR without the human checking the Git host, when instantiating or repairing the
+      watcher on a machine, when adding GitHub to a machine that already watches Bitbucket (or the reverse), when adding
+      a third host, or when a session is woken by a `prw wait` exit. Triggers on "pr watch", "prw", "réagir aux PR",
+      "news de GitHub / Bitbucket", "pipeline échoué", "commentaire de PR", "instancier le watcher".
+    category: devx-and-agentic
+  - path: skills/project-philosophy/
+    type: skill
+    tags:
+      - documentation
+      - meta
+      - philosophy
+    description: >-
+      Create or amend the PHILOSOPHY.md file at the root of a repository and make sure it is referenced from CLAUDE.md
+      and/or AGENTS.md so every agent loads it; records the implementation decisions a philosophy requires.
+    category: philosophy
   - path: skills/s3-backend-proxy/
     type: skill
     tags:
@@ -1526,6 +1772,24 @@ assets:
       - web-components
     description: Scroll and UX mastery
     category: frameworks-and-libraries
+  - path: skills/self-improving-skills/
+    type: skill
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - meta
+      - process
+    description: >-
+      Turn the corrections a human makes during Claude Code sessions into durable rules and better skills, instead of
+      repeating them every session. Explains the principle (session introspection → proposed amendment → human review →
+      scoped write), compares the eight public implementations surveyed on 2026-10-29 with their maturity, and installs
+      the recommended one, BayramAnnakov/claude-reflect (https://github.com/BayramAnnakov/claude-reflect). Covers where
+      a learning must land (most specific target wins), the measure-before-and-after discipline no mature tool ships
+      yet, and the settings that keep session history long enough to mine. Use when the user asks for a skill that
+      "improves itself", "learns from corrections", "reflects on the session", wants to stop repeating the same
+      correction, or wants to set up /reflect. Triggers on "self-improving", "auto-improve", "reflect",
+      "claude-reflect", "learn from corrections", "retrospective", "introspection de session".
   - path: skills/semantic-release-js-ts-pipeline/
     type: skill
     tags:
@@ -1561,6 +1825,27 @@ assets:
       signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint
       with PBKDF2-SHA256 password hashing.
     category: domain-specific
+  - path: skills/session-title/
+    type: skill
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+      - spec-kit
+    description: >-
+      Keep a Claude desktop session title equal to the next action its human owes — "🔀 À merger #12 · 042-webhook", "🧪
+      À tester · Mes Mailles impersonation", "📐 À planifier · 042-webhook" — chosen from 13 fixed templates instead of
+      being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
+      deterministic facts through `scripts/session-title.sh` (spec or free session, spec-kit stage, git state, PR state,
+      whether the turn ended on a question) and, once per new set of facts, asks the agent to judge the human's next
+      action and rename the session; only the agent can call the app's `set_session_title` tool. An age dot (🟢 under 5
+      min, 🟡, 🟠, 🔴, 🟤, ⚫, ⚪ over 2 weeks) is kept current by a watcher session that a bash loop over the app's
+      session files wakes only when a dot must change, with a timed scheduled sweep as fallback. Works for spec-kit
+      sessions (any spec-kit flow, not only /dev-it) and for free "vibe coding" sessions alike. Use when installing the
+      title hook, when the hook asks for a title update, when a session's title no longer says what to do next, or when
+      adding a status to the template set. Triggers on "session title", "rename session", "titre de session",
+      "intitulé", "à merger", "à tester", "à clôturer".
   - path: skills/sonarqube-config/
     type: skill
     tags:
@@ -1629,9 +1914,11 @@ assets:
       Generate a bespoke static-validation hook in a consumer repo so agents never carry the burden of remembering to
       lint. Ships a generic runner for `.agents/hooks/validate-on-edit.sh` (agent protocol, per-edit time budget, cached
       container resolution, retry brake, warn-once degradation) plus python / typescript / nestjs routing tables and the
-      Claude and Cursor registration adapters. Documents the svc/strip/fix/check/skip routing vocabulary, branch
-      ordering, why whole-project checkers (tsc, phpstan, mypy) must stay in CI, worktree-aware container resolution,
-      and the Bash-tool coverage gap. Replaces the former `make lint FILE=…` router approach.
+      Claude and Cursor registration adapters, a SessionStart hook that installs dependencies in Claude Code cloud
+      sessions (where the runner switches to host mode, no Docker there), and a pre-commit replay of the hook on staged
+      files. Documents the svc/strip/fix/check/skip routing vocabulary, branch ordering, why whole-project checkers
+      (tsc, phpstan, mypy) must stay in CI, worktree-aware container resolution, and the Bash-tool coverage gap.
+      Replaces the former `make lint FILE=…` router approach.
   - path: skills/systematic-debugging/
     type: skill
     description: >-
@@ -1666,6 +1953,7 @@ assets:
       across a fleet, or reviewing a test config that hardcodes a target.
   - path: skills/text-clip-cloud-word/
     type: skill
+    category: frameworks-and-libraries
     tags:
       - animation
       - clip-path
@@ -1692,6 +1980,7 @@ assets:
     category: frameworks-and-libraries
   - path: skills/web-analysis/
     type: skill
+    category: quality-assurance
     tags:
       - accessibility
       - docker

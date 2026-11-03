@@ -16,6 +16,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -57,6 +58,15 @@ def quiet():
     """Swallow the CLI's own stdout; the suite reports its own results."""
     with contextlib.redirect_stdout(io.StringIO()):
         yield
+
+
+@contextlib.contextmanager
+def captured(sink: list[str]):
+    """Swallow the CLI's stdout and hand it to the caller for assertions."""
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        yield
+    sink.append(buffer.getvalue())
 
 
 def written(text: str) -> Path:
@@ -198,6 +208,47 @@ class TestDeriveId(unittest.TestCase):
             g.check_new_id(ident)
             self.assertLessEqual(len(ident), g.ID_MAX_LEN, ident)
 
+    def test_word_count_sweep_never_mints_an_invalid_id(self):
+        """The fixtures above all sit at 5 significant words or fewer, which is
+        exactly the segment ceiling — so this class went green while `add` was
+        minting 6-, 7- and 8-segment names that every later command refused.
+        The sweep is the point: the boundary must be crossed, not touched."""
+        for n in range(2, 13):
+            short = " ".join(f"wrd{k}" for k in range(n))
+            ident = g.derive_id(short)
+            self.assertRegex(ident, g.SLUG_ID_RE, f"{n} words -> {ident}")
+            self.assertLessEqual(len(ident), g.ID_MAX_LEN, ident)
+
+    def test_field_reported_descriptions_mint_valid_ids(self):
+        """Shaped like descriptions seen in downstream ledgers. Every one minted
+        an id its own validator rejected. The third is the sharp one — 8
+        segments at 38 characters, so tightening ID_MAX_LEN alone would not
+        have moved it. The last minted a 6-segment id that this copy then
+        refused to reload."""
+        reported = [
+            "alpha beta gamma delta epsilon zeta",
+            "docs corpus drift gate merge order",
+            "the api key is not read from the env any more so the job dies at boot",
+            "the orders e2e still clicks a button renamed six weeks ago, "
+            "so one spec is red on staging",
+            "One OAuth token request per account per sweep makes the token "
+            "endpoint 500 under fan-out",
+            "shop item list wrong default tax shown",
+        ]
+        for short in reported:
+            ident = g.derive_id(short)
+            self.assertRegex(ident, g.SLUG_ID_RE, short)
+
+    def test_the_two_bounds_are_stated_once(self):
+        """The defect was two bounds in two units, only one enforced. The
+        pattern must be built from ID_MAX_SEGMENTS, not hard-coded beside it."""
+        self.assertEqual(g.ID_MAX_SEGMENTS, 5)
+        for n in range(2, g.ID_MAX_SEGMENTS + 1):
+            self.assertRegex("GRV-" + "-".join(["w"] * n), g.SLUG_ID_RE)
+        self.assertNotRegex(
+            "GRV-" + "-".join(["w"] * (g.ID_MAX_SEGMENTS + 1)), g.SLUG_ID_RE
+        )
+
     def test_deterministic(self):
         short = "the asset registry description drifts from the skill frontmatter title"
         self.assertEqual(len({g.derive_id(short) for _ in range(5)}), 1)
@@ -299,6 +350,20 @@ class TestLedgerIntegrity(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("GRV-worker", message)
         self.assertIn("unusable id", message)
+
+    def test_a_too_many_segments_marker_gets_a_concrete_replacement(self):
+        """Ledgers written before ID_MAX_SEGMENTS was enforced at mint time
+        hold 6-segment ids, e.g. GRV-alpha-beta-gamma-delta-epsilon-1a2b. The
+        refusal names the id to rename it to, built the way derive_id now
+        builds one: the first readable segments plus the existing
+        discriminator, so the rename is mechanical."""
+        stale = "GRV-alpha-beta-gamma-delta-epsilon-1a2b"
+        path = written(ledger_text(block(LEGACY_ID), block(stale)))
+        with self.assertRaises(g.UserError) as caught:
+            g.Ledger.load(path)
+        message = str(caught.exception)
+        self.assertIn(f"{stale} -> GRV-alpha-beta-gamma-delta-1a2b", message)
+        self.assertRegex("GRV-alpha-beta-gamma-delta-1a2b", g.SLUG_ID_RE)
 
     def test_an_overlong_stored_identifier_is_rejected(self):
         """T033, review finding 3: the ceiling must hold on the read path."""
@@ -619,3 +684,185 @@ class TestAuditAndMigrate(unittest.TestCase):
         migrated = target.read_text(encoding="utf-8")
         self.assertIn("an old note about GRV-0001", migrated, "prose kept verbatim")
         self.assertEqual(g.Ledger.load(target).taken_ids(), set(), "nothing minted")
+
+
+# ── Publishing to a tracker ────────────────────────────────────────────────
+
+
+class PublishCase(unittest.TestCase):
+    """Base for the publish verb: a real ledger, a real .linear.json beside it."""
+
+    CONFIG = {"team": "Tiger Team", "project": "Broker PA · Run", "labels": ["modelo-broker-pa"]}
+
+    def setUp(self):
+        self.root = Path(tempfile.mkdtemp())
+        (self.root / "specs").mkdir()
+        self.path = self.root / "specs" / g.LEDGER_BASENAME
+        self.path.write_text(
+            ledger_text(block(SLUG_ID, "worker co-hosted with the API will not scale",
+                              occurrences=4, locus="internal/worker/main.go:42",
+                              source="spec 156 implementation", tags=["scaling"])),
+            encoding="utf-8",
+        )
+        self.config = self.root / ".linear.json"
+        self.write_config(self.CONFIG)
+
+    def write_config(self, payload: object) -> None:
+        self.config.write_text(json.dumps(payload), encoding="utf-8")
+
+    def publish(self, **overrides: object):
+        """Run cmd_publish and return (exit code, stdout)."""
+        import argparse
+        fields = dict(
+            file=str(self.path), repo=None, id=SLUG_ID, prepare=False, record=None,
+            url=None, backend="linear", config=str(self.config), date=None, note=None,
+            force=False, dry_run=False, json=True,
+        )
+        fields.update(overrides)
+        sink: list[str] = []
+        with captured(sink):
+            code = g.cmd_publish(argparse.Namespace(**fields))
+        return code, sink[0]
+
+    def entry(self) -> g.Grievance:
+        return g.Ledger.load(self.path).get(SLUG_ID)
+
+
+class TestPublishRefusesAndReports(PublishCase):
+    """Every stop has a distinct meaning, and two of them are not failures."""
+
+    def test_no_config_is_not_an_error(self):
+        self.config.unlink()
+        code, out = self.publish(prepare=True)
+        self.assertEqual(code, 0, "a repository that keeps its findings locally is normal")
+        self.assertEqual(json.loads(out)["status"], "not-configured")
+
+    def test_a_missing_project_refuses_rather_than_guesses(self):
+        self.write_config({"team": "Tiger Team"})
+        with self.assertRaises(g.UserError) as ctx:
+            self.publish(prepare=True)
+        self.assertIn("project", str(ctx.exception))
+
+    def test_a_committed_credential_refuses(self):
+        self.write_config({"team": "T", "project": "P", "apiKey": "lin_api_xxx"})
+        with self.assertRaises(g.UserError) as ctx:
+            self.publish(prepare=True)
+        self.assertIn("committed", str(ctx.exception))
+
+    def test_exactly_one_of_prepare_or_record(self):
+        for combination in ({}, {"prepare": True, "record": "TT-412"}):
+            with self.subTest(combination=combination):
+                with self.assertRaises(g.UserError):
+                    self.publish(**combination)
+
+    def test_a_malformed_reference_is_refused(self):
+        for ref in ("412", "tt-412", "TT412", "TT-"):
+            with self.subTest(ref=ref):
+                with self.assertRaises(g.UserError):
+                    self.publish(record=ref)
+
+    def test_a_relative_url_is_refused(self):
+        with self.assertRaises(g.UserError):
+            self.publish(record="TT-412", url="linear.app/issue/TT-412")
+
+
+class TestPublishPrepare(PublishCase):
+    """Step 1 builds the payload and touches nothing."""
+
+    def payload(self) -> dict:
+        code, out = self.publish(prepare=True)
+        self.assertEqual(code, 0)
+        return json.loads(out)
+
+    def test_prepare_writes_nothing(self):
+        before = self.path.read_text(encoding="utf-8")
+        self.publish(prepare=True)
+        self.assertEqual(self.path.read_text(encoding="utf-8"), before)
+
+    def test_severity_maps_onto_the_tracker_priority_scale(self):
+        self.assertEqual(self.payload()["issue"]["priority"], 2, "high -> 2 High")
+        self.assertNotIn(0, g.SEVERITY_TO_PRIORITY.values(), "priority 0 sorts below everything")
+
+    def test_the_provenance_header_carries_what_the_tracker_cannot_hold(self):
+        description = self.payload()["issue"]["description"]
+        for fact in (SLUG_ID, "2026-07-30", "×4", "internal/worker/main.go:42", "spec 156"):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, description)
+
+    def test_the_three_corrupting_fields_are_absent(self):
+        issue = self.payload()["issue"]
+        for forbidden in ("state", "status", "estimate", "assignee"):
+            with self.subTest(field=forbidden):
+                self.assertNotIn(forbidden, issue)
+
+    def test_labels_merge_the_config_and_never_carry_the_binding(self):
+        self.publish(record="TT-412")
+        issue = self.publish(prepare=True, force=True)[1]
+        labels = json.loads(issue)["issue"]["labels"]
+        self.assertIn("scaling", labels)
+        self.assertIn("modelo-broker-pa", labels, "config labels are added")
+        self.assertNotIn("linear:TT-412", labels, "the binding is never a tracker label")
+
+    def test_a_boundary_tag_warns_and_does_not_block(self):
+        entry = self.entry()
+        entry.tags = ["security"]
+        ledger = g.Ledger.load(self.path)
+        ledger.get(SLUG_ID).tags = ["security"]
+        self.path.write_text(ledger.render(), encoding="utf-8")
+        payload = self.payload()
+        self.assertEqual(payload["status"], "prepared", "a judgement the script cannot make never blocks")
+        self.assertTrue(payload["warnings"], "but the caller is told to look")
+
+
+class TestPublishRecord(PublishCase):
+    """Step 3 writes the reference back, and only into the tags."""
+
+    def test_the_reference_lands_in_the_tags_and_the_ledger_still_loads(self):
+        code, _ = self.publish(record="TT-412", url="https://linear.app/x/issue/TT-412")
+        self.assertEqual(code, 0)
+        self.assertIn("linear:TT-412", self.entry().tags)
+        # The binding must not widen the header's closed field list: `from_meta`
+        # refuses an unknown top-level key and stops reading the whole file.
+        header = json.loads(re.search(r"<!-- grievance:\S+ (\{.*\}) -->",
+                                      self.path.read_text(encoding="utf-8")).group(1))
+        self.assertLessEqual(set(header), set(g.Grievance.__dataclass_fields__))
+        self.assertNotIn("linear", header)
+
+    def test_publishing_does_not_resolve_the_finding(self):
+        self.publish(record="TT-412")
+        self.assertEqual(self.entry().status, "open")
+        self.assertIsNone(self.entry().resolution)
+
+    def test_the_log_line_reads_published_and_not_resolved(self):
+        self.publish(record="TT-412", url="https://linear.app/x/issue/TT-412")
+        rendered = self.path.read_text(encoding="utf-8")
+        self.assertIn("**Published", rendered)
+        self.assertNotIn("**Resolved", rendered, "render_log_entry falls through to a resolution without its branch")
+
+    def test_recording_the_same_reference_twice_is_a_no_op(self):
+        self.publish(record="TT-412")
+        code, out = self.publish(record="TT-412")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["status"], "already-recorded")
+        self.assertEqual([t for t in self.entry().tags if t.startswith("linear:")], ["linear:TT-412"])
+
+    def test_rebinding_needs_force(self):
+        self.publish(record="TT-412")
+        with self.assertRaises(g.UserError):
+            self.publish(record="TT-999")
+        self.publish(record="TT-999", force=True)
+        self.assertEqual([t for t in self.entry().tags if t.startswith("linear:")], ["linear:TT-999"])
+
+    def test_prepare_after_a_binding_reports_instead_of_building_a_duplicate(self):
+        self.publish(record="TT-412")
+        code, out = self.publish(prepare=True)
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["status"], "already-published")
+        self.assertEqual(payload["ref"], "TT-412")
+
+    def test_a_published_record_survives_a_full_round_trip(self):
+        self.publish(record="TT-412")
+        ledger = g.Ledger.load(self.path)
+        self.path.write_text(ledger.render(), encoding="utf-8")
+        self.assertIn("linear:TT-412", g.Ledger.load(self.path).get(SLUG_ID).tags)

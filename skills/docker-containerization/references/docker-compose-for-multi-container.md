@@ -16,7 +16,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://postgres:password@db:5432/myapp
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:?}@db:5432/myapp
       - REDIS_URL=redis://redis:6379
     depends_on:
       db:
@@ -33,7 +33,7 @@ services:
     image: postgres:15-alpine
     environment:
       POSTGRES_DB: myapp
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:

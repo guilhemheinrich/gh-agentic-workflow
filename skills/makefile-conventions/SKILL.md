@@ -1,14 +1,30 @@
 ---
 name: makefile-conventions
 description: >-
-  Write project-root Makefiles with Docker-first execution, .env-driven
-  configuration, and standardized targets. Use when authoring or debugging
-  Makefiles, adding make targets, configuring docker compose orchestration,
-  or when the user mentions "Makefile", "make up", "make test", or
-  "docker compose" workflow.
+  Write the project-root task runner — a Makefile or a Taskfile.yml (Task) —
+  with Docker-first execution, .env-driven configuration, and standardized
+  targets (up, down, test, lock, copy-vendors, db-*). Use when authoring or
+  debugging Makefiles or Taskfiles, adding make targets or Task tasks,
+  converting a Makefile to Task, configuring docker compose orchestration, or
+  when the user mentions "Makefile", "Taskfile", "make up", "task up",
+  "make test", or "docker compose" workflow.
 ---
 
-# Makefile — conventions et templates
+# Makefile / Taskfile — conventions et templates
+
+Deux pilotes sont couverts, avec les mêmes principes et les mêmes targets :
+
+| Pilote | Fichier | Référence |
+|---|---|---|
+| **Make** | `Makefile` | ce fichier (templates ci-dessous) + [examples.md](examples.md) |
+| **Task** | `Taskfile.yml` (v3) | [taskfile.md](taskfile.md) : correspondance Make → Task, template complet, anti-patterns |
+
+Un projet choisit **un seul pilote** (souvent imposé par son `CLAUDE.md` /
+`AGENTS.md`). Task est à privilégier quand le projet veut un fichier
+déclaratif (YAML), `task --list` comme aide, des arguments nommés
+(`task logs -- api`) et un shell identique sur tous les OS. Les targets
+obligatoires ci-dessous existent sous le même nom dans les deux pilotes
+(`help` devient la tâche `default`, `locks` / `copy-lock` devient `lock`).
 
 ## Principes fondamentaux
 
@@ -268,13 +284,14 @@ test:
 ## Ressources complémentaires
 
 - Pour des exemples complets de Makefiles réels, voir [examples.md](examples.md)
+- Pour la variante Task (`Taskfile.yml`), voir [taskfile.md](taskfile.md)
 
 ---
 
 ## See also — Static validation on edit
 
 Per-file linting driven by an editor-agent hook does **not** go through the
-Makefile. See [static-validation-hooks](../static-validation-hooks/SKILL.md):
+Makefile (or Taskfile). See [static-validation-hooks](../static-validation-hooks/SKILL.md):
 the routing table lives in the hook itself, so there is no `make lint FILE=…`
 target to write and no second file to keep in sync.
 

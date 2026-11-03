@@ -21,7 +21,7 @@ A Cursor command that orchestrates web scraping via intent detection, brief gene
 /scrape-site URL="https://example.com" INTENT="data-extraction"
 /scrape-site URL="https://example.com" MAX_PAGES=15
 /scrape-site URL="https://pricing.example.com" "Extract pricing tables and plans"
-/scrape-site URL="https://example.com" AUTH_EMAIL="user@example.com" AUTH_PASSWORD="secret" AUTH_TYPE="form"
+/scrape-site URL="https://example.com" AUTH_EMAIL="$AUTH_EMAIL" AUTH_PASSWORD="$AUTH_PASSWORD" AUTH_TYPE="form"
 /scrape-site URL="https://example.com" INTENT="site-structure" MAX_PAGES=100
 ```
 
@@ -121,8 +121,8 @@ The command supports three authentication workflows:
 ```yaml
 auth:
   type: form
-  email: user@example.com
-  password: secret
+  email: ${AUTH_EMAIL}
+  password: ${AUTH_PASSWORD}   # from the environment, never written here
 ```
 The scraper agent will locate login form and submit credentials.
 
@@ -130,8 +130,8 @@ The scraper agent will locate login form and submit credentials.
 ```yaml
 auth:
   type: basic
-  email: user@example.com
-  password: secret
+  email: ${AUTH_EMAIL}
+  password: ${AUTH_PASSWORD}   # from the environment, never written here
 ```
 Passed as HTTP Authorization header.
 

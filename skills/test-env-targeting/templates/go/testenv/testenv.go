@@ -133,7 +133,7 @@ func (e Env) RequireLocal(t testing.TB) {
 		t.Fatalf("integration tests target local backing services; TEST_ENV=%s needs TEST_LIVE=1 to opt into the live lane", e.Name)
 	}
 	if e.DatabaseURL == "" {
-		t.Fatalf("TEST_ENV=%s: DATABASE_URL missing in tests/env/.env.%s", e.Name, e.Name)
+		t.Fatalf("TEST_ENV=%s: DATABASE_URL missing in tests/env/.env.%s.secret", e.Name, e.Name)
 	}
 }
 

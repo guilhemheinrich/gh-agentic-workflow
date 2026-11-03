@@ -6,4 +6,4 @@
 # .gitignore, never committed, never copied to .env or .env.example.
 SONAR_HOST_URL=https://sonarqube.example.com
 SONAR_PROJECT_KEY=my-project
-SONAR_TOKEN=sqp_0123456789abcdef0123456789abcdef01234567
+SONAR_TOKEN=<analysis-token-written-by-sonarctl-bind>
