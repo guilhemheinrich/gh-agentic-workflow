@@ -12,6 +12,10 @@
 #      sentences, user language) naming the conversation's main subject,
 #      once per user message — not again in a continuation forced by
 #      another Stop hook, which conversation-focus-stop.sh lets through.
+#      The summary also carries links to the objects the conversation
+#      tracks — the Linear project a pilot session steers, the Linear issue
+#      a coding session implements, the pull request under way — repeated
+#      in every summary so the reader never scrolls back for them.
 #
 # Both are judged by the agent itself, which already holds the whole
 # conversation: no extra model call, no transcript parsing. The "after the
@@ -26,6 +30,7 @@
 #   CONVERSATION_FOCUS=0         disable both rules
 #   CONVERSATION_FOCUS_SPLIT=0   disable the split check only
 #   CONVERSATION_FOCUS_SUMMARY=0 disable the closing summary only
+#   CONVERSATION_FOCUS_REFS=0    keep the summary, drop its reference links
 
 set -uo pipefail
 
@@ -47,6 +52,9 @@ if [[ "${CONVERSATION_FOCUS_SPLIT:-1}" == "1" ]]; then
 fi
 if [[ "${CONVERSATION_FOCUS_SUMMARY:-1}" == "1" ]]; then
   lines+=("- Closing summary: end the reply with one final paragraph wrapped in single asterisks (*…*), 2-3 sentences in the user's language, stating the conversation's main subject and where it stands — the whole conversation, not only this turn. Nothing after it. Write it once per user message: when a Stop hook makes you continue after it was written (e.g. a session-title update), do not write it again.")
+  if [[ "${CONVERSATION_FOCUS_REFS:-1}" == "1" ]]; then
+    lines+=("- Summary references: end that italic paragraph, inside the asterisks, with markdown links to the objects this conversation tracks, separated by ' · ' — the Linear project a pilot session steers, the Linear issue the work implements, the pull request opened or reviewed (e.g. '· [Linear: Broker PA](https://linear.app/…) · [ENG-123](https://linear.app/…) · [PR #28](https://github.com/…)'). Once a reference has appeared in the conversation, repeat it in every later summary while it still applies. Use only URLs seen in this conversation or returned by a tool; never guess one, and omit the links when there are none.")
+  fi
 fi
 (( ${#lines[@]} > 1 )) || exit 0
 
