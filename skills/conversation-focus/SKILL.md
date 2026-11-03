@@ -120,13 +120,16 @@ the installation snippet.
 | `hooks/conversation-focus-prompt.sh` | `UserPromptSubmit` | injects both rules; in the desktop app the split is offered as a `start_session` card, elsewhere as a one-line suggestion with a title |
 | `hooks/conversation-focus-stop.sh` | `Stop` | reads `last_assistant_message` (falls back to the transcript), blocks once if the last paragraph is not `*…*` / `_…_` |
 
-## Installing in a repo
+## Installing
 
-Add both hooks to the repo's `.claude/settings.json` (project level), next to
-any existing hooks. The snippet is in the reference. Then check:
+Install at user level: copy both scripts to `~/.agents/hooks/` and wire them
+in `~/.claude/settings.json`, as `session-title` does. A project-level wiring
+only reaches sessions opened on that repo, and never reaches a worktree
+session until it is committed. Never wire both levels: the rules would be
+injected twice. The snippets are in the reference. Then check:
 
 ```bash
-printf '%s' '{"last_assistant_message":"Done.\n\nNo summary."}' | bash hooks/conversation-focus-stop.sh
+printf '%s' '{"last_assistant_message":"Done.\n\nNo summary."}' | bash ~/.agents/hooks/conversation-focus-stop.sh
 ```
 
 It must print a `block` decision. With `*Sujet : …*` as the last paragraph, it

@@ -63,9 +63,35 @@ caps a run of stop-hook continuations at eight
 If a future Claude Code version lets a Stop hook amend the final message, the
 guard can become a producer. Until then, keep "produce before, verify after".
 
+## Installation (user level, recommended)
+
+The rules are about how every conversation runs, not about one repo, so
+install them once for all sessions, as `session-title` does. Copy both scripts
+to `~/.agents/hooks/` and merge into `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [ { "type": "command", "command": "bash ~/.agents/hooks/conversation-focus-prompt.sh", "timeout": 5 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "bash ~/.agents/hooks/conversation-focus-stop.sh", "timeout": 10 } ] }
+    ]
+  }
+}
+```
+
+Do not also wire them at project level: the rules would be injected twice.
+Re-copy the scripts after changing them in this repo; the installed copies do
+not follow edits.
+
 ## Installation (project level)
 
-Merge into the repo's `.claude/settings.json`:
+Only for a repo whose users do not have the user-level install. A project-level
+wiring reaches only sessions opened on that repo, and only once the scripts and
+the settings are committed: a worktree session starts from the last commit, so
+uncommitted hooks never fire there. Merge into the repo's `.claude/settings.json`:
 
 ```json
 {
@@ -81,5 +107,4 @@ Merge into the repo's `.claude/settings.json`:
 ```
 
 The commands resolve against the project root, which is where Claude Code
-runs project hooks. For a user-level install, copy both scripts to
-`~/.agents/hooks/`, as `session-title` does, and point the commands there.
+runs project hooks.
