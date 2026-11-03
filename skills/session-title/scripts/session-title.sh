@@ -237,6 +237,42 @@ last_message() {
     | jq -rs '[.[] | .message.content[]? | select(.type == "text") | .text] | last // ""' 2>/dev/null
 }
 
+# local_id SESSION — the app's local id (local_…) of a CLI session id, from
+# the app's session files; cached, since a lookup greps every recent file.
+local_id() {
+  local session="$1" id
+  [[ "$session" == local_* ]] && { echo "$session"; return 0; }
+  id="$(read_cache "$session" | jq -r '.localId // empty')"
+  if [[ -z "$id" && -d "$APP_DIR" ]]; then
+    id="$(find "$APP_DIR" -type f -name 'local_*.json' -mtime -6 -print0 2>/dev/null \
+      | xargs -0 grep -lF "\"cliSessionId\":\"$session\"" 2>/dev/null | head -1)"
+    id="$(basename "${id%.json}" 2>/dev/null)"
+    [[ -n "$id" ]] && merge_cache "$session" '.localId = $l' --arg l "$id"
+  fi
+  echo "$id"
+}
+
+# children SESSION — {total, running} over the non-archived sessions started
+# from this one (their file names it in spawnedFrom.sessionId). The files
+# carry no isRunning flag and the app does not rewrite them during a turn, so
+# a child counts as running while its title wears the working dot, for up to
+# SESSION_TITLE_CHILD_STALE seconds (default 2 h) so a crashed turn ends.
+children() {
+  local parent wdot
+  parent="$(local_id "$1")"
+  [[ -n "$parent" && -d "$APP_DIR" ]] || { echo '{"total":0,"running":0}'; return 0; }
+  wdot="$(jq -r '.freshness.workingDot' "$TEMPLATES")"
+  find "$APP_DIR" -type f -name 'local_*.json' -mtime -6 -print0 2>/dev/null \
+    | xargs -0 grep -lF "\"spawnedFrom\":{\"sessionId\":\"$parent\"" 2>/dev/null \
+    | tr '\n' '\0' \
+    | xargs -0 jq -c --arg w "$wdot " --arg p "$parent" --argjson now "$(date +%s)" \
+        --argjson stale "${SESSION_TITLE_CHILD_STALE:-7200}" '
+      select(.spawnedFrom.sessionId == $p and (.isArchived // false) == false)
+      | {running: ((.title // "" | startswith($w)) and ($now - ((.lastActivityAt // 0) / 1000)) < $stale)}' 2>/dev/null \
+    | jq -sc '{total: length, running: (map(select(.running)) | length)}'
+  return 0
+}
+
 # ── Facts ────────────────────────────────────────────────────────────────────
 facts() {
   local repo="$1" session="$2" transcript="$3" lastfile="$4"
@@ -312,6 +348,10 @@ facts() {
   last="$(last_message "$transcript" "$lastfile")"
   printf '%s' "$last" | sed -e 's/[[:space:]*_`)]*$//' | tail -c 2 | grep -q '?' && question=true
 
+  # Side sessions started from this one: a pilot waiting on them owes the
+  # human nothing yet.
+  local kids; kids="$(children "$session")"; [[ -n "$kids" ]] || kids='{"total":0,"running":0}'
+
   merge_cache "$session" '.mode = $m | .modeReason = $r | .spec = (if $s == "" then .spec else $s end)
       | .transcript = (if $t == "" then .transcript else $t end)
       | .pr = (if $pr == null then .pr else ($pr.number | tostring) end)' \
@@ -321,13 +361,13 @@ facts() {
     --argjson done "$done" --argjson total "$total" --arg branch "$branch" --arg base "$base" \
     --argjson dirty "$dirty" --argjson ahead "$ahead" --argjson upstream "$upstream" \
     --argjson merged "$merged" --argjson pr "$prj" --argjson question "$question" \
-    --arg title "$(printf '%s' "$scan" | jq -r '.title')" --arg root "$root" \
+    --argjson kids "$kids" --arg title "$(printf '%s' "$scan" | jq -r '.title')" --arg root "$root" \
     --slurpfile tpl "$TEMPLATES" '
     {
       mode: $mode, modeReason: $reason, root: $root, currentTitle: $title,
       spec: (if $slug == "" then null else {slug: $slug, stage: $stage, done: $done, total: $total} end),
       git: {branch: $branch, base: $base, dirty: $dirty, ahead: $ahead, upstream: $upstream, mergedByAncestry: $merged},
-      pr: $pr, endsWithQuestion: $question
+      pr: $pr, endsWithQuestion: $question, children: $kids
     }
     | .suggested = (
         (if .pr.state == "OPEN" then ["to-merge"]
@@ -340,9 +380,10 @@ facts() {
          elif $dirty > 0 or $ahead > 0 then ["to-test", "to-ship"]
          elif $upstream and $branch != $base and .pr == null then ["to-merge", "to-ship"]
          else ["to-read"] end)
+        | if $kids.running > 0 then ["waiting-sessions"] + (. - ["waiting-sessions"]) else . end
         | if $question then ["decide"] + (. - ["decide"]) else . end)
     | .allowed = [$tpl[0].statuses | to_entries[] | select((.value.modes | index($mode)) and .value.atStop != false) | .key]
-    | .fingerprint = ({mode, s: .spec, d: ($dirty > 0), a: ($ahead > 0), pr, m: $merged, q: $question} | tojson)'
+    | .fingerprint = ({mode, s: .spec, d: ($dirty > 0), a: ($ahead > 0), pr, m: $merged, q: $question, k: $kids} | tojson)'
 }
 
 # ── Render ───────────────────────────────────────────────────────────────────
@@ -567,6 +608,8 @@ case "$cmd" in
     prn="$(printf '%s' "$state" | jq -r '.pr.number // empty')"
     prog=""
     [[ "$status_arg" == "to-implement" ]] && prog="$(printf '%s' "$state" | jq -r 'if (.spec.total // 0) > 0 then "\(.spec.done)/\(.spec.total)" else "" end')"
+    # Pilot counter: side sessions done / started, "🧭 Piloting 1/3".
+    [[ "$status_arg" == "waiting-sessions" ]] && prog="$(printf '%s' "$state" | jq -r '.children | if .total > 0 then "\(.total - .running)/\(.total)" else "" end')"
     title="$(render_title "$status_arg" "$subject" "$prn" "$prog")" || exit 1
     merge_cache "$session" '.subject = $subj | .status = $s | .title = $t' \
       --arg subj "$subject" --arg s "$status_arg" --arg t "$title"

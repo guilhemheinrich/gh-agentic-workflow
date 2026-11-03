@@ -1867,8 +1867,9 @@ assets:
       - spec-kit
     description: >-
       Keep a Claude desktop session title equal to the next action its human owes — "🔀 À merger #12 · 042-webhook", "🧪
-      À tester · Mes Mailles impersonation", "📐 À planifier · 042-webhook" — chosen from 13 fixed templates instead of
-      being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
+      À tester · Mes Mailles impersonation", "📐 À planifier · 042-webhook" — chosen from fixed templates instead of
+      being reinvented each time; a pilot waiting on its side sessions, a pipeline or a colleague's review says so
+      ("🧭 Pilotage 1/3", "⏳ Attente pipeline #478") instead of a misleading "À lire". A Stop hook (`hooks/session-title-sync.sh`) runs at the end of each turn, gathers
       deterministic facts through `scripts/session-title.sh` (spec or free session, spec-kit stage, git state, PR state,
       whether the turn ended on a question) and, once per new set of facts, asks the agent to judge the human's next
       action and rename the session; only the agent can call the app's `set_session_title` tool. An age dot (🟢 under 5

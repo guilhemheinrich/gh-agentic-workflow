@@ -1,5 +1,5 @@
 {
-  "$comment": "Session title templates. The title is read when the agent is idle, so every label names the HUMAN's next action. Tokens: {pr} -> ' #12' or '', {progress} -> ' 3/10' or ''. Labels are UI strings rendered in ONE language for every status and activity (SESSION_TITLE_LANG, default en); the free-text subject follows the session language. 'modes' lists where a status may be chosen; 'next' is the guidance the agent reads.",
+  "$comment": "Session title templates. The title is read when the agent is idle, so every label names the HUMAN's next action, or says plainly that there is none yet because the session waits on something automated that will wake it (the 'waiting-*' statuses). Tokens: {pr} -> ' #12' or '', {progress} -> ' 3/10' or ''. Labels are UI strings rendered in ONE language for every status and activity (SESSION_TITLE_LANG, default en); the free-text subject follows the session language. 'modes' lists where a status may be chosen; 'next' is the guidance the agent reads.",
   "format": "{icon} {label} · {subject}",
   "maxLength": 60,
   "freshness": {
@@ -26,7 +26,8 @@
     "debugging":     { "icon": "🐛", "label": { "en": "Debugging", "fr": "Débogage" },     "when": "chasing a failure" },
     "reviewing":     { "icon": "👀", "label": { "en": "Reviewing", "fr": "Relecture" },     "when": "reviewing a diff, a PR or a document" },
     "writing":       { "icon": "✍️", "label": { "en": "Writing", "fr": "Rédaction" },       "when": "writing docs, a report or a message" },
-    "shipping":      { "icon": "📤", "label": { "en": "Shipping", "fr": "Livraison" },      "when": "committing, pushing, opening a PR" }
+    "shipping":      { "icon": "📤", "label": { "en": "Shipping", "fr": "Livraison" },      "when": "committing, pushing, opening a PR" },
+    "piloting":      { "icon": "🧭", "label": { "en": "Piloting", "fr": "Pilotage" },       "when": "starting side sessions, or relaying what they reported" }
   },
   "statuses": {
     "to-clarify":   { "icon": "❓", "modes": ["spec"],         "label": { "fr": "À clarifier",          "en": "To clarify" },          "next": "spec.md holds [NEEDS CLARIFICATION]; human answers or runs /speckit.clarify." },
@@ -41,7 +42,11 @@
     "to-merge":     { "icon": "🔀", "modes": ["spec", "free"], "label": { "fr": "À merger{pr}",         "en": "To merge{pr}" },        "next": "A PR is open; human reviews and merges it." },
     "merged":       { "icon": "🏁", "modes": ["spec", "free"], "atStop": false, "label": { "fr": "Mergé{pr}",            "en": "Merged{pr}" },          "next": "The sweep saw the PR merged while the session was idle; human tests the change or archives the session. Set by the sweep, never at Stop (the agent judges to-test or to-close there)." },
     "to-close":     { "icon": "📦", "modes": ["spec", "free"], "label": { "fr": "À clôturer",           "en": "To close" },            "next": "Merged and nothing left to exercise, or the human confirmed it works; human archives the session and the branch." },
-    "blocked":      { "icon": "⛔", "modes": ["spec", "free"], "label": { "fr": "Bloqué",               "en": "Blocked" },             "next": "Waiting on something outside the session (a colleague, an access, a deploy)." },
+    "blocked":      { "icon": "⛔", "modes": ["spec", "free"], "label": { "fr": "Bloqué",               "en": "Blocked" },             "next": "Waiting on a PERSON or an access outside the session that the human must chase (a colleague's answer, a permission). Automated waits are the waiting-* statuses." },
+    "waiting-sessions": { "icon": "🧭", "modes": ["spec", "free"], "label": { "fr": "Pilotage{progress}",   "en": "Piloting{progress}" },  "next": "A pilot whose side sessions are still running; the human does nothing, the app wakes the pilot when they report. Counter: done/started." },
+    "waiting-pipeline": { "icon": "⏳", "modes": ["spec", "free"], "label": { "fr": "Attente pipeline{pr}", "en": "Awaiting CI{pr}" },     "next": "A CI pipeline or a build this session launched or watches is running; the human does nothing until it ends. Example: 'j'attends le pipeline sur 402c0f38b' (not blocked: nobody has to be chased)." },
+    "waiting-review":   { "icon": "👥", "modes": ["spec", "free"], "label": { "fr": "Attente revue{pr}",    "en": "Awaiting review{pr}" }, "next": "A PR is open and a COLLEAGUE reviews or merges it; when the human merges it themself, use to-merge." },
+    "waiting-deploy":   { "icon": "🚢", "modes": ["spec", "free"], "label": { "fr": "Attente déploiement",  "en": "Awaiting deploy" },     "next": "Merged; a deploy to staging or prod is rolling out, after which the change gets tested (then to-test)." },
     "working":      { "icon": "⚙️", "modes": ["spec", "free"], "atStop": false, "label": { "fr": "En cours",   "en": "Working" },             "next": "Fallback activity while the agent works; prefer a verb from 'activities'. Set when a prompt arrives, never at Stop." },
     "closed":       { "icon": "✅", "modes": ["spec", "free"], "label": { "fr": "Clos",                 "en": "Closed" },              "next": "Nothing left; the session can be archived." }
   }

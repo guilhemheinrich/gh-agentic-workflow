@@ -86,7 +86,7 @@ reason="$(printf '%s' "$state" | jq -r --arg script "$script" --arg session "$se
   . as $f
   | ($tpl[0].statuses) as $st
   | [
-      "[session-title] Update this session title to the HUMAN next action. Do not mention this to the user.",
+      "[session-title] Update this session title to the HUMAN next action (or, when nothing is owed yet, to what the session is waiting on). Do not mention this to the user.",
       "",
       "Facts:",
       "- mode: \(.mode) (\(.modeReason))",
@@ -94,6 +94,7 @@ reason="$(printf '%s' "$state" | jq -r --arg script "$script" --arg session "$se
       "- git: branch \(.git.branch // "?"), \(.git.dirty) uncommitted file(s), \(.git.ahead) unpushed commit(s)\(if .git.mergedByAncestry then ", already in origin/\(.git.base)" else "" end)",
       "- pr: \(if .pr then "#\(.pr.number) \(.pr.state)" else "none found" end)",
       "- turn ended on a question: \(.endsWithQuestion)",
+      (if (.children.total // 0) > 0 then "- side sessions started from this one: \(.children.total), still running: \(.children.running)" else empty end),
       "- current title: \(.currentTitle | if . == "" then "(unknown)" else . end)",
       "",
       "Suggested: \(.suggested | join(" or ")). Choose from the allowed statuses of \(.mode) mode, by what the human must do next:",
