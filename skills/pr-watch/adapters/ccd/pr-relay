@@ -19,7 +19,7 @@ pr-relay — relay pr-watch news to Claude Desktop sessions that stopped listeni
   pr-relay park CLI_SESSION     skip that session until a new line arrives (after a send that failed)
   pr-relay discover [--subscribe]
                                 JSON: your open PRs no subscription covers, with the session that owns each branch;
-                                --subscribe subscribes the ones with exactly one owner
+                                --subscribe subscribes each to its owner, or to the relay inbox when it has none
   pr-relay wait [--interval S]  every S seconds (default 300): discover --subscribe, then scan;
                                 exit 0 printing the scan as soon as something is deliverable
 EOF
@@ -29,6 +29,7 @@ API="${PR_RELAY_API_BASE:-https://api.bitbucket.org/2.0}"
 SESSIONS_DIR="${PR_RELAY_SESSIONS_DIR:-$HOME/Library/Application Support/Claude/claude-code-sessions}"
 RELAY_STATE="${PR_RELAY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-relay}"
 ORPHAN_TTL="${PR_RELAY_ORPHAN_TTL:-3600}"
+RELAY_INBOX="${PR_RELAY_INBOX:-pr-relay-inbox}"
 
 # watch_state — the watcher's state dir: the generic pr-watch one once it holds
 # subscriptions, else the legacy bitbucket-pr-watch one.
@@ -123,7 +124,8 @@ cmd_scan() {
     wait_alive "$s" && continue
     # A parked session is skipped until a new line arrives for it.
     [ "$(cat "$RELAY_STATE/parked/$(safe_name "$s")" 2>/dev/null)" = "$(wc -l <"$f" | tr -d ' ')" ] && continue
-    info="$(ccd_session "$s")"
+    if [ "$s" = "$(safe_name "$RELAY_INBOX")" ]; then info='{"local":"relay","title":"","archived":false}'
+    else info="$(ccd_session "$s")"; fi
     [ -n "$info" ] || info='{"local":null,"title":"","archived":false}'
     lines="$(tail -n "$n" "$f" | jq -sc '[.[].text]')"
     out="$(jq -c --arg cli "$s" --argjson n "$n" --argjson info "$info" --argjson lines "$lines" \
@@ -135,7 +137,8 @@ cmd_scan() {
       + (.lines | map("- " + .) | join("\n"))
       + "\n\nSi tu suis encore quelque chose (PR ouverte ou pipeline post-merge), relance `\($cli) wait --session \(.cli)` avec run_in_background.";
     {
-      deliveries: [.[] | select(.local != null and (.archived | not)) | . + {message: message}],
+      deliveries: [.[] | select(.local != null and .local != "relay" and (.archived | not)) | . + {message: message}],
+      relay: [.[] | select(.local == "relay") | {cli, count, lines}],
       undeliverable: [.[] | select(.local == null or .archived) | {cli, count, archived, reason: (if .local == null then "no desktop session" else "archived" end)}]
     }' <<<"$out"
 }
@@ -265,6 +268,12 @@ cmd_discover() {
         --session "$(jq -r .cli <<<"$chosen")" --harness claude >&2 \
         && status=subscribed || status="subscribe failed"
     elif [ -n "$chosen" ]; then status="would subscribe"
+    elif [ "$subscribe" = true ]; then
+      # No session owns it: the relay itself listens, under a fixed id that
+      # no desktop session carries, and tells the human.
+      "$(watch_cli)" subscribe "$(jq -r .repo <<<"$p")" "$(jq -r .pr <<<"$p")" \
+        --session "$RELAY_INBOX" --harness relay >&2 \
+        && status="subscribed to relay" || status="subscribe failed"
     else
       status=orphan
       jq --arg k "$key" --argjson now "$now" '.[$k] = $now' "$orphans" >"$orphans.tmp" && mv "$orphans.tmp" "$orphans"
@@ -282,7 +291,7 @@ cmd_wait() {
   while :; do
     cmd_discover --subscribe >/dev/null 2>&1 || true
     scan="$(cmd_scan)"
-    if [ "$(jq '.deliveries | length' <<<"$scan")" -gt 0 ]; then
+    if [ "$(jq '(.deliveries | length) + (.relay | length)' <<<"$scan")" -gt 0 ]; then
       printf '%s\n' "$scan"
       return 0
     fi

@@ -47,7 +47,9 @@ The owner of a PR is the session whose `prs` holds that PR URL, else the most
 recently active one that pushed its branch from a clone whose `origin` is the
 PR's repository (a branch name such as `staging` alone matches every repo). Archived sessions (`isArchived`, or
 listed in `archived-sessions.idx`) never own anything. A PR with no owner is
-an orphan, looked up again after `PR_RELAY_ORPHAN_TTL` seconds (3600).
+subscribed to the relay's own inbox (`PR_RELAY_INBOX`, default
+`pr-relay-inbox`, an id no desktop session carries): its lines come back in
+the scan's `relay` list, for the relay session to tell the human.
 
 ## The relay session
 
@@ -67,6 +69,9 @@ When it exits, for each entry of `deliveries`:
    and tell the human which PR news did not get through. Never undo the ack:
    the wait would exit again at once and the relay would loop, one turn per
    round.
+
+For each entry of `relay`, tell the human the lines in one short message,
+then `pr-relay ack <cli> <count>`.
 
 Then arm `pr-relay wait` again. `undeliverable` entries need no action.
 
