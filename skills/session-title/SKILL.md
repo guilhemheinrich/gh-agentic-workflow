@@ -72,9 +72,11 @@ through its number. When two folders share the number, the script does not
 guess and keeps the last known slug.
 
 The title subject follows the mode. A spec session is named by its slug
-(`042-webhook`). A free session is named by a 2-5 word topic that the agent
-writes once (`Mes Mailles impersonation`). That topic stays until the agent
-passes a new one.
+(`042-webhook`). A pilot session is named by what it pilots
+(`Facturation réception`, see [Pilot sessions](#pilot-sessions-a-stable-name)).
+A free session is named by a 2-5 word topic that the agent writes once
+(`Mes Mailles impersonation`). That topic stays until the agent passes a new
+one.
 
 ## The template set
 
@@ -119,6 +121,42 @@ Choose by **whose hand moves next**:
 | a CI pipeline | `waiting-pipeline` | the side session reported "j'attends le pipeline sur `402c0f38b`" — not "⛔ Bloqué · pipeline PR 478" |
 | a colleague reviewing or merging | `waiting-review` | PR 147 waits on the bill-e owner's merge |
 | a deploy rolling out | `waiting-deploy` | merged, staging deploy in progress, then `to-test` |
+
+### Pilot sessions: a stable name
+
+When the human asks a session to **pilot** (drive a roadmap, a Linear
+project, a batch of side sessions), its subject is pinned at once, as a spec
+session is pinned to its folder. The pilot's titles then differ only in
+status and dot:
+
+```
+🔵 🧭 Pilotage · Facturation réception
+🟢 🧭 Pilotage 1/3 · Facturation réception
+🟠 🙋 À trancher · Facturation réception
+```
+
+Pick the name, in this order:
+
+1. **A Linear project or initiative it follows**: its name verbatim, so the
+   sidebar matches Linear. Example: the project "Facturation réception".
+2. **A roadmap file or a pilot-roadmap fiche**: its title. Example:
+   `ROADMAP.md` titled "Migration MODELO_HUB".
+3. **Otherwise**: the name the human gave the work, 2-4 words.
+
+Leave out any "Linear ·" or "Pilote ·" prefix: the 🧭 icon already says it,
+and the subject has about 35 characters of room.
+
+```bash
+session-title.sh pilot --session <id> --name "Facturation réception"   # pin
+session-title.sh pilot --session <id> --name ""                        # unpin
+```
+
+Once pinned, `set` ignores `--subject` and the working title keeps the
+name. When facts are unchanged, `restore` gives back the previous title, as
+in a spec session. A pinned name wins over a spec slug too: a pilot that
+writes a spec stays named after its roadmap. When a session has started side
+sessions but is not pinned, the Stop hook reminds the agent to run `pilot`
+if the human asked it to pilot.
 
 `waiting-sessions` is backed by a fact. Each side session's app file names
 its pilot in `spawnedFrom.sessionId`. `facts` maps the hook's CLI session id
@@ -473,6 +511,7 @@ Both hooks run only where the rename tool exists
 session-title.sh facts  --session <id> --repo . --transcript <jsonl>   # what the hook sees
 session-title.sh set to-ship --session <id> --repo . --subject "Mes Mailles impersonation"
 session-title.sh gate --session <id>                                  # deny once before a question, then allow
+session-title.sh pilot --session <id> --name "Facturation réception"  # pin a pilot's subject; --name "" unpins
 session-title.sh render to-merge --subject 042-webhook --pr 12
 session-title.sh list --mode free
 session-title.sh forget --session <id>                                 # drop the cache
@@ -561,7 +600,10 @@ Pilot: on a fixture app directory (one pilot, a running side session, an idle
 one, an archived one), `facts` counted 2 started and 1 running, suggested
 `waiting-sessions` first, and `set` rendered "🟢 🧭 Piloting 1/2". On the
 real pilot `local_7e7dd894` (2 idle side sessions) it kept `to-read`, in
-0.9 s once the local id was cached.
+0.9 s once the local id was cached. After `pilot --name`, the subject stayed
+pinned through `set` with a stray `--subject`, `working` and `restore`. The
+Stop hook dropped its `--subject` request and showed "pilot of". Before
+pinning, it showed the reminder. `--name ""` unpinned the subject.
 
 Merged PR: on a fake Bitbucket (a local bare origin, no `gh`), the sweep turned
 the merged branch into "🏁 Merged" and left the open one and a session without

@@ -58,7 +58,7 @@ ctx="$(printf '%s' "$menu" | jq -r '
   (if .dot == "" then "" else "\(.dot) " end) as $d
   | [
       "[session-title] As soon as you have read this message, and before any other work, make your FIRST tool call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and a title saying what YOU are about to do:",
-      (if .subject then "  \"\($d)<icon> <Activity> · \(.subject)\"  (keep the subject exactly: it is the spec folder)"
+      (if .subject then "  \"\($d)<icon> <Activity> · \(.subject)\"  (keep the subject exactly: it is fixed, the spec folder or what this pilot pilots)"
        else "  \"\($d)<icon> <Activity> · <topic>\"  (<topic>: 2-5 words in the user language naming what this message asks)" end),
       "Pick the one activity that matches, and copy what comes before the dash exactly (icon, label, counter if any):",
       (.activities[] | "  - \(.)"),

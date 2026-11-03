@@ -28,6 +28,7 @@
 #   session-title.sh scheduled --transcript FILE    # exit 0 when the session is a scheduled run
 #   session-title.sh working --session ID           # prompt arrived: activity menu for the working title
 #   session-title.sh restore --session ID           # Stop, facts unchanged: previous title, fresh dot
+#   session-title.sh pilot --session ID --name TEXT # pin a pilot's subject (Linear project, roadmap); --name "" unpins
 #
 # Freshness: every title carries an age dot ("🟡 🔀 À merger #12 · 042-webhook").
 # `set` always renders 🟢 (the turn just ended); a scheduled task runs `sweep`
@@ -361,13 +362,14 @@ facts() {
     --argjson done "$done" --argjson total "$total" --arg branch "$branch" --arg base "$base" \
     --argjson dirty "$dirty" --argjson ahead "$ahead" --argjson upstream "$upstream" \
     --argjson merged "$merged" --argjson pr "$prj" --argjson question "$question" \
-    --argjson kids "$kids" --arg title "$(printf '%s' "$scan" | jq -r '.title')" --arg root "$root" \
+    --argjson kids "$kids" --arg cache "${cache:-"{}"}" --arg title "$(printf '%s' "$scan" | jq -r '.title')" --arg root "$root" \
     --slurpfile tpl "$TEMPLATES" '
     {
       mode: $mode, modeReason: $reason, root: $root, currentTitle: $title,
       spec: (if $slug == "" then null else {slug: $slug, stage: $stage, done: $done, total: $total} end),
       git: {branch: $branch, base: $base, dirty: $dirty, ahead: $ahead, upstream: $upstream, mergedByAncestry: $merged},
-      pr: $pr, endsWithQuestion: $question, children: $kids
+      pr: $pr, endsWithQuestion: $question, children: $kids,
+      pilot: ($cache | fromjson | .pilot // null)
     }
     | .suggested = (
         (if .pr.state == "OPEN" then ["to-merge"]
@@ -554,13 +556,14 @@ snapshot() {
 
 # ── Commands ─────────────────────────────────────────────────────────────────
 cmd="${1:-}"; [[ $# -gt 0 ]] && shift
-repo="$(pwd)"; session=""; subject=""; pr=""; progress=""; status_arg=""
+repo="$(pwd)"; session=""; subject=""; pr=""; progress=""; status_arg=""; name=""; name_set=""
 transcript=""; lastfile=""; mode_arg=""; sessions_file=""; days=""; interval=60; once=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;;
     --session) session="$2"; shift 2 ;;
     --subject) subject="$2"; shift 2 ;;
+    --name) name="$2"; name_set=1; shift 2 ;;
     --pr) pr="$2"; shift 2 ;;
     --progress) progress="$2"; shift 2 ;;
     --transcript) transcript="$2"; shift 2 ;;
@@ -602,6 +605,10 @@ case "$cmd" in
       slug="$(printf '%s' "$state" | jq -r '.spec.slug // empty')"
       [[ -n "$slug" ]] && subject="$slug"
     fi
+    # A pilot is named by what it pilots (its Linear project, its roadmap),
+    # always, like a spec session by its folder.
+    pilot_name="$(printf '%s' "$cache" | jq -r '.pilot // empty')"
+    [[ -n "$pilot_name" ]] && subject="$pilot_name"
     [[ -z "$subject" ]] && subject="$(printf '%s' "$cache" | jq -r '.subject // empty')"
     [[ -z "$subject" ]] && subject="$(printf '%s' "$state" | jq -r 'if .git.branch != .git.base then .git.branch else "" end')"
     [[ -z "$subject" ]] && subject="$(basename "$(printf '%s' "$state" | jq -r '.root')")"
@@ -763,7 +770,9 @@ case "$cmd" in
     root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || root="$repo"
     [[ -n "$slug" ]] && slug="$(resolve_slug "$root" "$slug")"
     prog=""
-    if [[ -n "$slug" ]]; then
+    pilot_name="$(printf '%s' "$cache" | jq -r '.pilot // empty')"
+    if [[ -n "$pilot_name" ]]; then slug="$pilot_name"
+    elif [[ -n "$slug" ]]; then
       dir="$(spec_dir "$root" "$slug")"
       if [[ -f "$dir/tasks.md" ]]; then
         read -r done total <<<"$(count_tasks "$dir/tasks.md")"
@@ -786,13 +795,22 @@ case "$cmd" in
     [[ -n "$session" ]] || die "restore needs --session"
     cache="$(read_cache "$session")"
     [[ "$(printf '%s' "$cache" | jq -r '.status // ""')" == "working" ]] || exit 0
-    if [[ "$(printf '%s' "$cache" | jq -r '.mode // "free"')" != "spec" ]]; then echo "JUDGE"; exit 0; fi
+    if [[ "$(printf '%s' "$cache" | jq -r 'if (.pilot // "") != "" then "spec" else (.mode // "free") end')" != "spec" ]]; then echo "JUDGE"; exit 0; fi
     prev="$(printf '%s' "$cache" | jq -r '.prevTitle // ""')"
     [[ -n "$prev" ]] || exit 0
     if freshness_on; then title="$(redot "$prev" "$(jq -r '.freshness.levels[0].dot' "$TEMPLATES")")"
     else title="$(redot "$prev" "")"; fi
     merge_cache "$session" '.status = (.prevStatus // "") | .title = $t' --arg t "$title"
     echo "$title"
+    ;;
+  pilot)
+    # The human asked this session to pilot: pin its subject to what it
+    # pilots, e.g. the Linear project "Facturation réception". Every later
+    # title keeps it, whatever --subject says. --name "" unpins.
+    [[ -n "$session" ]] || die "pilot needs --session"
+    [[ -n "${name_set:-}" ]] || die "pilot needs --name TEXT (empty to unpin)"
+    merge_cache "$session" '.pilot = (if $n == "" then null else $n end) | .asked = ""' --arg n "$name"
+    printf '%s\n' "${name:-(unpinned)}"
     ;;
   scheduled)
     is_scheduled "$transcript"
