@@ -15,10 +15,10 @@ sleep 1
 check "a second wait for the same session exits 4 at once" '[ "$rc2" = 4 ] && grep -q "already waiting" "$WORK/w2"' "rc=$rc2 $(cat "$WORK/w2")"
 lib 'events_append dup "{\"ts\":1,\"text\":\"line1\"}"'
 wait "$p1"
-check "the first wait delivers the line" '[ "$(cat "$WORK/w1")" = line1 ]' "$(cat "$WORK/w1")"
+check "the first wait delivers the line" '[ "$(head -n1 "$WORK/w1")" = line1 ]' "$(cat "$WORK/w1")"
 lib 'events_append dup "{\"ts\":2,\"text\":\"line2\"}"'
 out="$("$PRW" wait --session dup --timeout 3)"
-check "the next line is still delivered" '[ "$out" = line2 ]' "$out"
+check "the next line is still delivered" '[ "$(printf "%s" "$out" | head -n1)" = line2 ]' "$out"
 
 # 2. Release lands between wait's read and its subscription check: no exit 3.
 "$PRW" subscribe "$FX_REPO" 229 --session race >/dev/null

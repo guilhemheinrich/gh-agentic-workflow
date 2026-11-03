@@ -23,7 +23,8 @@ fx_pr MERGED abc123 def456 '[]' mrg111
 fx_statuses mrg111 '[]'
 cycle $((T0 + 10))
 check "merge wakes with the merged line" 'unread s1 | grep -q "modelo-bill-e#229 merged"'
-lib 'events_ack s1 1'
+out="$("$PRW" wait --session s1 --timeout 1)"
+check "wait delivering merged reminds to re-arm while the build is followed" 'grep -q "modelo-bill-e#229 merged" <<<"$out" && grep -q "prw wait --session s1. again" <<<"$out"' "$out"
 check "the subscription follows the merge commit" 'grep -q "modelo-bill-e#229 build staging@mrg111 s1" <<<"$("$PRW" list --session s1)"' "$("$PRW" list --session s1)"
 out="$("$PRW" wait --session s1 --timeout 1)"; rc=$?
 check "wait keeps waiting during the build phase (exit 2, not 3)" '[ "$rc" = 2 ]' "rc=$rc $out"

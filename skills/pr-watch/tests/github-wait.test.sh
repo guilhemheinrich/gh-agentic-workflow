@@ -9,7 +9,7 @@ fx_pr_open
 lib "events_append s1 '{\"ts\":1,\"text\":\"octo-org/cockpit#42 comment by alice (id 9010)\"}'"
 
 out="$("$PRW" wait --session s1 --timeout 2)"; rc=$?
-check "wait returns the released line" '[ "$rc" = 0 ] && [ "$out" = "octo-org/cockpit#42 comment by alice (id 9010)" ]' "rc=$rc $out"
+check "wait returns the released line" '[ "$rc" = 0 ] && [ "$(printf "%s" "$out" | head -n1)" = "octo-org/cockpit#42 comment by alice (id 9010)" ]' "rc=$rc $out"
 
 out="$("$PRW" wait --session s1 --timeout 1)"; rc=$?
 check "wait times out with 2 when nothing comes" '[ "$rc" = 2 ]' "rc=$rc"
