@@ -3,8 +3,10 @@ name: session-title
 description: >-
   Keep a Claude desktop session title equal to the next action its human owes —
   "🔀 À merger #12 · 042-webhook", "🧪 À tester · Mes Mailles impersonation",
-  "📐 À planifier · 042-webhook" — chosen from 13 fixed templates instead of
-  being reinvented each time. A Stop hook (`hooks/session-title-sync.sh`) runs
+  "📐 À planifier · 042-webhook" — chosen from fixed templates instead of
+  being reinvented each time; a pilot waiting on its side sessions, a
+  pipeline or a colleague's review says so ("🧭 Pilotage 1/3", "⏳ Attente
+  pipeline #478") instead of a misleading "À lire". A Stop hook (`hooks/session-title-sync.sh`) runs
   at the end of each turn, gathers deterministic facts through
   `scripts/session-title.sh` (spec or free session, spec-kit stage, git state,
   PR state, whether the turn ended on a question) and, once per new set of
@@ -18,7 +20,7 @@ description: >-
   hook asks for a title update, when a session's title no longer says what to
   do next, or when adding a status to the template set. Triggers on "session
   title", "rename session", "titre de session", "intitulé", "à merger",
-  "à tester", "à clôturer".
+  "à tester", "à clôturer", "pilote", "en attente".
 tags:
   - spec-kit
   - claude
@@ -30,7 +32,9 @@ tags:
 
 A sidebar of 30 sessions is useful only if each title says what the human must
 do next. The title is read while the agent is idle, so it never describes what
-the agent is doing — it names what the **human** does next.
+the agent is doing — it names what the **human** does next, or says plainly
+that the human owes nothing yet because the session waits on something that
+will wake it (see [Waiting statuses](#waiting-statuses-the-human-owes-nothing-yet)).
 
 ## The split of work
 
@@ -68,9 +72,11 @@ through its number. When two folders share the number, the script does not
 guess and keeps the last known slug.
 
 The title subject follows the mode. A spec session is named by its slug
-(`042-webhook`). A free session is named by a 2-5 word topic that the agent
-writes once (`Mes Mailles impersonation`). That topic stays until the agent
-passes a new one.
+(`042-webhook`). A pilot session is named by what it pilots
+(`Facturation réception`, see [Pilot sessions](#pilot-sessions-a-stable-name)).
+A free session is named by a 2-5 word topic that the agent writes once
+(`Mes Mailles impersonation`). That topic stays until the agent passes a new
+one.
 
 ## The template set
 
@@ -91,8 +97,78 @@ at most 60 characters; the script truncates the subject with `…`.
 | `to-merge` | 🔀 À merger #12 · <topic> | both | review and merge | PR open, or branch pushed without a PR found |
 | `merged` | 🏁 Mergé #12 · <topic> | both | test the change, or archive | set by the sweep only, never at Stop |
 | `to-close` | 📦 À clôturer · <topic> | both | archive session and branch | merged PR |
-| `blocked` | ⛔ Bloqué · <topic> | both | chase the outside dependency | agent judgement |
+| `blocked` | ⛔ Bloqué · <topic> | both | chase the outside person or access | agent judgement |
+| `waiting-sessions` | 🧭 Pilotage 1/3 · <topic> | both | nothing: side sessions still run | a side session started from this one wears 🔵 |
+| `waiting-pipeline` | ⏳ Attente pipeline #12 · <topic> | both | nothing: CI is running | agent judgement |
+| `waiting-review` | 👥 Attente revue #12 · <topic> | both | nothing: a colleague reviews or merges | agent judgement |
+| `waiting-deploy` | 🚢 Attente déploiement · <topic> | both | nothing: a deploy rolls out | agent judgement |
 | `closed` | ✅ Clos · <topic> | both | nothing | PR closed |
+
+## Waiting statuses: the human owes nothing yet
+
+A pilot session that has started side sessions and waits for their reports
+used to end its turn on "💬 À lire", which sends the human to read an answer
+that does not exist. The `waiting-*` statuses follow the state of the work,
+like a roadmap tracker, rather than the last turn.
+
+Choose by **whose hand moves next**:
+
+| Next hand | Status | Example |
+|---|---|---|
+| the human | `to-merge`, `to-test`, `decide`… | the human merges PR 12 |
+| a person or an access the human must chase | `blocked` | Julien's prod read access was refused |
+| side sessions this one started | `waiting-sessions` | "🧭 Pilotage 1/3 · roadmap facturation" |
+| a CI pipeline | `waiting-pipeline` | the side session reported "j'attends le pipeline sur `402c0f38b`" — not "⛔ Bloqué · pipeline PR 478" |
+| a colleague reviewing or merging | `waiting-review` | PR 147 waits on the bill-e owner's merge |
+| a deploy rolling out | `waiting-deploy` | merged, staging deploy in progress, then `to-test` |
+
+### Pilot sessions: a stable name
+
+When the human asks a session to **pilot** (drive a roadmap, a Linear
+project, a batch of side sessions), its subject is pinned at once, as a spec
+session is pinned to its folder. The pilot's titles then differ only in
+status and dot:
+
+```
+🔵 🧭 Pilotage · Facturation réception
+🟢 🧭 Pilotage 1/3 · Facturation réception
+🟠 🙋 À trancher · Facturation réception
+```
+
+Pick the name, in this order:
+
+1. **A Linear project or initiative it follows**: its name verbatim, so the
+   sidebar matches Linear. Example: the project "Facturation réception".
+2. **A roadmap file or a pilot-roadmap fiche**: its title. Example:
+   `ROADMAP.md` titled "Migration MODELO_HUB".
+3. **Otherwise**: the name the human gave the work, 2-4 words.
+
+Leave out any "Linear ·" or "Pilote ·" prefix: the 🧭 icon already says it,
+and the subject has about 35 characters of room.
+
+```bash
+session-title.sh pilot --session <id> --name "Facturation réception"   # pin
+session-title.sh pilot --session <id> --name ""                        # unpin
+```
+
+Once pinned, `set` ignores `--subject` and the working title keeps the
+name. When facts are unchanged, `restore` gives back the previous title, as
+in a spec session. A pinned name wins over a spec slug too: a pilot that
+writes a spec stays named after its roadmap. When a session has started side
+sessions but is not pinned, the Stop hook reminds the agent to run `pilot`
+if the human asked it to pilot.
+
+`waiting-sessions` is backed by a fact. Each side session's app file names
+its pilot in `spawnedFrom.sessionId`. `facts` maps the hook's CLI session id
+to the app's `local_…` id (cached), then counts the non-archived side
+sessions and those whose title wears 🔵 (for at most
+`SESSION_TITLE_CHILD_STALE` seconds, default 7200, so a crashed one ends). When
+one runs, the Stop hook suggests `waiting-sessions` first, and `set` fills the
+counter as done/started: 1 of 3 finished renders "🧭 Piloting 1/3". The count
+is part of the fingerprint, so a pilot woken by a report is re-judged.
+
+The other three have no fact yet: the agent judges them from what it knows,
+such as a pipeline it is waiting on.
 
 ## Language: one setting for every label
 
@@ -171,6 +247,7 @@ says what the **agent** does, from the `activities` catalogue of
 | 👀 Reviewing | Relecture | reviewing a diff, a PR or a document |
 | ✍️ Writing | Rédaction | writing docs, a report or a message |
 | 📤 Shipping | Livraison | committing, pushing, opening a PR |
+| 🧭 Piloting | Pilotage | starting side sessions, or relaying what they reported |
 
 - **Free session**: "🔵 🛠️ Coding · Verbes d'activité", with a topic that fits
   the new message.
@@ -434,6 +511,7 @@ Both hooks run only where the rename tool exists
 session-title.sh facts  --session <id> --repo . --transcript <jsonl>   # what the hook sees
 session-title.sh set to-ship --session <id> --repo . --subject "Mes Mailles impersonation"
 session-title.sh gate --session <id>                                  # deny once before a question, then allow
+session-title.sh pilot --session <id> --name "Facturation réception"  # pin a pilot's subject; --name "" unpins
 session-title.sh render to-merge --subject 042-webhook --pr 12
 session-title.sh list --mode free
 session-title.sh forget --session <id>                                 # drop the cache
@@ -475,6 +553,11 @@ session-title.sh config                                                # effecti
    changes. Its runs also show in the sidebar, since a scheduled run cannot
    archive itself.
 
+8. **The pilot counter moves only on the pilot's turns.** The app wakes a
+   pilot once no side session is still working, so "🧭 Piloting 1/3" stays at
+   1/3 while a second side session finishes. Pipeline, review and deploy
+   waits have no detecting fact yet.
+
 ## Implementation Status
 
 Fully implemented. Tested on fixture repos in spec mode, with mode detected
@@ -512,6 +595,15 @@ from an idle session, with no wake between dot changes. It turned 🟢→🟡,
 🟡→🟠, 🟠→🔴 and 🔀→🏁, each within 15 s plus one interval of its level. One
 session went 🟢→🟡→🟠 across the run. `get_session` skipped an archived
 session and two long running turns. Not tested: ⚫, and Windows.
+
+Pilot: on a fixture app directory (one pilot, a running side session, an idle
+one, an archived one), `facts` counted 2 started and 1 running, suggested
+`waiting-sessions` first, and `set` rendered "🟢 🧭 Piloting 1/2". On the
+real pilot `local_7e7dd894` (2 idle side sessions) it kept `to-read`, in
+0.9 s once the local id was cached. After `pilot --name`, the subject stayed
+pinned through `set` with a stray `--subject`, `working` and `restore`. The
+Stop hook dropped its `--subject` request and showed "pilot of". Before
+pinning, it showed the reminder. `--name ""` unpinned the subject.
 
 Merged PR: on a fake Bitbucket (a local bare origin, no `gh`), the sweep turned
 the merged branch into "🏁 Merged" and left the open one and a session without
