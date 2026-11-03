@@ -664,6 +664,24 @@ assets:
       - spec-kit
     description: Run the full Specify → Plan → Tasks pipeline in one shot, pausing if any step requires user input.
     category: workflows-and-processes
+  - path: hooks/conversation-focus-prompt.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+    description: >-
+      UserPromptSubmit hook of the conversation-focus skill: injects the split check and the italic closing summary
+      rule before the agent replies.
+  - path: hooks/conversation-focus-stop.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+    description: >-
+      Stop hook of the conversation-focus skill: blocks the stop once when the reply's last paragraph is not an italic
+      summary; never loops (stop_hook_active).
   - path: hooks/registry-sync-on-skill.sh
     type: hook
     category: devx-and-agentic
@@ -1096,6 +1114,20 @@ assets:
       published-port variables, checking Docker Engine and local listener ports, and generating deterministic free port
       assignments.
     category: tools-and-configurations
+  - path: skills/conversation-focus/
+    type: skill
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+      - shell
+    description: >-
+      Keep every agent conversation on one subject and readable at a glance, through hooks written from host-agnostic
+      intents: a split check that proposes a separate session when a message opens an unrelated subject, and an italic
+      2-3 sentence closing summary of the conversation's main subject on every reply. States each rule as an intent, a
+      lifecycle moment and a contract so the hooks can be ported to a future Claude Code or another agent host. Ships
+      the Claude Code reference: `hooks/conversation-focus-prompt.sh` (UserPromptSubmit, injects both rules) and
+      `hooks/conversation-focus-stop.sh` (Stop, blocks once when the summary is missing).
   - path: skills/cursor-adversarial-review/
     type: skill
     category: quality-assurance
