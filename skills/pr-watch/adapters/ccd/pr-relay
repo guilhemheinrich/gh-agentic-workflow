@@ -20,6 +20,8 @@ pr-relay — relay pr-watch news to Claude Desktop sessions that stopped listeni
   pr-relay discover [--subscribe]
                                 JSON: your open PRs no subscription covers, with the session that owns each branch;
                                 --subscribe subscribes each to its owner, or to the relay inbox when it has none
+  pr-relay sweep                one pass over your open (and recently merged) PRs, no subscription needed;
+                                JSON: one message per session about what changed since the last sweep
   pr-relay wait [--interval S]  every S seconds (default 300): discover --subscribe, then scan;
                                 exit 0 printing the scan as soon as something is deliverable
 EOF
@@ -285,6 +287,131 @@ EOF
   jq . <<<"$out"
 }
 
+# sweep_state REPO PR — one coarse snapshot of a PR, from the host only:
+# {state, head, url, ci{name:{state,url}}, post{...}, approved[], changes[], comments}.
+# `post` is the CI of the merge commit, once the PR is merged.
+sweep_state() {
+  local repo="$1" pr="$2" detail head merge ci post='{}'
+  detail="$(bb_get "$API/repositories/$repo/pullrequests/$pr")" || return 1
+  head="$(jq -r '.source.commit.hash' <<<"$detail")"
+  ci="$(bb_get "$API/repositories/$repo/commit/$head/statuses?pagelen=50" \
+    | jq -c '[.values[] | {key: .name, value: {state, url}}] | from_entries')" || ci='{}'
+  merge="$(jq -r '.merge_commit.hash // empty' <<<"$detail")"
+  if [ -n "$merge" ] && [ "$merge" != "$head" ]; then
+    post="$(bb_get "$API/repositories/$repo/commit/$merge/statuses?pagelen=50" \
+      | jq -c '[.values[] | {key: .name, value: {state, url}}] | from_entries')" || post='{}'
+  fi
+  jq -c --argjson ci "$ci" --argjson post "$post" '{
+      state, head: .source.commit.hash, branch: .source.branch.name, url: .links.html.href,
+      ci: $ci, post: $post,
+      approved: [.participants[] | select(.approved) | .user.display_name],
+      changes: [.participants[] | select(.state == "changes_requested") | .user.display_name],
+      comments: (.comment_count // 0)
+    }' <<<"$detail"
+}
+
+# sweep_news PREV CUR — French one-liners for what changed between two
+# snapshots. Pipelines are reported only when they end; a new head resets
+# them, since the pipelines of the previous commit no longer apply.
+sweep_news() {
+  jq -nr --argjson p "$1" --argjson c "$2" '
+    def verdict: {"SUCCESSFUL": "est passée", "FAILED": "a échoué", "STOPPED": "a été arrêtée"}[.];
+    def ended($old; $new; $label):
+      $new | to_entries[]
+      | select(.value.state | IN("SUCCESSFUL", "FAILED", "STOPPED"))
+      | select(($old[.key].state // "") != .value.state)
+      | "\($label) « \(.key) » \(.value.state | verdict) · \(.value.url)";
+    (if $p.head == $c.head then $p.ci else {} end) as $oldci
+    | [
+        (if $c.state != $p.state then
+           {"MERGED": "la PR a été fusionnée", "DECLINED": "la PR a été déclinée"}[$c.state] // empty
+         else empty end),
+        ended($oldci; $c.ci; "la pipeline"),
+        ended($p.post // {}; $c.post; "après merge, la pipeline"),
+        ($c.approved - $p.approved | .[] | "approuvée par \(.)"),
+        ($c.changes - $p.changes | .[] | "\(.) demande des changements"),
+        (($c.comments - $p.comments) as $n
+         | if $n == 1 then "un nouveau commentaire" elif $n > 1 then "\($n) nouveaux commentaires" else empty end)
+      ] | .[]'
+}
+
+# bbw_covers REPO PR — true when the watcher follows this PR for a session
+# whose own wait is armed right now: that session hears it from the watcher.
+bbw_covers() {
+  local s
+  for s in $(jq -r --arg r "$1" --argjson n "$2" \
+      '.[] | select(.repo == $r and .pr == $n and .status != "closed") | .session' "$(watch_state)/subscriptions.json" 2>/dev/null); do
+    wait_alive "$s" && return 0
+  done
+  return 1
+}
+
+# sweep_owner REPO BRANCH PR — the desktop session to tell: the app's own
+# record of who pushed the PR, else the watcher's subscription, else
+# PR_RELAY_FALLBACK_SESSION. Prints {local, title} or nothing.
+sweep_owner() {
+  local o s info
+  o="$(owner_of "$1" "$2" "$3" | jq -c '.[0] // empty | {local, title}')"
+  [ -n "$o" ] && { echo "$o"; return; }
+  for s in $(jq -r --arg r "$1" --argjson n "$3" '.[] | select(.repo == $r and .pr == $n) | .session' "$(watch_state)/subscriptions.json" 2>/dev/null); do
+    info="$(ccd_session "$s")"
+    [ -n "$info" ] && [ "$(jq -r .archived <<<"$info")" = false ] && { jq -c '{local, title}' <<<"$info"; return; }
+  done
+  [ -n "${PR_RELAY_FALLBACK_SESSION:-}" ] && jq -nc --arg l "$PR_RELAY_FALLBACK_SESSION" '{local: $l, title: "(relay)"}'
+}
+
+# cmd_sweep — one pass over the user's PRs, independent of any subscription:
+# every open PR, plus the ones merged in the last PR_RELAY_MERGED_HOURS (6),
+# so the destination pipeline is heard. Prints the messages to send, one per
+# session; the first sight of a PR is a silent baseline.
+cmd_sweep() {
+  local uuid ws list prs p repo pr key snap prev cur news owner since msgs='[]' skipped='[]'
+  load_credential || return 1
+  uuid="$(my_uuid)" || return 1
+  snap="$RELAY_STATE/sweep"; mkdir -p "$snap"
+  since="$(( $(date +%s) - ${PR_RELAY_MERGED_HOURS:-6} * 3600 ))"
+  list='[]'
+  for ws in ${PR_RELAY_WORKSPACES:-$(jq -r '[.[].repo | split("/")[0]] | unique | .[]' "$(watch_state)/subscriptions.json")}; do
+    for state in OPEN MERGED; do
+      prs="$(bb_get -G "$API/workspaces/$ws/pullrequests/$(jq -rn --arg u "$uuid" '$u | @uri')" \
+        --data-urlencode state="$state" --data-urlencode pagelen=50)" || { echo "pr-relay: cannot list $state PRs of $ws" >&2; continue; }
+      list="$(jq -c --argjson p "$prs" --argjson since "$since" '. + [$p.values[]
+        | select(.state == "OPEN" or ((.updated_on | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) > $since))
+        | {repo: .destination.repository.full_name, pr: .id, branch: .source.branch.name}]' <<<"$list")"
+    done
+  done
+  while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    repo="$(jq -r .repo <<<"$p")"; pr="$(jq -r .pr <<<"$p")"
+    key="$snap/$(safe_name "$repo#$pr").json"
+    cur="$(sweep_state "$repo" "$pr")" || { echo "pr-relay: cannot read $repo#$pr" >&2; continue; }
+    prev="$(cat "$key" 2>/dev/null)"
+    printf '%s\n' "$cur" >"$key.tmp" && mv "$key.tmp" "$key"
+    [ -n "$prev" ] || continue
+    news="$(sweep_news "$prev" "$cur" | jq -Rsc 'split("\n") | map(select(. != ""))')"
+    [ "$news" != "[]" ] || continue
+    if bbw_covers "$repo" "$pr"; then
+      skipped="$(jq -c --arg k "$repo#$pr" '. + [{pr: $k, reason: "bbw wait armed"}]' <<<"$skipped")"; continue
+    fi
+    owner="$(sweep_owner "$repo" "$(jq -r .branch <<<"$p")" "$pr")"
+    if [ -z "$owner" ]; then
+      skipped="$(jq -c --arg k "$repo#$pr" --argjson n "$news" '. + [{pr: $k, reason: "no session", news: $n}]' <<<"$skipped")"; continue
+    fi
+    msgs="$(jq -c --argjson o "$owner" --arg k "${repo##*/}#$pr" --arg url "$(jq -r .url <<<"$cur")" --argjson n "$news" \
+      '. + [$o + {pr: $k, url: $url, news: $n}]' <<<"$msgs")"
+  done <<EOF
+$(jq -c 'unique_by("\(.repo)#\(.pr)") | .[]' <<<"$list")
+EOF
+  jq '{
+    messages: (group_by(.local) | map({
+      to: .[0].local, title: .[0].title,
+      text: ("Point Bitbucket (routine pr-sweep) :\n"
+        + (map("- \(.pr) : " + (.news | join(" ; ")) + " · \(.url)") | join("\n")))
+    })),
+    skipped: $skipped
+  }' --argjson skipped "$skipped" <<<"$msgs"
+}
+
 cmd_wait() {
   local interval=300 scan
   [ "${1:-}" = --interval ] && interval="$2"
@@ -306,6 +433,7 @@ case "${1:-help}" in
   park) shift; cmd_park "$@" ;;
   discover) shift; cmd_discover "$@" ;;
   wait) shift; cmd_wait "$@" ;;
+  sweep) shift; cmd_sweep "$@" ;;
   help|-h|--help) usage ;;
   *) usage >&2; exit 64 ;;
 esac
