@@ -570,6 +570,17 @@ session-title.sh config                                                # effecti
    pilot once no side session is still working, so "🧭 Piloting 1/3" stays at
    1/3 while a second side session finishes. Pipeline, review and deploy
    waits have no detecting fact yet.
+9. **The status title comes only when a turn ends.** A side session's first
+   turn often runs for half an hour, and a message sent into a running turn
+   (a pilot's `SendMessage`, a queued human message) fires UserPromptSubmit
+   but not Stop. Until that turn ends, the session wears its 🔵 working title
+   and its cache holds no `asked`: it is working, not broken. Check for a
+   `stop_hook_summary` entry in its transcript before suspecting the hook.
+   Likewise, a stop continued by another Stop hook (`stop_hook_active`)
+   passes through, so the title asked at the first stop of that chain stays
+   until the next turn. Example: on 2026-11-03, two side sessions started at
+   16:37 showed 0 asks at 17:02:10; their first turns ended at 17:02:44 and
+   17:04:16, and both got their status title then.
 
 ## Implementation Status
 
