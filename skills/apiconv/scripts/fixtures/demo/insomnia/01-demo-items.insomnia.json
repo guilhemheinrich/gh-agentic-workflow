@@ -1,0 +1,83 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-10-30T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v10.3.0",
+  "resources": [
+    {
+      "_id": "wrk_demoitems000000000000000000",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "01 demo items",
+      "description": "Synthetic collection for the apiconv fixture. The host is a reserved .test name.",
+      "scope": "collection"
+    },
+    {
+      "_id": "env_demoitemsbase00000000000000",
+      "_type": "environment",
+      "parentId": "wrk_demoitems000000000000000000",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "https://api.example.test",
+        "items_url": "{{ _.base_url }}/v1/items",
+        "batch_label": "batch-{% now 'custom', 'yyyy-MM-dd' %}"
+      },
+      "metaSortKey": 0
+    },
+    {
+      "_id": "req_demolist0000000000000000000",
+      "_type": "request",
+      "parentId": "wrk_demoitems000000000000000000",
+      "name": "1. List items",
+      "description": "Reads the first page of items. Read-only.",
+      "method": "GET",
+      "url": "{{ _.items_url }}",
+      "parameters": [
+        { "name": "limit", "value": "10" },
+        { "name": "q", "value": "widget", "description": "Free-text filter on the item name." },
+        { "name": "cursor", "value": "", "disabled": true }
+      ],
+      "headers": [
+        { "name": "Accept", "value": "application/json", "description": "The API answers JSON only." }
+      ],
+      "authentication": { "type": "bearer", "token": "{{ _.api_token }}" },
+      "body": {},
+      "metaSortKey": -1000
+    },
+    {
+      "_id": "req_democreate00000000000000000",
+      "_type": "request",
+      "parentId": "wrk_demoitems000000000000000000",
+      "name": "2. Create item",
+      "description": "Creates one item and stores its id for request 3. Writes.",
+      "method": "POST",
+      "url": "{{ _.items_url }}",
+      "parameters": [],
+      "headers": [
+        { "name": "Content-Type", "value": "application/json" }
+      ],
+      "authentication": { "type": "basic", "username": "{{ _.client_id }}", "password": "{{ _.client_secret }}" },
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"name\": \"widget\",\n  \"batch\": \"{{ _.batch_label }}\"\n}"
+      },
+      "afterResponseScript": "if (insomnia.response.code === 201) {\n  insomnia.environment.set(\"item_id\", insomnia.response.json().id);\n}",
+      "metaSortKey": -900
+    },
+    {
+      "_id": "req_demotrace000000000000000000",
+      "_type": "request",
+      "parentId": "wrk_demoitems000000000000000000",
+      "name": "3. Read item with trace",
+      "description": "Reads the item created by request 2, tagged with a fresh request id.",
+      "method": "GET",
+      "url": "{{ _.items_url }}/{{ _.item_id }}?sent_at={% now 'millis' %}",
+      "headers": [
+        { "name": "X-Request-Id", "value": "{% uuid 'v4' %}" }
+      ],
+      "authentication": { "type": "bearer", "token": "{{ _.api_token }}" },
+      "body": {},
+      "metaSortKey": -800
+    }
+  ]
+}

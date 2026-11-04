@@ -1,0 +1,36 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-10-30T00:00:00.000Z",
+  "__export_source": "insomnia.desktop.app:v10.3.0",
+  "resources": [
+    {
+      "_id": "wrk_identity0000000000000000000",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "00 identity (synthetic)",
+      "description": "Fake credentials for the apiconv fixture. None of them works anywhere.",
+      "scope": "environment"
+    },
+    {
+      "_id": "env_identitybase000000000000000",
+      "_type": "environment",
+      "parentId": "wrk_identity0000000000000000000",
+      "name": "Base Environment",
+      "data": {},
+      "metaSortKey": 0
+    },
+    {
+      "_id": "env_identitydemo000000000000000",
+      "_type": "environment",
+      "parentId": "env_identitybase000000000000000",
+      "name": "demo",
+      "data": {
+        "client_id": "demo-client",
+        "client_secret": "not-a-real-secret-0000",
+        "api_token": "demo-token-0000"
+      },
+      "metaSortKey": 1
+    }
+  ]
+}
