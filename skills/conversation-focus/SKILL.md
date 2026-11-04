@@ -62,6 +62,7 @@ conversation tracks, so the reader never scrolls back to find them:
 | Pilot session | the Linear project it steers |
 | Coding session tied to Linear | the Linear issue it implements |
 | Any session with a pull request | the PR opened or reviewed |
+| Any session watching CI | the pipeline under way |
 
 Example (real PR of this repo, made-up Linear URL):
 `*Sujet : épingler le sujet d'une session de pilotage. Fusionné ; reste la doc. · [ENG-42](https://linear.app/…) · [PR #28](https://github.com/guilhemheinrich/gh-agentic-workflow/pull/28)*`
@@ -71,7 +72,26 @@ while it still applies; only URLs seen in the conversation or returned by a
 tool are used, never a guessed one; no link at all when there is none. The
 agent picks them (principle 2): it already knows which project, issue or PR
 the conversation is about. `CONVERSATION_FOCUS_REFS=0` drops the links and
-keeps the summary.
+keeps the summary. Only external URLs count: a local file link is not a
+reference.
+
+#### Carried forward from the transcript, not from memory
+
+"Repeat it in every later summary" cannot rest on the agent remembering its
+own previous replies. Measured on 2026-11-04 over the modelo-workspace pilot
+sessions: pilot `87de7c7a` (Linear project "Calendar · Notifications seule &
+IAM agence") carried 1-4 links from summary #52 to #95, had already lost the
+project link by then, and carried none from #96 on, right after a compaction
+removed the earlier replies from its context. `c4746dbb` lost its links at
+#31 with no compaction at all.
+
+So the prompt hook reads `transcript_path`, which keeps what compaction
+removed, collects the links of past italic summaries and injects them: the
+session's first summary link (in a pilot, its Linear project) always first,
+then the others by most recent appearance, deduped by URL, capped at
+`CONVERSATION_FOCUS_LINKS` (default 6). If the agent drops every link one
+turn, the next turn re-injects them. The agent still chooses (principle 2);
+the script only supplies the facts.
 
 ## Design principles (host-agnostic)
 
@@ -157,6 +177,17 @@ printf '%s' '{"last_assistant_message":"Done.\n\nNo summary."}' | bash ~/.agents
 
 It must print a `block` decision. With `*Sujet : …*` as the last paragraph, it
 must print nothing.
+
+Install **only from an up-to-date `main`** (`git -C <repo> pull` first). The
+copy is a plain overwrite, so installing from a stale branch silently rolls
+back merged work. That happened on 2026-11-03: the summary-references rule
+(PR #29) was live from 16:29Z, then a copy from a stale checkout behind
+`main` overwrote it around 17:34Z, and no session received it afterwards.
+Check after installing:
+
+```bash
+diff <(git -C <repo> show origin/main:hooks/conversation-focus-prompt.sh) ~/.agents/hooks/conversation-focus-prompt.sh
+```
 
 ## Tuning
 
