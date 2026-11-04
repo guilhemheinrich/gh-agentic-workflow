@@ -181,6 +181,7 @@ for slug in "${candidates[@]}"; do
   issue="$(printf '%s' "$events" | jq -r '[.[] | select(.event == "created" or .event == "linked") | .id] | last // ""')"
   record="\"\$CLAUDE_PROJECT_DIR/.agents/hooks/linear-record.sh\" $rel"
   noregress="If it is already at that state or later (In Review, Done, Canceled), do not move it: skip step 1 and still run step 3. A lifecycle move never goes backwards."
+  subissues="List the sub-issues of $issue (list_issues, parentId $issue). One that this change resolves gets its own comment and moves to Done; never post its answer on $issue, and name sub-issues by identifier."
   footer="If no Linear MCP tool is available in this session, run instead: $record unavailable — and stop. Do not mention this hook to the user unless the Linear call needs their decision."
 
   # specify — spec.md exists, no issue known yet
@@ -209,6 +210,7 @@ $footer"
 0. Read the current state of $issue first (get_issue). $noregress
 1. Move $issue to the first existing state among $(state_names in_progress) (save_issue; list_issue_statuses if the name is unknown; else the team's first state of type started).
 2. Render .agents/linear/$tpl with: issue=$issue, ticked=$ticked, total=$total, branch=${branch:-?}, and post it with save_comment on $issue.
+Also: $subissues
 3. Then run: $record in_progress $issue
 $footer"
       fi
@@ -227,6 +229,7 @@ $footer"
 0. Read the current state of $issue first (get_issue). $noregress
 1. Move $issue to the first existing state among $(state_names in_review) (save_issue; list_issue_statuses if the name is unknown; else the team's first state of type started that follows In Progress).
 2. Render .agents/linear/$tpl with: issue=$issue, pr_number=$num, pr_url=$url, branch=$branch, and post it with save_comment on $issue. Attach the PR link to the issue if the tool allows it.
+Also: $subissues
 3. Then run: $record in_review $issue $url
 $footer"
       fi

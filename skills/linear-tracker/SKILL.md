@@ -422,6 +422,41 @@ with "read the current state first; if it is already there or later, do not
 move it, record the event only". The agent does that read, since only the agent
 holds the MCP.
 
+### Sub-issues — an answer lands on the sub-issue that asked
+
+Every state move of an issue — In Progress, In Review, and the Done that
+follows a merge to staging, whether a hook asks for it or not — starts by
+listing its sub-issues (`list_issues` with `parentId`). An issue with
+sub-issues is a checklist, and each sub-issue is one box.
+
+Real example (2026-11-04, project `Calendar · Notifications seule & IAM
+agence`). `TT-1566` "B1 — Cadrer le modèle d'accès agence" has five
+sub-issues, `TT-1598` B1.1 to `TT-1602` B1.5. The decision "no multi-tenant;
+the IAM is the source of truth for groups" was posted as a comment on
+`TT-1566`, which moved to In Review. Yet it answers `TT-1598` B1.1 (access
+computed on the fly) and `TT-1601` B1.4 (amend the "NO MULTI-TENANT" rule).
+Both stayed in Backlog and Todo, with nothing on them. Whoever opens B1.4 sees
+an open question that was settled hours ago.
+
+1. **The answer goes on the sub-issue it resolves.** The decision, the
+   deliverable or the PR link is a comment on `TT-1601`, not on `TT-1566`.
+   The parent gets at most one line pointing to it.
+2. **A settled sub-issue moves to Done in the same gesture.** That is the
+   ticked box. A sub-issue with a deliverable still to merge follows the
+   normal lifecycle instead (In Progress, In Review, Done).
+3. **The parent reaches Done only when every sub-issue is Done or Canceled.**
+   Otherwise it keeps its state, and its comment names the open sub-issues by
+   identifier.
+4. **Name a sub-issue by its identifier, never by a number in prose.** On
+   `TT-1566` the decision comment calls "point 4" the scope inheritance, a
+   later comment calls "point 4" `Room.organizationId`, and the sub-issue
+   B1.4 is a third question. `TT-1601` cannot drift.
+
+The ticket type tells you what a sub-issue is. On a framing ticket (decisions
+before code, like B1) each sub-issue is a question, closed by its decision. On
+an implementation ticket each sub-issue is a slice of work, closed by its own
+merge.
+
 ### Never blocking — what the hook will not do
 
 1. **No `PreToolUse`, no permission decision, no guarded file.** The installer
@@ -500,9 +535,9 @@ would also stay mute for any tool that writes spec-kit artifacts directly.
   `templates/hooks/linear-record.sh`, three templates and `phases.json`.
 - `tests/lifecycle.test.sh` runs the **installed** copy in a fixture repository,
   through `bash skills/linear-tracker/tests/run-in-docker.sh` (alpine + bash +
-  jq + git, gh stubbed). 35 checks: no run emits a deny, exactly 6 asks over the
+  jq + git, gh stubbed). 37 checks: no run emits a deny, exactly 6 asks over the
   whole scenario, a hand-linked takeover catching up on In Progress, the
-  no-regression guard in every state-move ask, silence on a question, on `stop_hook_active`, without
+  no-regression guard and the sub-issue step in every state-move ask, silence on a question, on `stop_hook_active`, without
   `.linear.json` and after `unavailable`, keys shared across worktrees,
   idempotent install that keeps edited templates. The PR-phase run measured
   under 200 ms. A mutation that makes the hook emit a deny turns the

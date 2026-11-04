@@ -104,6 +104,7 @@ printf -- '- [x] T001 test\n- [ ] T002 code\n' >"$REPO/specs/042-webhook-202/tas
 hook
 check "first ticked task: asks In Progress" 'asks "1/2 tasks are ticked" && asks "TT-412" && asks "En cours"'
 check "implement carries the no-regression guard" 'asks "never goes backwards"'
+check "implement asks to close resolved sub-issues" 'asks "sub-issues of TT-412"'
 printf -- '- [x] T001 test\n- [x] T002 code\n' >"$REPO/specs/042-webhook-202/tasks.md"
 hook; check "more ticks, same fact: silent" '[[ -z "$OUT" ]]'
 "$rec" "$REPO/specs/042-webhook-202" in_progress TT-412 >/dev/null
@@ -114,6 +115,7 @@ echo '{"number":7,"state":"OPEN","url":"https://example.test/acme/widget-api/pul
 hook
 check "PR opens: asks In Review with the link" 'asks "PR #7 is open" && asks "pull/7" && asks "pr-open.comment.md"'
 check "pr-open carries the no-regression guard" 'asks "never goes backwards"'
+check "pr-open asks to close resolved sub-issues" 'asks "sub-issues of TT-412"'
 check "PR-open hook stays under 200 ms" '(( MS < 200 ))' "took ${MS} ms"
 hook; check "same PR again: silent" '[[ -z "$OUT" ]]'
 "$rec" "$REPO/specs/042-webhook-202" in_review TT-412 https://example.test/acme/widget-api/pull/7 >/dev/null
