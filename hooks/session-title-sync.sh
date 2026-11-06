@@ -96,6 +96,7 @@ reason="$(printf '%s' "$state" | jq -r --arg script "$script" --arg session "$se
       "- turn ended on a question: \(.endsWithQuestion)",
       (if (.children.total // 0) > 0 then "- side sessions started from this one: \(.children.total), still running: \(.children.running)" else empty end),
       (if .pilot then "- pilot of: \(.pilot) (fixed subject)"
+       elif .pinned then "- pinned subject: \(.pinned) (fixed, from session metadata)"
        elif (.children.total // 0) > 0 then "- not named as a pilot yet: if the human asked this session to pilot, first run bash \"\($script)\" pilot --session \"\($session)\" --name \"<Linear project or roadmap name>\""
        else empty end),
       "- current title: \(.currentTitle | if . == "" then "(unknown)" else . end)",
@@ -104,7 +105,7 @@ reason="$(printf '%s' "$state" | jq -r --arg script "$script" --arg session "$se
       (.allowed[] | "- \(.) — \($st[.].next)"),
       "",
       "Then run:",
-      "  bash \"\($script)\" set <status> --session \"\($session)\" --repo \"\(.root)\"\(if .mode == "free" and .pilot == null then " --subject \"<topic in 2-5 words, user language>\"" else "" end)",
+      "  bash \"\($script)\" set <status> --session \"\($session)\" --repo \"\(.root)\"\(if .mode == "free" and .pilot == null and .pinned == null then " --subject \"<topic in 2-5 words, user language>\"" else "" end)",
       "It prints the title, or UNCHANGED. If it prints a title, call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and that exact title. Then stop."
     ] | join("\n")')"
 

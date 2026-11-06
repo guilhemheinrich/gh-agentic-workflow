@@ -48,6 +48,42 @@ split. Made-up example: in the webhook session, "and add the retry policy" is
 the same subject, so it stays here, while "what's our Sonar token naming rule?"
 is a split.
 
+### Anchored on a pinned subject
+
+The split check depends on "the conversation's main subject". As long as that
+subject was implicit, the check never fired. Measured on 2026-11-06: 540
+sessions received 5,402 injections and produced zero `offer` calls. Session
+`87de7c7a` drifted from "pilotage roadmap calendar/IAM" to "jeton Bitbucket du
+daemon prw", and the agent compared every message to a subject that had
+drifted along with it. A second cause: the desktop app tells the agent that
+an unclear message is a continuation, and the hook never claimed precedence.
+
+So the prompt hook now reads the session's metadata from the
+[session-meta](../session-meta/SKILL.md) store, keyed by the payload's
+`session_id`, and it counts `turns`. It injects one of three clauses:
+
+| `scope` | Injected clause |
+|---|---|
+| unset | classify now, at the latest by message #3: `scope focused` plus a pinned `subject`, or `scope generalist` (the exact commands, already filled with the id) |
+| `focused` | "Pinned subject: «…». Judge the split against it, not against the latest turns." |
+| `generalist` | a quick question stays; a subject that needs real work in one project goes to a session opened in **that project's folder**, so the sidebar files it under that project |
+
+The desktop app groups the sidebar by folder, and a session cannot change
+folder once it exists. So the placement happens when the session starts.
+`start_session` accepts a `cwd` only with `initiation: "user_asked"`, and
+only when the user named the place. When the message names the project
+("côté modelo-calendar"), the agent starts the session there. Otherwise it
+offers the session, with a title naming the project. If the app cannot open
+the session in that folder, the agent says in one line which project to open
+it in.
+
+The split clause also says it takes precedence over the "unclear means
+continuation" default, and asks the agent to `append` each proposed split to
+`split_events`. The agent judges scope and subject (principle 2). The hook
+only counts and reads. No `python3`, no CLI or no `session_id` means the
+rules go out without metadata, as before (principle 5).
+`CONVERSATION_FOCUS_META=0` turns this off.
+
 The summary describes the whole conversation, not only the last turn. After
 ten turns on the webhook, a turn that only renames a variable still ends with
 the webhook summary.
