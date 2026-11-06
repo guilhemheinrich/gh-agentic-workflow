@@ -102,6 +102,45 @@ metadata cannot follow the session. For Cursor and Codex this has not been
 checked yet, so check their current hook documentation before writing an
 adapter.
 
+## Opening a child session in another project (CLI)
+
+The desktop app files a session under the folder it was created in, and its
+`start_session` accepts a `cwd` only when the user named the place. The CLI
+has no such limit, so a pilot can open its children where they belong and
+keep their facts here. Measured on 2026-11-06 in `repos/calendar`: the child
+ran in that folder, finished a read-only investigation in 40 s, and its hooks
+wrote `turns` under its own id.
+
+```bash
+cd ~/code/modelo-workspace/repos/calendar \
+  && claude --bg -n "Calendar : formatage des dates" --permission-mode plan "<brief>"
+claude agents --json | jq -r '.[] | select(.name == "Calendar : formatage des dates") | .sessionId'
+session-meta.py set <child-id> parent_session <pilot-id>
+session-meta.py set <child-id> scope focused
+session-meta.py set <child-id> subject "Calendar : formatage des dates"
+session-meta.py append <pilot-id> children '{"session_id": "<child-id>", "cwd": "repos/calendar"}' --json
+```
+
+Three facts measured in that run:
+
+- **`--bg` chooses the id.** With `--session-id` it prints
+  `--bg manages the session id; ignoring --session-id`. So read the real id
+  from `claude agents --json` after launch, then write the metadata. Never
+  write it ahead of time.
+- **The child is invisible in the desktop sidebar.** It has no desktop
+  session file. The human talks to the pilot, and the pilot reads its
+  children through `children` in this store, `claude agents --json`, and the
+  child's transcript at
+  `~/.claude/projects/<folder-slug>/<child-id>.jsonl`.
+- **The background service can vanish.** In one launch out of three, the
+  child disappeared, along with its control socket and with no transcript.
+  The next launch printed `Starting background service…` and worked. After
+  launch, check that the child shows up in `claude agents --json` with
+  `state: "working"`, and relaunch once if it does not.
+
+The CLI keeps its own login, separate from the desktop app's. A child that
+answers `Login expired` needs a `claude /login` in a terminal.
+
 ## Keys in use
 
 This table is documentation, not a schema. It only lists who writes what.
@@ -112,6 +151,7 @@ This table is documentation, not a schema. It only lists who writes what.
 | `scope` | the agent, prompted by conversation-focus | `focused` (one subject) or `generalist` (a hub for unrelated questions) |
 | `subject` | the agent, for a focused session | the pinned subject: the split check is judged against it, and session-title keeps it as the title subject |
 | `pilot` | `session-title.sh pilot --name` | what a pilot session pilots (its Linear project, its roadmap); the title subject, above the spec slug |
+| `parent_session` / `children` | a pilot opening a child session | the link between a pilot and the sessions it launched, in either direction |
 | `split_events` | the agent, when it proposes a split | `[{title, turn}]` — the measurement the split check never had |
 
 ## Consumers
