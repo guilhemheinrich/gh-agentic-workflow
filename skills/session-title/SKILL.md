@@ -151,6 +151,17 @@ session-title.sh pilot --session <id> --name "Facturation réception"   # pin
 session-title.sh pilot --session <id> --name ""                        # unpin
 ```
 
+The pin is written to the shared [session-meta](../session-meta/SKILL.md)
+store as the key `pilot`, keyed by the session id the hooks pass. The cache
+keeps a copy, so sessions pinned before the store existed keep their name.
+
+A free session pins its subject the same way, through conversation-focus.
+Once it has classified itself with `scope=focused` and a `subject`, every
+title keeps that subject. The split check is judged against the same
+`subject`, so the title and the split agree on one fact. Order of
+precedence: `pilot`, then the spec slug, then the pinned `subject`, then the
+agent's `--subject`, then the branch.
+
 Once pinned, `set` ignores `--subject` and the working title keeps the
 name. When facts are unchanged, `restore` gives back the previous title, as
 in a spec session. A pinned name wins over a spec slug too: a pilot that

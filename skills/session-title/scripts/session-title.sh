@@ -140,6 +140,41 @@ merge_cache() {
   return 0
 }
 
+# ── Pins (session-meta store) ────────────────────────────────────────────────
+# A pinned subject lives in the shared session-meta store, keyed by the same
+# session id the hooks pass: `pilot` (what a pilot session pilots, e.g. the
+# Linear project "Facturation réception") and `subject` once the session
+# classified itself `scope=focused`. conversation-focus judges its split check
+# against the same `subject`, so the title and the split agree on one fact.
+# Once pinned, the subject no longer follows the agent's per-turn topic.
+# No python3 or no CLI: the cache's `pilot` alone, as before the store.
+META_CLI="${SESSION_META_CLI:-$SCRIPT_DIR/../../session-meta/scripts/session-meta.py}"
+
+meta_doc() {
+  local doc=""
+  if [[ -f "$META_CLI" ]] && command -v python3 >/dev/null 2>&1; then
+    doc="$(python3 "$META_CLI" get --harness claude-code "$1" 2>/dev/null)"
+  fi
+  printf '%s' "${doc:-"{}"}"
+}
+
+# pins SESSION CACHE_JSON — {"pilot": name|null, "subject": pinned subject|null}
+pins() {
+  meta_doc "$1" | jq -c --arg cache "${2:-"{}"}" '
+    ($cache | fromjson? // {}) as $c
+    | def nonempty: (strings | select(. != "")) // null;
+      {pilot: ((.pilot // $c.pilot // "") | nonempty),
+       subject: (if .scope == "focused" then ((.subject // "") | nonempty) else null end)}' 2>/dev/null \
+    || printf '{"pilot":null,"subject":null}'
+}
+
+meta_set_pilot() {
+  [[ -f "$META_CLI" ]] && command -v python3 >/dev/null 2>&1 || return 0
+  if [[ -n "$2" ]]; then python3 "$META_CLI" set --harness claude-code "$1" pilot "$2" >/dev/null 2>&1
+  else python3 "$META_CLI" unset --harness claude-code "$1" pilot >/dev/null 2>&1; fi
+  return 0
+}
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 # run_bounded SECS CMD... — print CMD stdout; fail on timeout or error.
 run_bounded() {
@@ -365,14 +400,14 @@ facts() {
     --argjson done "$done" --argjson total "$total" --arg branch "$branch" --arg base "$base" \
     --argjson dirty "$dirty" --argjson ahead "$ahead" --argjson upstream "$upstream" \
     --argjson merged "$merged" --argjson pr "$prj" --argjson question "$question" \
-    --argjson kids "$kids" --arg cache "${cache:-"{}"}" --arg title "$(printf '%s' "$scan" | jq -r '.title')" --arg root "$root" \
+    --argjson kids "$kids" --arg cache "${cache:-"{}"}" --arg pin "$(pins "$session" "${cache:-"{}"}")" --arg title "$(printf '%s' "$scan" | jq -r '.title')" --arg root "$root" \
     --slurpfile tpl "$TEMPLATES" '
     {
       mode: $mode, modeReason: $reason, root: $root, currentTitle: $title,
       spec: (if $slug == "" then null else {slug: $slug, stage: $stage, done: $done, total: $total} end),
       git: {branch: $branch, base: $base, dirty: $dirty, ahead: $ahead, upstream: $upstream, mergedByAncestry: $merged},
       pr: $pr, endsWithQuestion: $question, children: $kids,
-      pilot: ($cache | fromjson | .pilot // null)
+      pilot: ($pin | fromjson | .pilot), pinned: ($pin | fromjson | .subject)
     }
     | .suggested = (
         (if .pr.state == "OPEN" then ["to-merge"]
@@ -643,9 +678,13 @@ case "$cmd" in
       [[ -n "$slug" ]] && subject="$slug"
     fi
     # A pilot is named by what it pilots (its Linear project, its roadmap),
-    # always, like a spec session by its folder.
-    pilot_name="$(printf '%s' "$cache" | jq -r '.pilot // empty')"
-    [[ -n "$pilot_name" ]] && subject="$pilot_name"
+    # always, like a spec session by its folder. A free session that pinned
+    # its subject keeps it too, whatever --subject says.
+    pin="$(pins "$session" "$cache")"
+    pilot_name="$(printf '%s' "$pin" | jq -r '.pilot // empty')"
+    pinned="$(printf '%s' "$pin" | jq -r '.subject // empty')"
+    if [[ -n "$pilot_name" ]]; then subject="$pilot_name"
+    elif [[ "$mode" != "spec" && -n "$pinned" ]]; then subject="$pinned"; fi
     [[ -z "$subject" ]] && subject="$(printf '%s' "$cache" | jq -r '.subject // empty')"
     [[ -z "$subject" ]] && subject="$(printf '%s' "$state" | jq -r 'if .git.branch != .git.base then .git.branch else "" end')"
     [[ -z "$subject" ]] && subject="$(basename "$(printf '%s' "$state" | jq -r '.root')")"
@@ -807,8 +846,11 @@ case "$cmd" in
     root="$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" || root="$repo"
     [[ -n "$slug" ]] && slug="$(resolve_slug "$root" "$slug")"
     prog=""
-    pilot_name="$(printf '%s' "$cache" | jq -r '.pilot // empty')"
+    pin="$(pins "$session" "$cache")"
+    pilot_name="$(printf '%s' "$pin" | jq -r '.pilot // empty')"
+    pinned="$(printf '%s' "$pin" | jq -r '.subject // empty')"
     if [[ -n "$pilot_name" ]]; then slug="$pilot_name"
+    elif [[ -z "$slug" && -n "$pinned" ]]; then slug="$pinned"
     elif [[ -n "$slug" ]]; then
       dir="$(spec_dir "$root" "$slug")"
       if [[ -f "$dir/tasks.md" ]]; then
@@ -832,7 +874,8 @@ case "$cmd" in
     [[ -n "$session" ]] || die "restore needs --session"
     cache="$(read_cache "$session")"
     [[ "$(printf '%s' "$cache" | jq -r '.status // ""')" == "working" ]] || exit 0
-    if [[ "$(printf '%s' "$cache" | jq -r 'if (.pilot // "") != "" then "spec" else (.mode // "free") end')" != "spec" ]]; then echo "JUDGE"; exit 0; fi
+    fixed="$(pins "$session" "$cache" | jq -r 'if .pilot or .subject then "yes" else "" end')"
+    if [[ -z "$fixed" && "$(printf '%s' "$cache" | jq -r '.mode // "free"')" != "spec" ]]; then echo "JUDGE"; exit 0; fi
     prev="$(printf '%s' "$cache" | jq -r '.prevTitle // ""')"
     [[ -n "$prev" ]] || exit 0
     if freshness_on; then title="$(redot "$prev" "$(jq -r '.freshness.levels[0].dot' "$TEMPLATES")")"
@@ -847,6 +890,7 @@ case "$cmd" in
     [[ -n "$session" ]] || die "pilot needs --session"
     [[ -n "${name_set:-}" ]] || die "pilot needs --name TEXT (empty to unpin)"
     merge_cache "$session" '.pilot = (if $n == "" then null else $n end) | .asked = ""' --arg n "$name"
+    meta_set_pilot "$session" "$name"
     printf '%s\n' "${name:-(unpinned)}"
     ;;
   scheduled)
