@@ -1876,6 +1876,17 @@ assets:
       signup forms, user provisioning, or password hashing for the Septeo SSO. Covers the PATCH /v1/register endpoint
       with PBKDF2-SHA256 password hashing.
     category: domain-specific
+  - path: skills/session-meta/
+    type: skill
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+    description: >-
+      Open, durable metadata for agent sessions: a SQLite store of triples (harness, session_id, key) → JSON value,
+      read back as one document by session id. No key is fixed, so any tool can attach a new fact to a session (pinned
+      subject, focused/generalist scope, split events, tracker links). Read by the conversation-focus prompt hook to
+      anchor its split check on a pinned subject.
   - path: skills/session-title/
     type: skill
     category: devx-and-agentic
