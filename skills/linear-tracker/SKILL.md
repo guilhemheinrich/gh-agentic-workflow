@@ -10,14 +10,18 @@ description: >-
   Stop hook and per-phase templates that follow a spec-kit change in Linear —
   issue at specify, In Progress at the first ticked task, In Review when a PR
   opens — from file, git and PR facts only, asking once per fact and never
-  blocking. `publish` is a verb of the `grievances`
+  blocking. It also draws the dependency tree of a Linear project ("blocks /
+  blocked by" between its issues) as a clickable SVG, with
+  `scripts/linear_deps.py` and a Linear API key read from `LINEAR_API_KEY`.
+  `publish` is a verb of the `grievances`
   skill; this skill is one backend that answers it, and it never writes a
   ledger. Use when wiring a repository to a Linear project, when a finding must
   leave a repository and become an issue someone can own, when auditing which
   findings are already tracked, or when deciding what a tracker can and cannot
   hold. Triggers on "Linear", "linear.json", "publish a grievance", "tracker",
   "issue from a finding", "which project does this repo belong to",
-  "follow a spec in Linear", "spec-kit lifecycle".
+  "follow a spec in Linear", "spec-kit lifecycle", "dependency tree", "what
+  blocks this issue", "LINEAR_API_KEY".
 license: Apache-2.0
 tags:
   - hooks
@@ -491,6 +495,100 @@ would also stay mute for any tool that writes spec-kit artifacts directly.
 - PR detection through a Bitbucket CLI.
 - Re-asking when `plan.md` changes after its comment.
 
+## Dependency tree of a project
+
+Linear stores "blocks / blocked by" between issues, and shows it nowhere as a
+picture: the issue sidebar lists the relations of one issue, and the Timeline
+view draws **projects**, never issues. `scripts/linear_deps.py` fills that gap.
+Given a project URL, it writes one standalone SVG: issues in columns, blockers on
+the left, an arrow per blocking link, and **every box a link to its issue**.
+
+![example: a made-up checkout project](references/linear-deps-demo.svg)
+
+*Open `references/linear-deps-demo.svg` in a browser: the boxes are clickable.*
+
+### Run it
+
+```bash
+export LINEAR_API_KEY=...   # see "The API key" below; never paste it in a chat
+docker run --rm -e LINEAR_API_KEY -v "$PWD":/work -w /work python:3.12-slim \
+  python skills/linear-tracker/scripts/linear_deps.py \
+  "https://linear.app/<workspace>/project/<name>-<slugId>" -o deps.svg
+```
+
+Run it from the repository root; adjust the script path if the skill is installed
+elsewhere. `-e LINEAR_API_KEY` forwards the variable without writing its value on
+the command line. Python standard library only; Docker is the execution rule.
+
+| Option | Effect |
+|---|---|
+| `-o FILE` | output file (default `deps.svg`) |
+| `--include-related` | also draw "related" links, dotted. Off by default: they order nothing |
+| `--external show` | draw issues outside the project as dashed boxes. Default `drop`: the links to them are counted in a footer note |
+| `--hide-isolated` | hide issues without dependency. Default: a strip of clickable chips below the graph |
+| `--from-json FILE` | no API call; read the normalized data from FILE (see below) |
+
+### How to read the picture
+
+- **Columns** come from the longest path: an issue sits one column to the right of
+  its furthest blocker. The leftmost issues are what to unblock first.
+- `↳ TT-1970` in a box is the parent issue; the colour is the state (blue unstarted,
+  orange started, grey completed or canceled); the full title is the tooltip.
+- A **cycle** (A blocks B blocks A) is reported on stderr and in the SVG; the link
+  that closes it is drawn dashed in red. The run still succeeds: a cycle is data
+  worth showing, not a failure.
+
+### The API key — where it comes from, where it lives
+
+The script talks to Linear's GraphQL API directly. It does **not** reuse the MCP
+server's session, so it needs a credential of its own: a **personal API key**.
+
+- **Create it:** Linear → Settings → Account → Security & access → API keys
+  ([API and webhooks](https://linear.app/docs/api-and-webhooks)). A workspace admin
+  may switch off member-created keys (Settings → Administration → API), in which case
+  an admin has to create it.
+- **Scope it down:** the script only reads. Give the key the **Read** permission and,
+  if the workspace offers it, limit it to the teams of the project.
+- **Hold it:** in the shell or the secret store of the person running the command, as
+  `LINEAR_API_KEY`. Never in a file of the repository, never in `.linear.json`
+  (that file records the *command* that retrieves a credential, never its value),
+  never in a chat. The script never prints it: an unreachable API or a refusal shows
+  the HTTP status or Linear's message, and a test pins it.
+- **Not set?** Do not ask for it in the conversation. Give the command above and stop,
+  or use the MCP fallback below.
+
+### What it queries
+
+One paginated GraphQL query per page of 25 issues, with at most 25 `relations` and 25
+`inverseRelations` each, well under Linear's complexity limit of 10000. Only
+`blocks` relations are drawn as dependencies. `inverseRelations` is what catches a
+blocker that lives **outside** the project: a relation is stored once, on its source
+issue. `duplicate` and `similar` are ignored. A warning names any issue that has more
+relations than one page returns.
+
+### Without a key — the MCP fallback
+
+The same picture can be drawn from the Linear MCP, which needs no key, at the price of
+one call per issue:
+
+1. `list_issues` with `project` → every issue, with `parentId`.
+2. `get_issue` with `fields: ["relations"]` **for every issue**, not only the parents.
+   Reading only the parents of a 49-issue project missed 4 blocking links that sat on
+   sub-issues (a question to a partner blocking two tasks, for instance).
+3. Write the normalized file and run with `--from-json`:
+
+```json
+{
+  "project": {"name": "Checkout redesign"},
+  "issues": [{"identifier": "DEMO-2", "title": "...", "state": "started", "parent": null}],
+  "relations": [{"type": "blocks", "from": "DEMO-1", "to": "DEMO-2"}],
+  "external": {"OTHER-77": "title of an issue outside the project"}
+}
+```
+
+`state` is the Linear state type (`unstarted`, `started`, `completed`, `canceled`).
+`tests/fixtures/linear-deps-demo.json` is a complete example.
+
 ## Boundaries
 
 | Not this skill's job | Where it belongs |
@@ -498,6 +596,7 @@ would also stay mute for any tool that writes spec-kit artifacts directly.
 | Deciding a finding may leave the repository | The `grievances` boundary and promotion rules |
 | Writing `specs/GRIEVANCES.md` | The `grievances` CLI, exclusively |
 | Holding a Linear token | The MCP server configuration, per machine, never committed |
+| Holding the API key `linear_deps.py` reads | The shell or secret store of the person running it, as `LINEAR_API_KEY`; never a file of the repository |
 | Choosing a project when the config has none | A human, once, in `.linear.json` |
 | Mirroring every record into Linear | Nothing. A mirror is two homes for one fact, and they drift |
 | Deciding what a repository's Linear project is called | The team, in the tracker |
@@ -527,6 +626,23 @@ would also stay mute for any tool that writes spec-kit artifacts directly.
   artifact: record the *command* that retrieves a credential, never its value.
 
 ## Implementation Status
+
+**Dependency tree — built, tested offline and against a stub server, never run
+against the live Linear API** (2026-11-09):
+
+- `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
+  `tests/run-linear-deps-in-docker.sh`, two made-up fixtures, one sample SVG.
+- 18 tests in Docker: layering by longest path, cycles, external links, every box
+  linking to `https://linear.app/<workspace>/issue/<ID>`, XML escaping, the key never
+  printed, and the live path against a local stub server (two pages, deduplicated
+  relations, the key only in the `Authorization` header). A mutation that breaks the
+  issue URL turns two tests red.
+- Not verified: the real schema. The lookup of the project by `slugId` (with a
+  fallback to `project(id:)`), the `inverseRelations` field, the `Authorization: <key>`
+  header format for personal keys, and the query staying under the complexity limit
+  are written from the schema and not yet run. The first live run settles them.
+- The first hand-drawn graph this script generalizes covered a real 49-issue project;
+  its data is not committed here (fixtures are made up).
 
 **Lifecycle hook — built and tested on a fixture, never run against Linear**
 (2026-10-28):
@@ -575,6 +691,9 @@ priority scale, the label names and the team's initial state.
 
 ## See also
 
+- Linear docs: [Issue relations](https://linear.app/docs/issue-relations),
+  [Project dependencies](https://linear.app/docs/project-dependencies) (projects, drawn
+  on the Timeline), [API and webhooks](https://linear.app/docs/api-and-webhooks) (API keys).
 - [`grievances`](../grievances/SKILL.md) — the ledger, the record, the boundary
   rules that decide whether a finding may leave, and the owner of the `publish`
   verb this skill answers.

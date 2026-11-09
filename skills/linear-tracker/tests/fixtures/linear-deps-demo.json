@@ -1,0 +1,26 @@
+{
+ "project": {"name": "Checkout redesign (made up)"},
+ "issues": [
+  {"identifier": "DEMO-1", "title": "ADR: payment state model", "state": "completed", "parent": null},
+  {"identifier": "DEMO-2", "title": "Payment worker with retries", "state": "started", "parent": null},
+  {"identifier": "DEMO-3", "title": "Database transactions per operation", "state": "unstarted", "parent": null},
+  {"identifier": "DEMO-4", "title": "Refund flow", "state": "unstarted", "parent": "DEMO-2"},
+  {"identifier": "DEMO-5", "title": "Receipt e-mail", "state": "unstarted", "parent": "DEMO-2"},
+  {"identifier": "DEMO-6", "title": "Question: which PSP signs receipts?", "state": "unstarted", "parent": null},
+  {"identifier": "DEMO-7", "title": "Admin screen for stuck payments", "state": "unstarted", "parent": null},
+  {"identifier": "DEMO-8", "title": "Unrelated copy fix", "state": "unstarted", "parent": null},
+  {"identifier": "DEMO-9", "title": "Unrelated icon refresh", "state": "canceled", "parent": null}
+ ],
+ "relations": [
+  {"type": "blocks", "from": "DEMO-1", "to": "DEMO-2"},
+  {"type": "blocks", "from": "DEMO-3", "to": "DEMO-2"},
+  {"type": "blocks", "from": "DEMO-2", "to": "DEMO-4"},
+  {"type": "blocks", "from": "DEMO-2", "to": "DEMO-5"},
+  {"type": "blocks", "from": "DEMO-6", "to": "DEMO-5"},
+  {"type": "blocks", "from": "DEMO-1", "to": "DEMO-7"},
+  {"type": "blocks", "from": "OTHER-77", "to": "DEMO-3"},
+  {"type": "related", "from": "DEMO-4", "to": "DEMO-7"},
+  {"type": "duplicate", "from": "DEMO-8", "to": "DEMO-9"}
+ ],
+ "external": {"OTHER-77": "Provision the staging PSP account (another project)"}
+}
