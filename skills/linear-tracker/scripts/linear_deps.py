@@ -635,7 +635,10 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
     if argv[:1] == ["check"]:
         return check_main(argv[1:])
-    ap = argparse.ArgumentParser(description="Render a Linear project's issue dependencies as a clickable SVG.")
+    ap = argparse.ArgumentParser(
+        description="Render a Linear project's issue dependencies as a clickable SVG (and JSON with --json-out).",
+        epilog='Then: linear_deps.py check deps.json --type Proof --blocked-by "Technical task,Feature" '
+               "lists the issues of one type not blocked by any issue of the accepted types.")
     ap.add_argument("project_url", help="https://linear.app/<workspace>/project/<name>-<slugId>")
     ap.add_argument("-o", "--output", default="deps.svg", help="SVG file to write (default: deps.svg)")
     ap.add_argument("--json-out", metavar="FILE",

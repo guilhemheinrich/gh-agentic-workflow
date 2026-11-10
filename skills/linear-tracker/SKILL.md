@@ -615,7 +615,7 @@ Made-up sample, trimmed to two nodes and two edges
 ```bash
 docker run --rm -v "$PWD":/work -w /work python:3.12-slim \
   python skills/linear-tracker/scripts/linear_deps.py check deps.json \
-  --type Proof --blocked-by "Technical task,Feature,Improvement,Bug" --open-only
+  --type Proof --blocked-by "Technical task,Feature,Improvement,Bug"
 ```
 
 Every project issue of `--type` must be blocked by at least one issue whose type is
