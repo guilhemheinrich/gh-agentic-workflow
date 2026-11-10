@@ -3,47 +3,48 @@
 Workspace-level Linear issue template « Bug ». Applies the Type label
 **Bug**. Title prefix: none. Semantics and the test that decides
 this type: [`../../references/ticket-types.md`](../../references/ticket-types.md).
-Starts from the existing Bug template; adds « En clair » and « Promesse ».
+
+Starts from a common Bug template; adds « In plain words » and « Promise ».
 
 ```markdown
-## En clair, avec un exemple
+## In plain words, with an example
 
-<Ce que l'utilisateur ne peut plus faire, et un cas concret. Ex. : « L'export d'une facture sans ligne renvoie une erreur au lieu d'un fichier vide. »>
+<What the user can no longer do, and one concrete case. E.g. « Exporting an invoice with no line returns an error instead of an empty file. »>
 
-## Promesse
+## Promise
 
-<La source qui dit ce qui devait se passer : spec, contrat d'API, doc, ou comportement d'avant. Sans source, ce n'est pas un bug.>
+<The source that says what should happen: a spec, an API contract, a doc, or the behaviour before. No source, no bug.>
 
-## Reproduction
+## Steps to reproduce
 
 1. …
 2. …
 
-## Attendu
+## Expected
 
-Ce qui devrait se passer, d'après la promesse.
+What should happen, according to the promise.
 
-## Observé
+## Observed
 
-Ce qui se passe réellement : la réponse ou le message exact.
+What actually happens: the exact response or message.
 
-## Environnement
+## Environment
 
-* Environnement et version :
-* URL ou écran :
-* Utilisateur / rôle :
+* Environment and version:
+* URL or screen:
+* User / role:
 
 ## Impact
 
-Sévérité, nombre d'utilisateurs touchés, contournement éventuel.
+Severity, number of users affected, workaround if any.
 
-## Logs / captures
+## Logs / screenshots
 
-## Terminé quand
+## Done when
 
-La correction est mergée en staging, pipeline de merge vert, avec un test qui échouait avant.
+The fix is merged into staging, merge pipeline green, with a test that failed before.
 
-## Preuve conseillée
+## Recommended proof
 
-Lien vers le ticket Preuve qui montrera que la reproduction ne reproduit plus sur staging (une commande et sa sortie, ou une capture), ou « aucune » et pourquoi.
+Link to the Proof ticket that will show that the reproduction no longer reproduces on staging (a command and its output, or a screenshot), or « none » and why.
 ```

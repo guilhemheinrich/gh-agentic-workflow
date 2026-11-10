@@ -1,37 +1,38 @@
 # Question template: proposal
 
 Workspace-level Linear issue template « Question ». Applies the Type label
-**Question** and asks for a **Destinataire** label. Title prefix: « Question : ». Semantics and the test that decides
+**Question** and asks for an **Addressee** label. Title prefix: « Question: ». Semantics and the test that decides
 this type: [`../../references/ticket-types.md`](../../references/ticket-types.md).
-Starts from the existing Question template; adds « En clair » and the options.
+
+Adds « In plain words » and the options to a common Question template.
 
 ```markdown
-## En clair, avec un exemple
+## In plain words, with an example
 
-<Ce qu'on ne peut pas décider seuls, et un cas concret. Ex. : « On ne sait pas s'il faut facturer quand la facture est émise ou quand elle est acceptée. »>
+<What we cannot decide on our own, and one concrete case. E.g. « We do not know whether to bill when the invoice is issued or when it is accepted. »>
 
 ## Question
 
-L'information ou la décision qui manque, en une phrase.
+The missing information or decision, in one sentence.
 
 ## Options
 
-* A : … — effet pour le client :
-* B : … — effet pour le client :
+* A: … — effect on the client:
+* B: … — effect on the client:
 
-## Réponse suggérée, sous réserve de validation
+## Suggested answer, pending validation
 
-Votre proposition, ou « aucune ».
+Your proposal, or « none ».
 
-## Qui décide
+## Who decides
 
-Nom ou rôle (label Destinataire). Réponse souhaitée avant le JJ/MM.
+Name or role (Addressee label). Answer wanted before DD/MM.
 
-## Ce que ça débloque
+## What it unblocks
 
-Les issues en attente, reliées en « bloquée par » ce ticket.
+The waiting issues, linked as « blocked by » this ticket.
 
-## Contenu de l'échange
+## Exchange so far
 
-Ce qui a été dit, avec la date et les personnes.
+What was said, with the date and the people.
 ```

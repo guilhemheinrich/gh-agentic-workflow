@@ -15,15 +15,15 @@ description: >-
   ledger. Use when wiring a repository to a Linear project, when a finding must
   leave a repository and become an issue someone can own, when auditing which
   findings are already tracked, or when deciding what a tracker can and cannot
-  hold. It also proposes eight issue types (Bug, Blocage, Question, Recherche,
-  Fonctionnalité, Amélioration, Preuve, Tâche technique), the order of
-  questions that picks one, and a workspace template body for each. Use it too
-  when choosing which ticket type to open, telling a Question from a Blocage,
-  proving a merged lot on an environment, or drafting Linear templates.
+  hold. It also proposes eight issue types (Bug, Blocker, Question, Research,
+  Feature, Improvement, Proof, Technical task), the order of questions that
+  picks one, and a workspace template body for each. Use it too when choosing
+  which ticket type to open, telling a Question from a Blocker, proving a
+  merged lot on an environment, or drafting Linear templates.
   Triggers on "Linear", "linear.json", "publish a grievance", "tracker",
   "issue from a finding", "which project does this repo belong to",
   "follow a spec in Linear", "spec-kit lifecycle", "ticket type",
-  "Linear template", "preuve".
+  "Linear template", "proof ticket".
 license: Apache-2.0
 tags:
   - hooks
@@ -501,37 +501,34 @@ would also stay mute for any tool that writes spec-kit artifacts directly.
 
 Status: **proposal**. Eight types, picked by asking eight questions in order and
 stopping at the first yes. Each has a workspace-level template body to paste
-into Linear. The full semantics (the Question / Blocage split, the Destinataire,
-Preuve and the Livraison milestone, the `save_issue` creation sequence) are in
+into Linear. The full semantics (the Question / Blocker split, the Addressee,
+Proof and the Delivery milestone, the `save_issue` creation sequence) are in
 [`references/ticket-types.md`](references/ticket-types.md).
 
 | # | First yes to | Type | Template |
 |---|---|---|---|
 | 1 | Something delivered breaks a promise you can cite | Bug | [`bug.md`](templates/tickets/bug.md) |
-| 2 | Someone outside the team must **do** something | Blocage | [`blocage.md`](templates/tickets/blocage.md) |
+| 2 | Someone outside the team must **do** something | Blocker | [`blocker.md`](templates/tickets/blocker.md) |
 | 3 | Someone must **tell** us something | Question | [`question.md`](templates/tickets/question.md) |
-| 4 | Ours to find out, within a time-box | Recherche | [`recherche.md`](templates/tickets/recherche.md) |
-| 5 | A user gains a new capability | Fonctionnalité | [`fonctionnalite.md`](templates/tickets/fonctionnalite.md) |
-| 6 | An existing capability gets better | Amélioration | [`amelioration.md`](templates/tickets/amelioration.md) |
-| 7 | One thing must be shown working on an environment, by running something, not writing code | Preuve | [`preuve.md`](templates/tickets/preuve.md) |
-| 8 | Otherwise: work that ends in a merge, with no visible change | Tâche technique | [`tache-technique.md`](templates/tickets/tache-technique.md) |
+| 4 | Ours to find out, within a time-box | Research | [`research.md`](templates/tickets/research.md) |
+| 5 | A user gains a new capability | Feature | [`feature.md`](templates/tickets/feature.md) |
+| 6 | An existing capability gets better | Improvement | [`improvement.md`](templates/tickets/improvement.md) |
+| 7 | One thing must be shown working on an environment, by running something, not writing code | Proof | [`proof.md`](templates/tickets/proof.md) |
+| 8 | Otherwise: work that ends in a merge, with no visible change | Technical task | [`technical-task.md`](templates/tickets/technical-task.md) |
 
-Two rules carry most of the weight:
+Three rules carry most of the weight:
 
 - **Dependency is a relation, never a type.** Whether a Question stops the work
-  is said with **Blocked by**, not by filing it as a Blocage.
-- **A Tâche technique ends with a merge; a Preuve ends with an observation**
+  is said with **Blocked by**, not by filing it as a Blocker.
+- **A Technical task ends with a merge; a Proof ends with an observation**
   (a command and its output, or a screenshot from a Playwright or browser
-  session). Every code ticket's template ends with a « Preuve conseillée »
-  link. Example (made up): « Monter Node de 20 à 22 » is the Tâche technique;
-  « `node --version` renvoie `v22` dans le pod staging » is its Preuve.
-- **A Preuve is blocked by every dev issue of its lot**, and a Livraison is the
-  lot's milestone, reached when its last Preuve is closed. Example (made up):
-  milestone « Staging : invitations » holds the two dev issues of the lot and
-  two Preuves, each blocked by both.
-
-The template bodies are in French, the language of the workspace they were
-drafted for; the structure is what to keep.
+  session). Every code ticket's template ends with a « Recommended proof »
+  link. Example (made up): « Upgrade Node from 20 to 22 » is the Technical
+  task; « `node --version` returns `v22` in the staging pod » is its Proof.
+- **A Proof is blocked by every dev issue of its lot**, and a Delivery is the
+  lot's milestone, reached when its last Proof is closed. Example (made up):
+  milestone « Staging: invitations » holds the two dev issues of the lot and
+  two Proofs, each blocked by both.
 
 ## Boundaries
 
