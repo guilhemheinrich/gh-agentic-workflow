@@ -24,7 +24,7 @@ API_URL = "https://api.linear.app/graphql"
 PAGE_SIZE = 25      # issues per page; relations are capped at the same size to stay under the complexity limit
 LABEL_PAGE = 10     # labels per issue
 EXTERNAL_PAGE = 50  # outside issues per label lookup
-BOX_W, BOX_H = 270, 54
+BOX_W, BOX_H = 270, 86
 GAP_X, GAP_Y = 110, 14
 MARGIN = 24
 TITLE_CHARS = 33
@@ -45,7 +45,8 @@ query($id: String!, $after: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         identifier title
-        state { type }
+        state { type name }
+        assignee { displayName }
         parent { identifier }
         projectMilestone { name }
         labels(first: %d) { nodes { name parent { name } } }
@@ -128,6 +129,8 @@ def fetch_live(slug, api_url):
             issues.append({
                 "identifier": me, "title": n["title"],
                 "state": (n.get("state") or {}).get("type", ""),
+                "state_name": (n.get("state") or {}).get("name"),
+                "assignee": (n.get("assignee") or {}).get("displayName"),
                 "parent": (n.get("parent") or {}).get("identifier"),
                 "milestone": (n.get("projectMilestone") or {}).get("name"),
                 "labels": gql_labels(n),
@@ -184,6 +187,8 @@ def build_graph(data, include_related, external_mode):
     block, related, dropped = set(), set(), 0
     for r in data["relations"]:
         a, b, t = r["from"], r["to"], r["type"]
+        if t == "blocked_by":
+            t, a, b = "blocks", b, a
         if a == b:
             continue
         if t == "blocks":
@@ -205,7 +210,8 @@ def build_graph(data, include_related, external_mode):
             nodes[ident] = dict(internal[ident], external=False)
         else:
             nodes[ident] = {"identifier": ident, "title": ext_titles.get(ident, ""),
-                            "state": "", "parent": None, "external": True}
+                            "state": "", "parent": None, "external": True,
+                            "labels": data.get("external_labels", {}).get(ident, [])}
     isolated = sorted((i for i in internal if i not in touched), key=sort_key)
 
     back = find_back_edges(nodes, block)
@@ -401,6 +407,8 @@ def build_export(data, project_url, workspace):
             "url": issue_url(workspace, ident),
             "external": src is None,
             "state": src.get("state", "") if src else None,
+            "state_name": src.get("state_name") if src else None,
+            "assignee": src.get("assignee") if src else None,
             "parent": src.get("parent") if src else None,
             "milestone": src.get("milestone") if src else None,
             "type": ticket_type(labels),
@@ -478,63 +486,157 @@ def check_main(argv):
     return 1 if failures or unknown else 0
 
 
-STYLE = """
-svg { --bg:#f5f6f8; --fg:#151a22; --muted:#5a6372; --edge:#4a5262; --cycle:#c2330f;
-  --todo-bg:#e8edfc; --todo-bd:#3d5bd9; --todo-fg:#1f2f78;
-  --run-bg:#fdebdc; --run-bd:#c2530f; --run-fg:#6e2d06;
-  --done-bg:#e6e9ee; --done-bd:#8b93a1; --done-fg:#4a5262;
-  --ext-bg:#ffffff; --ext-bd:#8b93a1; --ext-fg:#4a5262; }
-@media (prefers-color-scheme: dark) { svg { --bg:#11151b; --fg:#e8ebf0; --muted:#9aa3b2; --edge:#a8b0be; --cycle:#ff8a65;
-  --todo-bg:#1d2748; --todo-bd:#8ea2f5; --todo-fg:#d3dbff;
-  --run-bg:#3d2312; --run-bd:#f0944f; --run-fg:#ffddc2;
-  --done-bg:#232933; --done-bd:#7c8594; --done-fg:#b7bfcc;
-  --ext-bg:#181d25; --ext-bd:#7c8594; --ext-fg:#b7bfcc; } }
+# One entry per box style: the CSS and the legend are both generated from this table,
+# so a colour cannot be drawn without being explained. (class, legend text, light, dark),
+# each colour triple being (fill, stroke, text).
+BOX_STYLES = [
+    ("triage", "Triage", ("#f1e8fb", "#8a4fd1", "#4b1f80"), ("#2b1d42", "#b98cf0", "#e6d6ff")),
+    ("backlog", "Backlog", ("#f0f2f5", "#9aa5b8", "#3b4556"), ("#1f242c", "#7d8899", "#c3cad6")),
+    ("unstarted", "Todo (unstarted)", ("#e8edfc", "#3d5bd9", "#1f2f78"), ("#1d2748", "#8ea2f5", "#d3dbff")),
+    ("started", "In progress (started)", ("#fdebdc", "#c2530f", "#6e2d06"), ("#3d2312", "#f0944f", "#ffddc2")),
+    ("completed", "Done (completed)", ("#e3f4e8", "#2f8f4e", "#17502b"), ("#16301f", "#5cc27f", "#cdeed7")),
+    ("canceled", "Canceled (title struck through)", ("#e6e9ee", "#8b93a1", "#4a5262"), ("#232933", "#7c8594", "#b7bfcc")),
+    ("other", "Other state", ("#fff7d6", "#a88a00", "#5c4b00"), ("#352e10", "#d8b93a", "#f5e7a8")),
+    ("ext", "Outside the project (dashed)", ("#ffffff", "#8b93a1", "#4a5262"), ("#181d25", "#7c8594", "#b7bfcc")),
+]
+STATE_TYPES = {c for c, *_ in BOX_STYLES} - {"other", "ext"}
+
+
+def box_css():
+    light, dark = [], []
+    for cls, _, (lb, ls, lf), (db, ds, df) in BOX_STYLES:
+        light.append("--%s-bg:%s; --%s-bd:%s; --%s-fg:%s;" % (cls, lb, cls, ls, cls, lf))
+        dark.append("--%s-bg:%s; --%s-bd:%s; --%s-fg:%s;" % (cls, db, cls, ds, cls, df))
+    rules = [".%s { fill: var(--%s-bg); stroke: var(--%s-bd); } .%s text { fill: var(--%s-fg); }"
+             % (c, c, c, c, c) for c, *_ in BOX_STYLES]
+    return "\n".join([
+        "svg { --bg:#f5f6f8; --fg:#151a22; --muted:#5a6372; --edge:#4a5262; --cycle:#c2330f; --chip:#ffffffb0; "
+        + " ".join(light) + " }",
+        "@media (prefers-color-scheme: dark) { svg { --bg:#11151b; --fg:#e8ebf0; --muted:#9aa3b2; --edge:#a8b0be; "
+        "--cycle:#ff8a65; --chip:#00000040; " + " ".join(dark) + " } }",
+    ] + rules)
+
+
+STYLE = box_css() + """
 text { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); }
 .bg { fill: var(--bg); }
 .h { font-size: 16px; font-weight: 600; } .sub { font-size: 12px; fill: var(--muted); }
 .id { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 500; }
-.ttl { font-size: 12.5px; } .tag { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; fill: var(--muted); }
+.ttl { font-size: 12.5px; } .tag { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; }
+.meta { font-size: 10.5px; opacity: .85; }
 .box { stroke-width: 1.5; }
-.todo { fill: var(--todo-bg); stroke: var(--todo-bd); } .todo text { fill: var(--todo-fg); }
-.run { fill: var(--run-bg); stroke: var(--run-bd); } .run text { fill: var(--run-fg); }
-.done { fill: var(--done-bg); stroke: var(--done-bd); } .done text { fill: var(--done-fg); }
-.ext { fill: var(--ext-bg); stroke: var(--ext-bd); stroke-dasharray: 5 3; } .ext text { fill: var(--ext-fg); }
+.canceled .ttl { text-decoration: line-through; }
+.ext { stroke-dasharray: 5 3; }
+.chip rect { fill: var(--chip); stroke: var(--muted); stroke-width: .6; } .chip text { font-size: 10px; }
+.tchip rect { fill: var(--chip); stroke-width: 1.2; } .tchip text { font-size: 10px; font-weight: 700; }
 a:hover .box { stroke-width: 2.6; }
 .edge { stroke: var(--edge); stroke-width: 1.4; fill: none; opacity: .8; }
 .rel { stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 2 3; fill: none; }
 .cyc { stroke: var(--cycle); stroke-width: 1.8; stroke-dasharray: 6 3; fill: none; }
 .arrow { fill: var(--edge); } .arrow-c { fill: var(--cycle); }
 .warn { font-size: 12px; fill: var(--cycle); font-weight: 600; }
+.lg { font-size: 11px; fill: var(--muted); }
 """
+CHAR_W = 6.1        # rough width of one 10-11px character, to fit text without a layout engine
+CHIP_CHAR_W = 5.5   # the same for the 10px chip text
+CHIP_PAD = 6
 
 
 def state_class(node):
     if node["external"]:
         return "ext"
-    if node["state"] in ("completed", "canceled"):
-        return "done"
-    if node["state"] == "started":
-        return "run"
-    return "todo"
+    if not node.get("state"):
+        return "unstarted"      # normalized data written before states were fetched
+    return node["state"] if node["state"] in STATE_TYPES else "other"
+
+
+def card_labels(node):
+    """(type, other labels as "group/name" or "name"); the type is shown once, as its own chip."""
+    labels = norm_labels(node.get("labels"))
+    kind = ticket_type(labels)
+    rest = []
+    for l in labels:
+        if norm(l.get("group")) == TYPE_GROUP or (kind and not l.get("group") and norm(l["name"]) == norm(kind)):
+            continue
+        rest.append("%s/%s" % (l["group"], l["name"]) if l.get("group") else l["name"])
+    return kind, rest
+
+
+def card_tooltip(ident, n):
+    kind, rest = card_labels(n)
+    lines = ["%s: %s" % (ident, n["title"] or "(outside this project)")]
+    facts = [("State", n.get("state_name") or n.get("state")), ("Type", kind),
+             ("Assignee", n.get("assignee")), ("Milestone", n.get("milestone")), ("Parent", n.get("parent")),
+             ("Labels", ", ".join(rest))]
+    lines += ["%s: %s" % (k, v) for k, v in facts if v]
+    return "\n".join(lines)
+
+
+def fit_chips(names, width):
+    """[(index or None, text, width)]: the chips that fit on one line, then a "+N" chip for the rest."""
+    out, x = [], 0
+    for i, name in enumerate(names):
+        label = clip(name, 26)
+        w = len(label) * CHIP_CHAR_W + 2 * CHIP_PAD
+        more = len(names) - i - 1
+        reserve = (len("+%d" % more) * CHIP_CHAR_W + 2 * CHIP_PAD + 4) if more else 0
+        if x + w + reserve > width:
+            more = "+%d" % (len(names) - i)
+            out.append((None, more, len(more) * CHIP_CHAR_W + 2 * CHIP_PAD))
+            break
+        out.append((i, label, w))
+        x += w + 4
+    return out
+
+
+def legend_items(graph, isolated, cards):
+    used = {state_class(n) for n in graph["nodes"].values()} | {state_class(dict(n, external=False))
+                                                              for n in isolated}
+    items = [("box", c, text) for c, text, *_ in BOX_STYLES if c in used]
+    if graph["block"] - graph["back"]:
+        items.append(("line", "edge", "A blocks B (arrow)"))
+    if graph["related"]:
+        items.append(("line", "rel", "related (dotted)"))
+    if graph["back"]:
+        items.append(("line", "cyc", "link closing a cycle"))
+    if any(k for k, _ in cards):
+        items.append(("chip", "tchip", "ticket type"))
+    if any(r for _, r in cards):
+        items.append(("chip", "chip", "label"))
+    return items
 
 
 def render_svg(data, graph, workspace, hide_isolated):
     nodes, layers = graph["nodes"], graph["order"]
+    isolated_ids = [] if hide_isolated else graph["isolated"]
+    internal = {i["identifier"]: i for i in data["issues"]}
+    isolated = [internal[i] for i in isolated_ids]
+    cards = [card_labels(n) for n in nodes.values()]
+
     n_layers = len(layers)
     graph_w = n_layers * BOX_W + max(0, n_layers - 1) * GAP_X if n_layers else 0
+    width = max(MARGIN * 2 + graph_w, 640)
+
+    legend = legend_items(graph, isolated, cards)
+    lg_pos, lx, ly = [], MARGIN, 70
+    for item in legend:
+        w_item = 34 + len(item[2]) * CHAR_W + 18
+        if lx + w_item > width - MARGIN and lx > MARGIN:
+            lx, ly = MARGIN, ly + 20
+        lg_pos.append((item, lx, ly))
+        lx += w_item
+    top = (ly + 26) if legend else 62
+
     tallest = max((len(l) for l in layers), default=0)
     graph_h = tallest * BOX_H + max(0, tallest - 1) * GAP_Y
-
     pos = {}
     for li, col in enumerate(layers):
         col_h = len(col) * BOX_H + max(0, len(col) - 1) * GAP_Y
         y0 = (graph_h - col_h) / 2
         for ri, ident in enumerate(col):
-            pos[ident] = (MARGIN + li * (BOX_W + GAP_X), 62 + y0 + ri * (BOX_H + GAP_Y))
+            pos[ident] = (MARGIN + li * (BOX_W + GAP_X), top + y0 + ri * (BOX_H + GAP_Y))
 
-    isolated = [] if hide_isolated else graph["isolated"]
-    width = max(MARGIN * 2 + graph_w, 640)
-    strip_top = 62 + graph_h + 40
+    strip_top = top + graph_h + 40
     per_row = max(1, int((width - 2 * MARGIN) // (CHIP_W + 8)))
     strip_rows = (len(isolated) + per_row - 1) // per_row
     strip_h = (30 + strip_rows * (CHIP_H + 8)) if isolated else 0
@@ -556,6 +658,19 @@ def render_svg(data, graph, workspace, hide_isolated):
     n_edges = len(graph["block"])
     w('<text class="sub" x="%d" y="46">%d issues in dependency chains, %d blocking links; arrow = blocks, left to right</text>'
       % (MARGIN, len(nodes), n_edges))
+
+    w('<g class="legend">')
+    for (kind, cls, text), x, y in lg_pos:
+        if kind == "box":
+            w('<g class="%s"><rect class="box" x="%d" y="%d" width="26" height="14" rx="4"/></g>' % (cls, x, y - 11))
+        elif kind == "line":
+            marker = {"edge": ' marker-end="url(#ar)"', "cyc": ' marker-end="url(#ac)"'}.get(cls, "")
+            w('<path class="%s" d="M%d %d L%d %d"%s/>' % (cls, x, y - 4, x + 26, y - 4, marker))
+        else:
+            w('<g class="unstarted"><g class="%s"><rect x="%d" y="%d" width="26" height="14" rx="7"/></g></g>'
+              % (cls, x, y - 11))
+        w('<text class="lg" x="%d" y="%d">%s</text>' % (x + 34, y, escape(text)))
+    w("</g>")
 
     def edge_path(a, b):
         (x1, y1), (x2, y2) = pos[a], pos[b]
@@ -584,17 +699,29 @@ def render_svg(data, graph, workspace, hide_isolated):
     def box(ident, x, y):
         n = nodes[ident]
         url = issue_url(workspace, ident)
-        tip = "%s: %s" % (ident, n["title"] or "(outside this project)")
+        kind, rest = card_labels(n)
         w('<a href=%s xlink:href=%s target="_blank" rel="noopener"><g class="%s">'
           % (quoteattr(url), quoteattr(url), state_class(n)))
-        w('<title>%s</title>' % escape(tip))
+        w('<title>%s</title>' % escape(card_tooltip(ident, n)))
         w('<rect class="box" x="%.1f" y="%.1f" width="%d" height="%d" rx="8"/>' % (x, y, BOX_W, BOX_H))
-        w('<text class="id" x="%.1f" y="%.1f">%s</text>' % (x + 12, y + 20, escape(ident)))
-        if n["parent"]:
+        w('<text class="id" x="%.1f" y="%.1f">%s</text>' % (x + 12, y + 18, escape(ident)))
+        if n.get("parent"):
             w('<text class="tag" x="%.1f" y="%.1f" text-anchor="end">↳ %s</text>'
-              % (x + BOX_W - 10, y + 20, escape(n["parent"])))
+              % (x + BOX_W - 10, y + 18, escape(n["parent"])))
         w('<text class="ttl" x="%.1f" y="%.1f">%s</text>'
-          % (x + 12, y + 39, escape(clip(n["title"], TITLE_CHARS) if n["title"] else "outside this project")))
+          % (x + 12, y + 36, escape(clip(n["title"], TITLE_CHARS) if n["title"] else "outside this project")))
+        meta = " · ".join(v for v in (n.get("state_name"), n.get("assignee"), n.get("milestone")) if v)
+        if meta:
+            w('<text class="meta" x="%.1f" y="%.1f">%s</text>'
+              % (x + 12, y + 53, escape(clip(meta, int((BOX_W - 24) / CHAR_W)))))
+        chips = ([("tchip", kind)] if kind else []) + [("chip", r) for r in rest]
+        cx = x + 10
+        fitted = fit_chips([c[1] for c in chips], BOX_W - 20)
+        for i, label, cw in fitted:
+            cls = chips[i][0] if i is not None else "chip"
+            w('<g class="%s"><rect x="%.1f" y="%.1f" width="%.1f" height="16" rx="8"/>'
+              '<text x="%.1f" y="%.1f">%s</text></g>' % (cls, cx, y + 62, cw, cx + CHIP_PAD, y + 74, escape(label)))
+            cx += cw + 4
         w("</g></a>")
 
     for ident, (x, y) in sorted(pos.items(), key=lambda kv: sort_key(kv[0])):
@@ -606,18 +733,17 @@ def render_svg(data, graph, workspace, hide_isolated):
 
     if isolated:
         w('<text class="sub" x="%d" y="%d">No dependency (%d issues)</text>' % (MARGIN, strip_top + 4, len(isolated)))
-        for i, ident in enumerate(isolated):
+        for i, issue in enumerate(isolated):
+            ident = issue["identifier"]
             r, c = divmod(i, per_row)
             x = MARGIN + c * (CHIP_W + 8)
             y = strip_top + 16 + r * (CHIP_H + 8)
-            n = nodes.get(ident) or {"state": "", "title": "", "external": False}
-            internal = next(j for j in data["issues"] if j["identifier"] == ident)
             url = issue_url(workspace, ident)
-            cls = state_class(dict(internal, external=False))
+            n = dict(issue, external=False)
             w('<a href=%s xlink:href=%s target="_blank" rel="noopener"><g class="%s"><title>%s</title>'
               '<rect class="box" x="%d" y="%d" width="%d" height="%d" rx="6"/>'
               '<text class="id" x="%d" y="%d">%s</text></g></a>'
-              % (quoteattr(url), quoteattr(url), cls, escape("%s: %s" % (ident, internal["title"])),
+              % (quoteattr(url), quoteattr(url), state_class(n), escape(card_tooltip(ident, n)),
                  x, y, CHIP_W, CHIP_H, x + 9, y + 16, escape(ident)))
 
     notes = []

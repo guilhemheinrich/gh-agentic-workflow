@@ -214,6 +214,60 @@ class LivePathTests(unittest.TestCase):
         self.assertLessEqual(ext[0] * (1 + ext[1]), 5000)
 
 
+class CardAndLegendTests(unittest.TestCase):
+    def svg(self, path=DEMO, **kw):
+        data = load(path)
+        return ld.render_svg(data, ld.build_graph(data, kw.get("related", False), kw.get("external", "drop")),
+                             "acme", False)
+
+    def legend(self, svg_text):
+        doc = minidom.parseString(svg_text)
+        g = [g for g in doc.getElementsByTagName("g") if g.getAttribute("class") == "legend"][0]
+        return [t.firstChild.data for t in g.getElementsByTagName("text")]
+
+    def test_every_box_class_drawn_is_in_the_legend(self):
+        for path, kw in ((DEMO, {"external": "show", "related": True}), (CYCLE, {}), (PASS, {"external": "show"})):
+            text = self.svg(path, **kw)
+            legend = self.legend(text)
+            doc = minidom.parseString(text)
+            drawn = {a.getElementsByTagName("g")[0].getAttribute("class") for a in doc.getElementsByTagName("a")}
+            texts = {c: t for c, t, *_ in ld.BOX_STYLES}
+            for cls in drawn:
+                self.assertIn(texts[cls], legend, (path, cls))
+
+    def test_legend_names_only_what_is_drawn(self):
+        legend = self.legend(self.svg(CYCLE))
+        self.assertIn("link closing a cycle", legend)
+        self.assertNotIn("related (dotted)", legend)
+        self.assertNotIn("Triage", legend)
+        self.assertIn("related (dotted)", self.legend(self.svg(related=True)))
+
+    def test_every_style_has_css(self):
+        for cls, *_ in ld.BOX_STYLES:
+            self.assertIn(".%s { fill: var(--%s-bg)" % (cls, cls), ld.STYLE)
+
+    def test_card_shows_type_labels_state_assignee_milestone(self):
+        text = self.svg()
+        self.assertIn(">In Progress · Sam K. · M1 · Payments on…<", text)
+        self.assertIn("Milestone: M1 · Payments on staging", text)
+        self.assertIn('<g class="tchip"><rect', text)
+        self.assertIn(">repo/backend<", text)
+        tips = [t.firstChild.data for t in minidom.parseString(text).getElementsByTagName("title")]
+        tip = [t for t in tips if t.startswith("DEMO-3:")][0]
+        self.assertIn("Type: Technical task", tip)
+        self.assertIn("Labels: repo/backend, database, performance", tip)
+
+    def test_too_many_chips_end_with_a_count(self):
+        chips = ld.fit_chips(["a-rather-long-label-%d" % i for i in range(6)], 250)
+        self.assertEqual(chips[-1][0], None)
+        self.assertEqual(chips[-1][1], "+%d" % (6 - len(chips) + 1))
+        self.assertLessEqual(sum(w for _, _, w in chips) + 4 * (len(chips) - 1), 250)
+
+    def test_unknown_state_type_is_other(self):
+        self.assertEqual(ld.state_class({"external": False, "state": "paused"}), "other")
+        self.assertEqual(ld.state_class({"external": False, "state": "triage"}), "triage")
+
+
 PASS = os.path.join(HERE, "fixtures", "linear-deps-types-pass.json")
 FAIL = os.path.join(HERE, "fixtures", "linear-deps-types-fail.json")
 
@@ -232,7 +286,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(n["milestone"], "Staging: invitations")
         self.assertEqual(n["blocked_by"], ["INV-1", "INV-2"])
         self.assertEqual(self.by_id["INV-1"]["blocks"], ["INV-3"])
-        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "parent", "milestone",
+        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "assignee", "parent", "milestone",
                                   "type", "labels", "blocked_by", "blocks"})
         json.dumps(self.g)  # serializable as is
 
@@ -263,7 +317,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(ld.build_export(load(DEMO), URL, "acme")["cycles"], [])
 
     def test_old_fixtures_without_labels_give_no_type(self):
-        g = ld.build_export(load(DEMO), URL, "acme")
+        g = ld.build_export(load(CYCLE), URL, "acme")
         self.assertTrue(all(n["type"] is None for n in g["nodes"]))
 
     def test_cli_writes_svg_and_json(self):

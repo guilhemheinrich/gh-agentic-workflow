@@ -561,8 +561,18 @@ the command line. Python standard library only; Docker is the execution rule.
 
 - **Columns** come from the longest path: an issue sits one column to the right of
   its furthest blocker. The leftmost issues are what to unblock first.
-- `↳ TT-1970` in a box is the parent issue; the colour is the state (blue unstarted,
-  orange started, grey completed or canceled); the full title is the tooltip.
+- **A legend** under the title explains every colour and line style the picture
+  actually uses. It is generated from the same table (`BOX_STYLES`) as the CSS, so a
+  colour cannot be drawn without being explained: one colour per Linear state type
+  (triage purple, backlog slate, unstarted blue, started orange, completed green,
+  canceled grey with the title struck through, any other state yellow), dashed boxes
+  for issues outside the project, solid arrows for "blocks", dotted lines for
+  "related", dashed red for the link that closes a cycle.
+- **A card** shows the identifier, `↳ TT-1970` for the parent issue, the title, then
+  the state name · assignee · milestone, then chips: the ticket type first (bold,
+  bordered), then the other labels as `group/name` (`repo/modelo-hub`). What does not
+  fit ends with `…` or a `+N` chip; the **tooltip** holds everything: full title,
+  state, type, assignee, milestone, parent and every label.
 - A **cycle** (A blocks B blocks A) is reported on stderr and in the SVG; the link
   that closes it is drawn dashed in red. The run still succeeds: a cycle is data
   worth showing, not a failure.
@@ -763,12 +773,15 @@ Three rules carry most of the weight:
 
 ## Implementation Status
 
-**Dependency graph — built, tested offline and against a stub server, never run
-against the live Linear API** (2026-11-09; JSON export and `check` 2026-11-10):
+**Dependency graph — built, tested offline and against a stub server, run once
+against a live project** (2026-11-09; JSON export, `check`, legend and richer cards
+2026-11-10):
 
 - `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
   `tests/run-linear-deps-in-docker.sh`, four made-up fixtures, one sample SVG.
-- 31 tests in Docker. The JSON export: its shape, a `blocks` and its inverse
+- 37 tests in Docker. The legend lists every box style drawn and only those, every
+  style has its CSS, a card carries type, labels, state, assignee and milestone, and
+  overflowing chips end with a count. The JSON export: its shape, a `blocks` and its inverse
   `blocked_by` as one edge, `related` both ways as one edge, outside issues kept with
   their type, the type read from the Type group or a bare label name, whole cycles,
   and the CLI writing both files. `check`: one passing fixture, one failing fixture
@@ -778,11 +791,12 @@ against the live Linear API** (2026-11-09; JSON export and `check` 2026-11-10):
   printed, and the live path against a local stub server (two pages, deduplicated
   relations, the key only in the `Authorization` header). A mutation that breaks the
   issue URL turns two tests red.
-- Not verified: the real schema. The lookup of the project by `slugId` (with a
-  fallback to `project(id:)`), the `inverseRelations` field, `labels { parent }` and
-  `projectMilestone`, the outside-issue lookup by `id: {in: ...}`, the
-  `Authorization: <key>` header format for personal keys, and the queries staying
-  under the complexity limit are written from the schema and not yet run. The first live run settles them.
+- Live run (2026-11-10) on a real 53-issue project with `--external show`: 56 blocking
+  links, no cycle, 12 issues without dependency, 9 outside issues; the schema fields
+  (`slugId` lookup, `inverseRelations`, `labels { parent }`, `projectMilestone`,
+  `assignee`, the outside-issue lookup by `id: {in: ...}`) and the
+  `Authorization: <key>` header all answered. Not measured: how close the queries come
+  to the complexity limit on a project with many relations per issue. The first live run settles them.
 - The first hand-drawn graph this script generalizes covered a real 49-issue project;
   its data is not committed here (fixtures are made up).
 
