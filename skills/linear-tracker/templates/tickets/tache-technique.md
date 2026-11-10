@@ -8,7 +8,7 @@ Starts from the existing Tâche technique template; adds « En clair » and the 
 ```markdown
 ## En clair, avec un exemple
 
-<Pourquoi ce travail, en termes de produit. Ex. : « Pour que l'invitation s'ouvre dans la messagerie, il faut l'envoyer en pièce jointe text/calendar. »>
+<Pourquoi ce travail, en termes de produit. Ex. : « Node 20 n'est plus maintenu : on monte le service en Node 22 pour continuer à recevoir les correctifs de sécurité. »>
 
 ## Issue produit
 
@@ -24,5 +24,9 @@ Lien et version de la spec du JJ/MM.
 
 ## Terminé quand
 
-Ce qui permet de dire que c'est fini : test vert, mergé en staging, pipeline de merge vert.
+Mergé en staging, pipeline de merge vert. Le ticket s'arrête là : montrer que ça tourne est le travail d'une Preuve.
+
+## Preuve conseillée
+
+Lien vers le ticket Preuve qui montrera que ça tourne sur staging (une commande et sa sortie, ou une capture), ou « aucune » et pourquoi.
 ```

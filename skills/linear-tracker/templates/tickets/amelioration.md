@@ -25,4 +25,8 @@ Ce qu'il fera, plus vite, plus clairement ou plus complètement.
 ## Spécification
 
 Lien et version, ou « aucune ».
+
+## Preuve conseillée
+
+Lien vers le ticket Preuve qui montrera le changement sur staging (une commande et sa sortie, ou une capture), ou « aucune » et pourquoi.
 ```

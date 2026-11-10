@@ -513,13 +513,18 @@ Preuve and the Livraison milestone, the `save_issue` creation sequence) are in
 | 4 | Ours to find out, within a time-box | Recherche | [`recherche.md`](templates/tickets/recherche.md) |
 | 5 | A user gains a new capability | Fonctionnalité | [`fonctionnalite.md`](templates/tickets/fonctionnalite.md) |
 | 6 | An existing capability gets better | Amélioration | [`amelioration.md`](templates/tickets/amelioration.md) |
-| 7 | One thing must be shown working on an environment, once its lot is merged | Preuve | [`preuve.md`](templates/tickets/preuve.md) |
-| 8 | Otherwise: dev work with no visible change | Tâche technique | [`tache-technique.md`](templates/tickets/tache-technique.md) |
+| 7 | One thing must be shown working on an environment, by running something, not writing code | Preuve | [`preuve.md`](templates/tickets/preuve.md) |
+| 8 | Otherwise: work that ends in a merge, with no visible change | Tâche technique | [`tache-technique.md`](templates/tickets/tache-technique.md) |
 
 Two rules carry most of the weight:
 
 - **Dependency is a relation, never a type.** Whether a Question stops the work
   is said with **Blocked by**, not by filing it as a Blocage.
+- **A Tâche technique ends with a merge; a Preuve ends with an observation**
+  (a command and its output, or a screenshot from a Playwright or browser
+  session). Every code ticket's template ends with a « Preuve conseillée »
+  link. Example (made up): « Monter Node de 20 à 22 » is the Tâche technique;
+  « `node --version` renvoie `v22` dans le pod staging » is its Preuve.
 - **A Preuve is blocked by every dev issue of its lot**, and a Livraison is the
   lot's milestone, reached when its last Preuve is closed. Example (made up):
   milestone « Staging : invitations » holds the two dev issues of the lot and

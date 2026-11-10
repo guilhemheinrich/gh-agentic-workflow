@@ -39,7 +39,11 @@ Sévérité, nombre d'utilisateurs touchés, contournement éventuel.
 
 ## Logs / captures
 
-## Preuve de correction
+## Terminé quand
 
-Le scénario qui échoue avant correction et son résultat après, sur une version identifiée.
+La correction est mergée en staging, pipeline de merge vert, avec un test qui échouait avant.
+
+## Preuve conseillée
+
+Lien vers le ticket Preuve qui montrera que la reproduction ne reproduit plus sur staging (une commande et sa sortie, ou une capture), ou « aucune » et pourquoi.
 ```

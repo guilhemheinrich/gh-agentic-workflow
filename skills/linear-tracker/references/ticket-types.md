@@ -42,8 +42,8 @@ out of the team's hands.
 | 4 | Do we not know yet what to do, and is it ours to find out, within a time-box? | Recherche | [`recherche.md`](../templates/tickets/recherche.md) |
 | 5 | Will a user or a client get a capability they did not have? | Fonctionnalité | [`fonctionnalite.md`](../templates/tickets/fonctionnalite.md) |
 | 6 | Will a user or a client see something they already have change for the better? | Amélioration | [`amelioration.md`](../templates/tickets/amelioration.md) |
-| 7 | Must we show that one thing works on an environment, once the lot it belongs to is merged? | Preuve | [`preuve.md`](../templates/tickets/preuve.md) |
-| 8 | Otherwise: dev work with no visible change (a slice of a feature, debt, tooling, infra, docs, a data migration). | Tâche technique | [`tache-technique.md`](../templates/tickets/tache-technique.md) |
+| 7 | Must we show that one thing works on an environment, by running something (a command, a browser session) rather than by writing code? | Preuve | [`preuve.md`](../templates/tickets/preuve.md) |
+| 8 | Otherwise: work that ends in a merge and brings no visible change (a slice of a feature, a version upgrade, debt, tooling, infra, a data migration). | Tâche technique | [`tache-technique.md`](../templates/tickets/tache-technique.md) |
 
 ## Question or Blocage: what is asked, not how urgent it is
 
@@ -88,8 +88,29 @@ team with an internal owner who chases.
 | Recherche | is the deliverable a written decision or a proof of concept, never shipped code? | « Which queue library? », half a day, written decision | something someone else will tell us (Question) |
 | Fonctionnalité | can you write « En tant que *rôle*, je peux *action* »? | calendar invitations open as invites in the mail client | a better version of what exists (Amélioration) |
 | Amélioration | could the user already do it before? | the existing export gains a VAT column | a new export format (Fonctionnalité) |
-| Preuve | can you say in one sentence what is proved and what an observer sees? | « the invitation opens as an invite in the mail client », on staging | « the lot works » (too broad: split it) |
-| Tâche technique | none of the seven questions got a yes | send the invitation as a `text/calendar` attachment | anything a user would notice |
+| Preuve | is the work to run something and look at the result, with no code to write? | « the invitation opens as an invite in the mail client », on staging | writing the e2e test that will prove it (Tâche technique) |
+| Tâche technique | does it end in a merge, with nothing a user notices? | upgrade the runtime from Node 20 to 22 | running the upgraded service on staging and reading its version (Preuve) |
+
+## Tâche technique or Preuve: a merge or an observation
+
+The two are easy to confuse because both are « technical ». They end on
+different things:
+
+| | Tâche technique | Preuve |
+|---|---|---|
+| The work is | writing code or configuration | running something and looking at the result |
+| It ends with | a merge into staging, merge pipeline green | a comment holding the observation |
+| The evidence is | the diff and a green pipeline | a command and its real output, or a screenshot taken by a Playwright or browser session |
+| Made-up example | « Monter Node de 20 à 22 » | « Le service tourne en Node 22 sur staging » : `kubectl exec … -- node --version` → `v22.11.0` |
+
+If proving something needs code first (an e2e test, a script), that code is a
+Tâche technique, and the Preuve is blocked by it.
+
+**Every code ticket recommends a Preuve.** A Bug, a Fonctionnalité, an
+Amélioration or a Tâche technique stops at the merge; its template ends with a
+« Preuve conseillée » section that links the Preuve showing it on staging, or
+says « aucune » and why. A version upgrade nobody ever sees running is the case
+this exists for.
 
 ## Preuve, and Livraison as a milestone
 
@@ -107,8 +128,9 @@ team with an internal owner who chases.
   (Helm values, secrets, migrations, feature flags) and the staging Preuves; it
   reaches 100 % when its last Preuve closes. Prod Preuves are blocked by the
   staging ones. Product owners follow the milestones and open the Preuves.
-- The proof is a **comment**: a screenshot with the URL visible, or the command,
-  what it does, its real output, the date and the deployed version. A code
+- The proof is a **comment**: a screenshot taken by a Playwright or browser
+  session, URL visible; or the command, what it does, its real output, the date
+  and the deployed version. A code
   excerpt is not a proof: it shows the code exists, not that it runs.
 - An agent can post it through the Linear MCP: `prepare_file_upload`, a `PUT`
   of the raw bytes to the signed URL with the returned headers (it expires

@@ -3,7 +3,9 @@
 Workspace-level Linear issue template « Preuve ». Applies the Type label
 **Preuve**. Title prefix: « Preuve : ». Semantics and the test that decides
 this type: [`../../references/ticket-types.md`](../../references/ticket-types.md).
-New. Each Preuve is blocked by every issue of its lot and sits in the lot's milestone.
+New. A Preuve is an execution, not code: a command, or a Playwright or browser
+session that takes the screenshot. Each Preuve is blocked by every issue of its
+lot, including the code tickets that recommended it, and sits in the lot's milestone.
 
 ```markdown
 ## En clair, avec un exemple
@@ -18,10 +20,13 @@ New. Each Preuve is blocked by every issue of its lot and sits in the lot's mile
 
 ## Comment le prouver
 
-* Type de preuve : capture d'écran | sortie de commande
+* Type de preuve : sortie de commande | capture (session Playwright ou navigateur)
 * Parcours ou commande : <URL et persona, ou la commande exacte>
 * Ce que fait la commande : <en une phrase>
 * Résultat attendu : <ce qu'on doit voir, précisément>
+* Ex. : `kubectl exec deploy/agenda -- node --version` lit la version de Node dans le pod staging ; attendu : `v22.x`.
+
+Si prouver demande d'écrire du code (un test e2e, un script), ce code est une Tâche technique, et cette Preuve est bloquée par elle.
 
 ## Preuve
 

@@ -35,7 +35,7 @@ Oui ou non. Si oui, pour le JJ/MM.
 
 Rempli par les devs : les Tâches techniques liées, en sous-issues.
 
-## Preuve attendue
+## Preuves conseillées
 
-Ce qu'on montrera une fois livré : les tickets Preuve du milestone.
+Un ticket Preuve par critère d'acceptation qu'on peut observer sur staging (une commande et sa sortie, ou une capture), dans le milestone du lot.
 ```
