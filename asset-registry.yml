@@ -1560,9 +1560,12 @@ assets:
       verb of the `grievances` skill; this skill is one backend that answers it, and it never writes a ledger. Use when
       wiring a repository to a Linear project, when a finding must leave a repository and become an issue someone can
       own, when auditing which findings are already tracked, or when deciding what a tracker can and cannot hold.
-      Triggers on "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding", "which project does
-      this repo belong to", "follow a spec in Linear", "spec-kit lifecycle", "dependency tree", "what blocks this
-      issue", "LINEAR_API_KEY".
+      It also proposes eight issue types (Bug, Blocker, Question, Research, Feature, Improvement, Proof, Technical
+      task), the order of questions that picks one, and a workspace template body for each. Use it too when choosing
+      which ticket type to open, telling a Question from a Blocker, proving a merged lot on an environment, or drafting
+      Linear templates. Triggers on "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding",
+      "which project does this repo belong to", "follow a spec in Linear", "spec-kit lifecycle", "ticket type", "Linear
+      template", "proof ticket", "dependency tree", "what blocks this issue", "LINEAR_API_KEY".
     category: workflows-and-processes
   - path: skills/lit-web-components/
     type: skill
