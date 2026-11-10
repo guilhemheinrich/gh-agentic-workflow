@@ -1737,6 +1737,26 @@ assets:
       to a committed final state; external or async effects go through a job orchestrator (pg-boss or equivalent)
       enqueued in the same transaction; the data layer uses an ORM that exposes the physical model (e.g. Drizzle).
     category: philosophy
+  - path: skills/pilot-session/
+    type: skill
+    tags:
+      - ci-cd
+      - process
+      - workflow
+    description: >-
+      Turn the current agent session into a pilot session: it steers a body of work (a roadmap, a milestone, a tracker
+      project, a list of specs, a single epic) by delegating every piece to child sessions, following their changes to
+      the end, and stopping only on real blocks — a product decision, an arbitration, a denied access, a production
+      action. It does not code. Its first duty is to look at what the environment offers and propose the tooling that
+      removes pseudo-blocks (clicking merge, re-checking a pipeline, approving the same prompt every 30 seconds), so
+      that it can unstack the work on its own. Harness-agnostic: the role holds whether the sessions run in Claude,
+      Codex, Cursor or anything that can start and follow another session; the harness specifics live in references.
+      Ships the startup protocol, the real-vs-pseudo block test, a tooling checklist of recommendations (Git-host
+      watcher, tracker, merge, review, permissions), a self-contained child-brief template, and a worked example. Use
+      when a session must drive several child sessions to completion with minimal human interruption. Triggers on
+      "session de pilotage", "tu es la session de pilotage", "pilote la roadmap", "pilote ce jalon", "pilot session",
+      "drive these tickets", "steer the roadmap".
+    category: devx-and-agentic
   - path: skills/plain-explanation/
     type: skill
     tags:
