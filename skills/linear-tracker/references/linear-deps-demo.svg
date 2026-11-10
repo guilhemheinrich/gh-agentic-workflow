@@ -27,6 +27,20 @@ a:hover .box { stroke-width: 2.6; }
 .arrow { fill: var(--edge); } .arrow-c { fill: var(--cycle); }
 .warn { font-size: 12px; fill: var(--cycle); font-weight: 600; }
 .lg { font-size: 11px; fill: var(--muted); }
+
+.peek { font: 12px/1.45 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg);
+  background: var(--card); border: 1px solid var(--muted); border-left: 4px solid var(--muted); border-radius: 8px;
+  padding: 10px 12px; box-shadow: 0 6px 24px #0004; box-sizing: border-box; width: 380px; }
+.peek .pid { font: 500 11.5px "IBM Plex Mono", ui-monospace, Menlo, monospace; display: flex; align-items: center; gap: 6px; }
+.peek .pid span { margin-left: auto; color: var(--muted); font-weight: 400; }
+.peek .pttl { font-weight: 600; font-size: 13px; margin: 4px 0 2px; }
+.peek .pmeta { color: var(--muted); font-size: 11px; }
+.peek .pchips { margin: 6px 0 2px; display: flex; flex-wrap: wrap; gap: 4px; }
+.peek .pchips b, .peek .pchips i { font-size: 10px; border-radius: 8px; padding: 1px 7px; background: var(--chip);
+  border: 1px solid var(--muted); font-style: normal; font-weight: 400; }
+.peek .pchips b { font-weight: 700; border-color: var(--fg); }
+.peek .pdesc { margin-top: 6px; white-space: normal; overflow-wrap: anywhere; }
+.peek .pnone { margin-top: 6px; color: var(--muted); font-style: italic; }
 </style>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker><marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="arrow-c" d="M0 0 L10 5 L0 10 z"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" style="fill:var(--card)"/><rect width="2.2" height="6" style="fill:var(--hatch)"/></pattern></defs>
 <rect class="bg" width="100%" height="100%"/>
@@ -66,13 +80,15 @@ a:hover .box { stroke-width: 2.6; }
 <path class="edge" d="M674.0 189.0 C 729.0 189.0, 729.0 239.0, 784.0 239.0" marker-end="url(#ar)"><title>DEMO-3 blocks DEMO-2</title></path>
 <path class="edge" d="M294.0 339.0 C 729.0 339.0, 729.0 289.0, 1164.0 289.0" marker-end="url(#ar)"><title>DEMO-6 blocks DEMO-5</title></path>
 <path class="edge" d="M294.0 139.0 C 349.0 139.0, 349.0 189.0, 404.0 189.0" marker-end="url(#ar)"><title>OTHER-77 blocks DEMO-3</title></path>
-<a href="https://linear.app/acme/issue/DEMO-1" xlink:href="https://linear.app/acme/issue/DEMO-1" target="_blank" rel="noopener"><g class="completed">
+<a href="https://linear.app/acme/issue/DEMO-1" xlink:href="https://linear.app/acme/issue/DEMO-1" target="_blank" rel="noopener" data-id="DEMO-1"><g class="completed">
 <title>DEMO-1: ADR: payment state model
 State: Done
 Type: Research
 Assignee: Alex M.
 Milestone: M1 · Payments on staging
-Labels: repo/backend</title>
+Labels: repo/backend
+
+Context We need one state model for payments: pending, authorized, captured, refunded. See the ADR template and</title>
 <rect class="box" x="24.0" y="196.0" width="270" height="86" rx="8" style="stroke:#5e6ad2"/>
 <rect x="25.5" y="204.0" width="4" height="70" rx="2" style="fill:#5e6ad2"/>
 <circle cx="42.0" cy="210.0" r="6.0" style="fill:#5e6ad2"/><path d="M38.8 210.0 l2.2 2.2 l4 -4.4" style="fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round"/>
@@ -82,13 +98,15 @@ Labels: repo/backend</title>
 <g class="tchip"><rect x="34.0" y="258.0" width="56.0" height="16" rx="8"/><text x="40.0" y="270.0">Research</text></g>
 <g class="chip"><rect x="94.0" y="258.0" width="78.0" height="16" rx="8"/><text x="100.0" y="270.0">repo/backend</text></g>
 </g></a>
-<a href="https://linear.app/acme/issue/DEMO-2" xlink:href="https://linear.app/acme/issue/DEMO-2" target="_blank" rel="noopener"><g class="started">
+<a href="https://linear.app/acme/issue/DEMO-2" xlink:href="https://linear.app/acme/issue/DEMO-2" target="_blank" rel="noopener" data-id="DEMO-2"><g class="started">
 <title>DEMO-2: Payment worker with retries
 State: In Progress
 Type: Feature
 Assignee: Sam K.
 Milestone: M1 · Payments on staging
-Labels: repo/backend, payments</title>
+Labels: repo/backend, payments
+
+The worker retries a failed capture three times with exponential backoff, then parks the payment for the admin screen. retry policy idempotency key Made-up issue for the demo.</title>
 <rect class="box" x="784.0" y="196.0" width="270" height="86" rx="8" style="stroke:#f2c94c"/>
 <rect x="785.5" y="204.0" width="4" height="70" rx="2" style="fill:#f2c94c"/>
 <circle cx="802.0" cy="210.0" r="6.0" style="fill:none;stroke:#f2c94c;stroke-width:1.6"/><path d="M802.0 206.0 A4.0 4.0 0 0 1 802.0 214.0 Z" style="fill:#f2c94c"/>
@@ -99,7 +117,7 @@ Labels: repo/backend, payments</title>
 <g class="chip"><rect x="848.5" y="258.0" width="78.0" height="16" rx="8"/><text x="854.5" y="270.0">repo/backend</text></g>
 <g class="chip"><rect x="930.5" y="258.0" width="56.0" height="16" rx="8"/><text x="936.5" y="270.0">payments</text></g>
 </g></a>
-<a href="https://linear.app/acme/issue/DEMO-3" xlink:href="https://linear.app/acme/issue/DEMO-3" target="_blank" rel="noopener"><g class="unstarted">
+<a href="https://linear.app/acme/issue/DEMO-3" xlink:href="https://linear.app/acme/issue/DEMO-3" target="_blank" rel="noopener" data-id="DEMO-3"><g class="unstarted">
 <title>DEMO-3: Database transactions per operation
 State: Todo
 Type: Technical task
@@ -115,7 +133,7 @@ Labels: repo/backend, database, performance</title>
 <g class="chip"><rect x="507.0" y="208.0" width="78.0" height="16" rx="8"/><text x="513.0" y="220.0">repo/backend</text></g>
 <g class="chip"><rect x="589.0" y="208.0" width="23.0" height="16" rx="8"/><text x="595.0" y="220.0">+2</text></g>
 </g></a>
-<a href="https://linear.app/acme/issue/DEMO-4" xlink:href="https://linear.app/acme/issue/DEMO-4" target="_blank" rel="noopener"><g class="backlog">
+<a href="https://linear.app/acme/issue/DEMO-4" xlink:href="https://linear.app/acme/issue/DEMO-4" target="_blank" rel="noopener" data-id="DEMO-4"><g class="backlog">
 <title>DEMO-4: Refund flow
 State: Backlog
 Type: Feature
@@ -130,7 +148,7 @@ Parent: DEMO-2</title>
 <text class="meta" x="1176.0" y="199.0">Backlog · M2 · Refunds</text>
 <g class="tchip"><rect x="1174.0" y="208.0" width="50.5" height="16" rx="8"/><text x="1180.0" y="220.0">Feature</text></g>
 </g></a>
-<a href="https://linear.app/acme/issue/DEMO-5" xlink:href="https://linear.app/acme/issue/DEMO-5" target="_blank" rel="noopener"><g class="unstarted">
+<a href="https://linear.app/acme/issue/DEMO-5" xlink:href="https://linear.app/acme/issue/DEMO-5" target="_blank" rel="noopener" data-id="DEMO-5"><g class="unstarted">
 <title>DEMO-5: Receipt e-mail
 State: unstarted
 Parent: DEMO-2</title>
@@ -141,11 +159,13 @@ Parent: DEMO-2</title>
 <text class="tag" x="1424.0" y="264.0" text-anchor="end">↳ DEMO-2</text>
 <text class="ttl" x="1176.0" y="282.0">Receipt e-mail</text>
 </g></a>
-<a href="https://linear.app/acme/issue/DEMO-6" xlink:href="https://linear.app/acme/issue/DEMO-6" target="_blank" rel="noopener"><g class="triage">
+<a href="https://linear.app/acme/issue/DEMO-6" xlink:href="https://linear.app/acme/issue/DEMO-6" target="_blank" rel="noopener" data-id="DEMO-6"><g class="triage">
 <title>DEMO-6: Question: which PSP signs receipts?
 State: Triage
 Type: Question
-Labels: Need information</title>
+Labels: Need information
+
+Which payment service provider signs the receipts we send? Legal needs the answer before the receipt e-mail can ship.</title>
 <rect class="box" x="24.0" y="296.0" width="270" height="86" rx="8" style="stroke:#fc7840"/>
 <rect x="25.5" y="304.0" width="4" height="70" rx="2" style="fill:#fc7840"/>
 <circle cx="42.0" cy="310.0" r="6.0" style="fill:none;stroke:#fc7840;stroke-width:1.6"/><circle cx="42.0" cy="310.0" r="2.4" style="fill:#fc7840"/>
@@ -155,13 +175,15 @@ Labels: Need information</title>
 <g class="tchip"><rect x="34.0" y="358.0" width="56.0" height="16" rx="8"/><text x="40.0" y="370.0">Question</text></g>
 <g class="chip"><rect x="94.0" y="358.0" width="100.0" height="16" rx="8"/><text x="100.0" y="370.0">Need information</text></g>
 </g></a>
-<a href="https://linear.app/acme/issue/DEMO-7" xlink:href="https://linear.app/acme/issue/DEMO-7" target="_blank" rel="noopener"><g class="started">
+<a href="https://linear.app/acme/issue/DEMO-7" xlink:href="https://linear.app/acme/issue/DEMO-7" target="_blank" rel="noopener" data-id="DEMO-7"><g class="started">
 <title>DEMO-7: Admin screen for stuck payments
 State: In Review
 Type: Improvement
 Assignee: Alex M.
 Milestone: M1 · Payments on staging
-Labels: repo/admin</title>
+Labels: repo/admin
+
+An admin screen listing payments stuck in authorized for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in authorized for more than one hour, with a button to retry or refund. An admin screen l…</title>
 <rect class="box" x="404.0" y="246.0" width="270" height="86" rx="8" style="stroke:#26b37a"/>
 <rect x="405.5" y="254.0" width="4" height="70" rx="2" style="fill:#26b37a"/>
 <circle cx="422.0" cy="260.0" r="6.0" style="fill:none;stroke:#26b37a;stroke-width:1.6"/><path d="M422.0 256.0 A4.0 4.0 0 0 1 422.0 264.0 Z" style="fill:#26b37a"/>
@@ -171,7 +193,7 @@ Labels: repo/admin</title>
 <g class="tchip"><rect x="414.0" y="308.0" width="72.5" height="16" rx="8"/><text x="420.0" y="320.0">Improvement</text></g>
 <g class="chip"><rect x="490.5" y="308.0" width="67.0" height="16" rx="8"/><text x="496.5" y="320.0">repo/admin</text></g>
 </g></a>
-<a href="https://linear.app/acme/issue/OTHER-77" xlink:href="https://linear.app/acme/issue/OTHER-77" target="_blank" rel="noopener"><g class="ext">
+<a href="https://linear.app/acme/issue/OTHER-77" xlink:href="https://linear.app/acme/issue/OTHER-77" target="_blank" rel="noopener" data-id="OTHER-77"><g class="ext">
 <title>OTHER-77: Provision the staging PSP account (another project)</title>
 <rect class="box" x="24.0" y="96.0" width="270" height="86" rx="8"/>
 <text class="id" x="36.0" y="114.0">OTHER-77</text>
@@ -179,9 +201,58 @@ Labels: repo/admin</title>
 <g class="xchip"><rect x="34.0" y="158.0" width="56.0" height="16" rx="8"/><text x="40.0" y="170.0">external</text></g>
 </g></a>
 <text class="sub" x="24" y="426">No dependency (2 issues)</text>
-<a href="https://linear.app/acme/issue/DEMO-8" xlink:href="https://linear.app/acme/issue/DEMO-8" target="_blank" rel="noopener"><g class="backlog"><title>DEMO-8: Unrelated copy fix
+<a href="https://linear.app/acme/issue/DEMO-8" xlink:href="https://linear.app/acme/issue/DEMO-8" target="_blank" rel="noopener" data-id="DEMO-8"><g class="backlog"><title>DEMO-8: Unrelated copy fix
 State: Backlog
 Type: Bug</title><rect class="box" x="24" y="438" width="96" height="24" rx="6" style="stroke:#bec2c8"/><circle cx="37.0" cy="450.0" r="5.0" style="fill:none;stroke:#bec2c8;stroke-width:1.6;stroke-dasharray:2 1.7"/><text class="id" x="48" y="454">DEMO-8</text></g></a>
-<a href="https://linear.app/acme/issue/DEMO-9" xlink:href="https://linear.app/acme/issue/DEMO-9" target="_blank" rel="noopener"><g class="canceled"><title>DEMO-9: Unrelated icon refresh
+<a href="https://linear.app/acme/issue/DEMO-9" xlink:href="https://linear.app/acme/issue/DEMO-9" target="_blank" rel="noopener" data-id="DEMO-9"><g class="canceled"><title>DEMO-9: Unrelated icon refresh
 State: canceled</title><rect class="box" x="128" y="438" width="96" height="24" rx="6" style="stroke:#95a2b3"/><circle cx="141.0" cy="450.0" r="5.0" style="fill:#95a2b3"/><path d="M138.5 447.5 l5 5 M143.5 447.5 l-5 5" style="fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round"/><text class="id" x="152" y="454">DEMO-9</text></g></a>
+<script type="application/json" id="peek-data"><![CDATA[{"DEMO-1": {"assignee": "Alex M.", "color": "#5e6ad2", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:#5e6ad2\"/\u003e\u003cpath d=\"M-3.2 0.0 l2.2 2.2 l4 -4.4\" style=\"fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round\"/\u003e", "id": "DEMO-1", "labels": ["repo/backend"], "milestone": "M1 · Payments on staging", "parent": null, "state": "Done", "text": "Context We need one state model for payments: pending, authorized, captured, refunded. See the ADR template and", "title": "ADR: payment state model", "type": "Research"}, "DEMO-2": {"assignee": "Sam K.", "color": "#f2c94c", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#f2c94c;stroke-width:1.6\"/\u003e\u003cpath d=\"M0.0 -4.0 A4.0 4.0 0 0 1 0.0 4.0 Z\" style=\"fill:#f2c94c\"/\u003e", "id": "DEMO-2", "labels": ["repo/backend", "payments"], "milestone": "M1 · Payments on staging", "parent": null, "state": "In Progress", "text": "The worker retries a failed capture three times with exponential backoff, then parks the payment for the admin screen. retry policy idempotency key Made-up issue for the demo.", "title": "Payment worker with retries", "type": "Feature"}, "DEMO-3": {"assignee": null, "color": "#e2e2e2", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#e2e2e2;stroke-width:1.6\"/\u003e", "id": "DEMO-3", "labels": ["repo/backend", "database", "performance"], "milestone": "M1 · Payments on staging", "parent": null, "state": "Todo", "text": null, "title": "Database transactions per operation", "type": "Technical task"}, "DEMO-4": {"assignee": null, "color": "#bec2c8", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#bec2c8;stroke-width:1.6;stroke-dasharray:2 1.7\"/\u003e", "id": "DEMO-4", "labels": [], "milestone": "M2 · Refunds", "parent": "DEMO-2", "state": "Backlog", "text": null, "title": "Refund flow", "type": "Feature"}, "DEMO-5": {"assignee": null, "color": "#e2e2e2", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#e2e2e2;stroke-width:1.6\"/\u003e", "id": "DEMO-5", "labels": [], "milestone": null, "parent": "DEMO-2", "state": "Todo", "text": null, "title": "Receipt e-mail", "type": null}, "DEMO-6": {"assignee": null, "color": "#fc7840", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#fc7840;stroke-width:1.6\"/\u003e\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"2.4\" style=\"fill:#fc7840\"/\u003e", "id": "DEMO-6", "labels": ["Need information"], "milestone": null, "parent": null, "state": "Triage", "text": "Which payment service provider signs the receipts we send? Legal needs the answer before the receipt e-mail can ship.", "title": "Question: which PSP signs receipts?", "type": "Question"}, "DEMO-7": {"assignee": "Alex M.", "color": "#26b37a", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#26b37a;stroke-width:1.6\"/\u003e\u003cpath d=\"M0.0 -4.0 A4.0 4.0 0 0 1 0.0 4.0 Z\" style=\"fill:#26b37a\"/\u003e", "id": "DEMO-7", "labels": ["repo/admin"], "milestone": "M1 · Payments on staging", "parent": null, "state": "In Review", "text": "An admin screen listing payments stuck in authorized for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in authorized for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in authorized for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in authorized for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in authorized…", "title": "Admin screen for stuck payments", "type": "Improvement"}, "DEMO-8": {"assignee": null, "color": "#bec2c8", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#bec2c8;stroke-width:1.6;stroke-dasharray:2 1.7\"/\u003e", "id": "DEMO-8", "labels": [], "milestone": null, "parent": null, "state": "Backlog", "text": null, "title": "Unrelated copy fix", "type": "Bug"}, "DEMO-9": {"assignee": null, "color": "#95a2b3", "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:#95a2b3\"/\u003e\u003cpath d=\"M-2.5 -2.5 l5 5 M2.5 -2.5 l-5 5\" style=\"fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round\"/\u003e", "id": "DEMO-9", "labels": [], "milestone": null, "parent": null, "state": "Canceled", "text": null, "title": "Unrelated icon refresh", "type": null}, "OTHER-77": {"assignee": null, "color": null, "glyph": "\u003ccircle cx=\"0.0\" cy=\"0.0\" r=\"6.0\" style=\"fill:none;stroke:#95a2b3;stroke-width:1.6\"/\u003e", "id": "OTHER-77", "labels": [], "milestone": null, "parent": null, "state": "outside this project", "text": null, "title": "Provision the staging PSP account (another project)", "type": null}}]]></script><script><![CDATA[(function () {
+  var data = JSON.parse(document.getElementById('peek-data').textContent);
+  var svg = document.documentElement, NS = 'http://www.w3.org/2000/svg', XH = 'http://www.w3.org/1999/xhtml';
+  var timer = null, fo = null;
+  function el(tag, cls, text) { var e = document.createElementNS(XH, tag); if (cls) e.className = cls;
+    if (text) e.textContent = text; return e; }
+  function toSvg(x, y) { var p = svg.createSVGPoint(); p.x = x; p.y = y;
+    return p.matrixTransform(svg.getScreenCTM().inverse()); }
+  function hide() { clearTimeout(timer); if (fo) { fo.remove(); fo = null; shrink(); } }
+  function show(d, ev) {
+    hide();
+    fo = document.createElementNS(NS, 'foreignObject');
+    fo.setAttribute('width', 380); fo.setAttribute('height', 10); fo.setAttribute('pointer-events', 'none');
+    var box = el('div', 'peek'); if (d.color) box.style.borderLeftColor = d.color;
+    var head = el('div', 'pid');
+    var g = document.createElementNS(NS, 'svg'); g.setAttribute('width', 14); g.setAttribute('height', 14);
+    g.setAttribute('viewBox', '-7 -7 14 14'); g.innerHTML = d.glyph; head.appendChild(g);
+    head.appendChild(document.createTextNode(d.id)); if (d.parent) head.appendChild(el('span', '', 'sub-issue of ' + d.parent));
+    box.appendChild(head); box.appendChild(el('div', 'pttl', d.title));
+    var meta = [d.state, d.assignee, d.milestone].filter(Boolean).join(' · ');
+    if (meta) box.appendChild(el('div', 'pmeta', meta));
+    if (d.type || d.labels.length) { var c = el('div', 'pchips');
+      if (d.type) c.appendChild(el('b', '', d.type));
+      d.labels.forEach(function (l) { c.appendChild(el('i', '', l)); }); box.appendChild(c); }
+    box.appendChild(d.text ? el('div', 'pdesc', d.text) : el('div', 'pnone', 'No description.'));
+    fo.appendChild(box); svg.appendChild(fo);
+    var h = box.offsetHeight + 2; fo.setAttribute('height', h);
+    var a = toSvg(0, 0), b = toSvg(window.innerWidth, window.innerHeight), p = toSvg(ev.clientX, ev.clientY);
+    var right = Math.min(b.x, vb.width), bottom = Math.min(b.y, vb.height);
+    var x = p.x + 16, y = p.y + 16;
+    if (x + 380 > right) x = p.x - 396; if (y + h > bottom) y = bottom - h - 8;
+    x = Math.max(a.x + 8, x); y = Math.max(a.y + 8, y);
+    fo.setAttribute('x', x); fo.setAttribute('y', y);
+    if (y + h + 8 > vb.height) grow(y + h + 8);   // a small graph: let the drawing grow under the panel
+  }
+  var vb = svg.viewBox.baseVal, base = [svg.getAttribute('height'), vb.height];
+  function grow(hgt) { svg.setAttribute('height', hgt); svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + hgt); }
+  function shrink() { if (svg.getAttribute('height') != base[0]) { svg.setAttribute('height', base[0]);
+    svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + base[1]); } }
+  Array.prototype.forEach.call(document.querySelectorAll('a[data-id]'), function (a) {
+    var d = data[a.getAttribute('data-id')]; if (!d) return;
+    var t = a.querySelector('title'); if (t) t.remove();   // the panel replaces the native tooltip
+    var last = null;
+    a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer);
+      timer = setTimeout(function () { show(d, last); }, 900); });
+    a.addEventListener('mousemove', function (ev) { last = ev; });
+    a.addEventListener('mouseleave', hide);
+  });
+})();]]></script>
 </svg>

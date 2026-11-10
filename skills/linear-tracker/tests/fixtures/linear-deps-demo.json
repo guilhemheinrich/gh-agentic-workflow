@@ -20,7 +20,8 @@
      "name": "backend",
      "group": "repo"
     }
-   ]
+   ],
+   "description": "## Context\n\nWe need **one** state model for payments: `pending`, `authorized`, `captured`, `refunded`.\n\n![diagram](https://uploads.linear.app/made-up.png)\n\nSee [the ADR template](https://example.com/adr) and https://example.com/raw-link."
   },
   {
    "identifier": "DEMO-2",
@@ -43,7 +44,8 @@
      "name": "payments"
     }
    ],
-   "state_color": "#f2c94c"
+   "state_color": "#f2c94c",
+   "description": "The worker retries a failed capture three times with exponential backoff, then parks the payment for the admin screen.\n\n- [ ] retry policy\n- [x] idempotency key\n\n> Made-up issue for the demo."
   },
   {
    "identifier": "DEMO-3",
@@ -107,7 +109,8 @@
     {
      "name": "Need information"
     }
-   ]
+   ],
+   "description": "Which payment service provider signs the receipts we send? Legal needs the answer before the receipt e-mail can ship."
   },
   {
    "identifier": "DEMO-7",
@@ -127,7 +130,8 @@
      "group": "repo"
     }
    ],
-   "state_color": "#26b37a"
+   "state_color": "#26b37a",
+   "description": "An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. An admin screen listing payments stuck in `authorized` for more than one hour, with a button to retry or refund. "
   },
   {
    "identifier": "DEMO-8",

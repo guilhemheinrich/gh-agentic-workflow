@@ -45,6 +45,7 @@ query($id: String!, $after: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         identifier title
+        description
         state { type name color }
         assignee { displayName }
         parent { identifier }
@@ -109,7 +110,7 @@ def gql(api_url, key, query, variables):
     return payload["data"]
 
 
-def fetch_live(slug, api_url):
+def fetch_live(slug, api_url, descriptions=True):
     key = os.environ.get("LINEAR_API_KEY", "").strip()
     if not key:
         raise SystemExit("error: LINEAR_API_KEY is not set (or use --from-json)")
@@ -123,7 +124,8 @@ def fetch_live(slug, api_url):
     issues, relations, external, other_ids, truncated = [], set(), {}, {}, []
     after = None
     while True:
-        page = gql(api_url, key, QUERY_ISSUES, {"id": project["id"], "after": after})["project"]["issues"]
+        query = QUERY_ISSUES if descriptions else QUERY_ISSUES.replace("        description\n", "", 1)
+        page = gql(api_url, key, query, {"id": project["id"], "after": after})["project"]["issues"]
         for n in page["nodes"]:
             me = n["identifier"]
             issues.append({
@@ -132,6 +134,7 @@ def fetch_live(slug, api_url):
                 "state_name": (n.get("state") or {}).get("name"),
                 "state_color": (n.get("state") or {}).get("color"),
                 "assignee": (n.get("assignee") or {}).get("displayName"),
+                "description_excerpt": excerpt(n.get("description")) if descriptions else None,
                 "parent": (n.get("parent") or {}).get("identifier"),
                 "milestone": (n.get("projectMilestone") or {}).get("name"),
                 "labels": gql_labels(n),
@@ -169,6 +172,43 @@ def fetch_live(slug, api_url):
         "external": external,
         "external_labels": external_labels,
     }
+
+
+EXCERPT_CHARS = 500
+MD_NOISE = [
+    (re.compile(r"```.*?```", re.S), " "),                 # fenced code
+    (re.compile(r"!\[[^\]]*\]\([^)]*\)"), " "),             # images
+    (re.compile(r"\[([^\]]*)\]\([^)]*\)"), r"\1"),          # links keep their text
+    (re.compile(r"<[^>]+>"), " "),                         # html tags
+    (re.compile(r"https?://\S+"), " "),                    # bare urls
+    (re.compile(r"(?m)^\s{0,3}(#{1,6}|>+|[-*+]\s+\[[ xX]\]|[-*+]|\d+[.)])\s+"), ""),  # heading, quote, list marks
+    (re.compile(r"(\*\*|__|~~|`)"), ""),                    # emphasis and code marks
+    (re.compile(r"(?m)^\s*([-*_]\s*){3,}$"), " "),          # horizontal rules
+]
+
+
+def excerpt(text, limit=EXCERPT_CHARS):
+    """The beginning of a markdown description as plain text: noise stripped, whitespace collapsed."""
+    if not text:
+        return None
+    for rx, sub in MD_NOISE:
+        text = rx.sub(sub, text)
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text or None
+    cut = text[:limit].rsplit(" ", 1)[0] if " " in text[:limit] else text[:limit]
+    return cut.rstrip(" ,;:.") + "…"
+
+
+def issue_excerpt(issue):
+    """Normalized data may carry the excerpt (live fetch) or a raw description (MCP fallback)."""
+    return issue.get("description_excerpt") or excerpt(issue.get("description"))
+
+
+def drop_descriptions(data):
+    for issue in data["issues"]:
+        issue.pop("description", None)
+        issue["description_excerpt"] = None
 
 
 def gql_labels(node):
@@ -411,6 +451,7 @@ def build_export(data, project_url, workspace):
             "state_name": src.get("state_name") if src else None,
             "state_color": src.get("state_color") if src else None,
             "assignee": src.get("assignee") if src else None,
+            "description_excerpt": issue_excerpt(src) if src else None,
             "parent": src.get("parent") if src else None,
             "milestone": src.get("milestone") if src else None,
             "type": ticket_type(labels),
@@ -595,6 +636,9 @@ def card_tooltip(ident, n):
              ("Assignee", n.get("assignee")), ("Milestone", n.get("milestone")), ("Parent", n.get("parent")),
              ("Labels", ", ".join(rest))]
     lines += ["%s: %s" % (k, v) for k, v in facts if v]
+    text = issue_excerpt(n)
+    if text:
+        lines += ["", clip(text, 240)]
     return "\n".join(lines)
 
 
@@ -640,6 +684,95 @@ def legend_items(graph, isolated, cards):
     return items
 
 
+PEEK_DELAY_MS = 900
+
+# The hover preview: a panel drawn by a small inline script from data embedded at generation
+# time (the SVG cannot call Linear when viewed). Viewers that block scripts keep <title>.
+PEEK_CSS = """
+.peek { font: 12px/1.45 "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--fg);
+  background: var(--card); border: 1px solid var(--muted); border-left: 4px solid var(--muted); border-radius: 8px;
+  padding: 10px 12px; box-shadow: 0 6px 24px #0004; box-sizing: border-box; width: 380px; }
+.peek .pid { font: 500 11.5px "IBM Plex Mono", ui-monospace, Menlo, monospace; display: flex; align-items: center; gap: 6px; }
+.peek .pid span { margin-left: auto; color: var(--muted); font-weight: 400; }
+.peek .pttl { font-weight: 600; font-size: 13px; margin: 4px 0 2px; }
+.peek .pmeta { color: var(--muted); font-size: 11px; }
+.peek .pchips { margin: 6px 0 2px; display: flex; flex-wrap: wrap; gap: 4px; }
+.peek .pchips b, .peek .pchips i { font-size: 10px; border-radius: 8px; padding: 1px 7px; background: var(--chip);
+  border: 1px solid var(--muted); font-style: normal; font-weight: 400; }
+.peek .pchips b { font-weight: 700; border-color: var(--fg); }
+.peek .pdesc { margin-top: 6px; white-space: normal; overflow-wrap: anywhere; }
+.peek .pnone { margin-top: 6px; color: var(--muted); font-style: italic; }
+"""
+
+PEEK_JS = """(function () {
+  var data = JSON.parse(document.getElementById('peek-data').textContent);
+  var svg = document.documentElement, NS = 'http://www.w3.org/2000/svg', XH = 'http://www.w3.org/1999/xhtml';
+  var timer = null, fo = null;
+  function el(tag, cls, text) { var e = document.createElementNS(XH, tag); if (cls) e.className = cls;
+    if (text) e.textContent = text; return e; }
+  function toSvg(x, y) { var p = svg.createSVGPoint(); p.x = x; p.y = y;
+    return p.matrixTransform(svg.getScreenCTM().inverse()); }
+  function hide() { clearTimeout(timer); if (fo) { fo.remove(); fo = null; shrink(); } }
+  function show(d, ev) {
+    hide();
+    fo = document.createElementNS(NS, 'foreignObject');
+    fo.setAttribute('width', 380); fo.setAttribute('height', 10); fo.setAttribute('pointer-events', 'none');
+    var box = el('div', 'peek'); if (d.color) box.style.borderLeftColor = d.color;
+    var head = el('div', 'pid');
+    var g = document.createElementNS(NS, 'svg'); g.setAttribute('width', 14); g.setAttribute('height', 14);
+    g.setAttribute('viewBox', '-7 -7 14 14'); g.innerHTML = d.glyph; head.appendChild(g);
+    head.appendChild(document.createTextNode(d.id)); if (d.parent) head.appendChild(el('span', '', 'sub-issue of ' + d.parent));
+    box.appendChild(head); box.appendChild(el('div', 'pttl', d.title));
+    var meta = [d.state, d.assignee, d.milestone].filter(Boolean).join(' · ');
+    if (meta) box.appendChild(el('div', 'pmeta', meta));
+    if (d.type || d.labels.length) { var c = el('div', 'pchips');
+      if (d.type) c.appendChild(el('b', '', d.type));
+      d.labels.forEach(function (l) { c.appendChild(el('i', '', l)); }); box.appendChild(c); }
+    box.appendChild(d.text ? el('div', 'pdesc', d.text) : el('div', 'pnone', 'No description.'));
+    fo.appendChild(box); svg.appendChild(fo);
+    var h = box.offsetHeight + 2; fo.setAttribute('height', h);
+    var a = toSvg(0, 0), b = toSvg(window.innerWidth, window.innerHeight), p = toSvg(ev.clientX, ev.clientY);
+    var right = Math.min(b.x, vb.width), bottom = Math.min(b.y, vb.height);
+    var x = p.x + 16, y = p.y + 16;
+    if (x + 380 > right) x = p.x - 396; if (y + h > bottom) y = bottom - h - 8;
+    x = Math.max(a.x + 8, x); y = Math.max(a.y + 8, y);
+    fo.setAttribute('x', x); fo.setAttribute('y', y);
+    if (y + h + 8 > vb.height) grow(y + h + 8);   // a small graph: let the drawing grow under the panel
+  }
+  var vb = svg.viewBox.baseVal, base = [svg.getAttribute('height'), vb.height];
+  function grow(hgt) { svg.setAttribute('height', hgt); svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + hgt); }
+  function shrink() { if (svg.getAttribute('height') != base[0]) { svg.setAttribute('height', base[0]);
+    svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + base[1]); } }
+  Array.prototype.forEach.call(document.querySelectorAll('a[data-id]'), function (a) {
+    var d = data[a.getAttribute('data-id')]; if (!d) return;
+    var t = a.querySelector('title'); if (t) t.remove();   // the panel replaces the native tooltip
+    var last = null;
+    a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer);
+      timer = setTimeout(function () { show(d, last); }, %d); });
+    a.addEventListener('mousemove', function (ev) { last = ev; });
+    a.addEventListener('mouseleave', hide);
+  });
+})();""" % PEEK_DELAY_MS
+
+
+def peek_entry(ident, n):
+    kind, rest = card_labels(n)
+    skind, color, name = state_look(n)
+    return {"id": ident, "title": n.get("title") or "(outside this project)",
+            "state": name if skind != "ext" else "outside this project", "color": color,
+            "glyph": state_glyph(skind, color or "#95a2b3", 0, 0),
+            "assignee": n.get("assignee"), "milestone": n.get("milestone"), "parent": n.get("parent"),
+            "type": kind, "labels": rest, "text": issue_excerpt(n)}
+
+
+def peek_script(peek):
+    """The preview data as JSON with <, > and & escaped, so it can never close the CDATA section."""
+    blob = json.dumps(peek, ensure_ascii=False, sort_keys=True)
+    blob = blob.replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e")
+    return ('<script type="application/json" id="peek-data"><![CDATA[%s]]></script>'
+            '<script><![CDATA[%s]]></script>' % (blob, PEEK_JS))
+
+
 def render_svg(data, graph, workspace, hide_isolated):
     nodes, layers = graph["nodes"], graph["order"]
     isolated_ids = [] if hide_isolated else graph["isolated"]
@@ -682,7 +815,7 @@ def render_svg(data, graph, workspace, hide_isolated):
       'width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label=%s>'
       % (width, height, width, height, quoteattr("Dependency graph of " + data["project"]["name"])))
     w("<title>%s</title>" % escape("Dependencies: " + data["project"]["name"]))
-    w("<style>%s</style>" % STYLE)
+    w("<style>%s</style>" % (STYLE + PEEK_CSS))
     w('<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">'
       '<path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker>'
       '<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">'
@@ -734,13 +867,16 @@ def render_svg(data, graph, workspace, hide_isolated):
         w('<path class="cyc" d="%s" marker-end="url(#ac)"><title>cycle: %s blocks %s</title></path>'
           % (edge_path(a, b), a, b))
 
+    peek = {}
+
     def box(ident, x, y):
         n = nodes[ident]
         url = issue_url(workspace, ident)
         kind, rest = card_labels(n)
         skind, color, _ = state_look(n)
-        w('<a href=%s xlink:href=%s target="_blank" rel="noopener"><g class="%s">'
-          % (quoteattr(url), quoteattr(url), skind))
+        peek[ident] = peek_entry(ident, n)
+        w('<a href=%s xlink:href=%s target="_blank" rel="noopener" data-id=%s><g class="%s">'
+          % (quoteattr(url), quoteattr(url), quoteattr(ident), skind))
         w('<title>%s</title>' % escape(card_tooltip(ident, n)))
         stroke = ' style="stroke:%s"' % color if color else ""
         w('<rect class="box" x="%.1f" y="%.1f" width="%d" height="%d" rx="8"%s/>' % (x, y, BOX_W, BOX_H, stroke))
@@ -786,10 +922,11 @@ def render_svg(data, graph, workspace, hide_isolated):
             url = issue_url(workspace, ident)
             n = dict(issue, external=False)
             skind, color, _ = state_look(n)
-            w('<a href=%s xlink:href=%s target="_blank" rel="noopener"><g class="%s"><title>%s</title>'
+            peek[ident] = peek_entry(ident, n)
+            w('<a href=%s xlink:href=%s target="_blank" rel="noopener" data-id=%s><g class="%s"><title>%s</title>'
               '<rect class="box" x="%d" y="%d" width="%d" height="%d" rx="6" style="stroke:%s"/>%s'
               '<text class="id" x="%d" y="%d">%s</text></g></a>'
-              % (quoteattr(url), quoteattr(url), skind, escape(card_tooltip(ident, n)),
+              % (quoteattr(url), quoteattr(url), quoteattr(ident), skind, escape(card_tooltip(ident, n)),
                  x, y, CHIP_W, CHIP_H, color, state_glyph(skind, color, x + 13, y + 12, 5),
                  x + 24, y + 16, escape(ident)))
 
@@ -800,6 +937,7 @@ def render_svg(data, graph, workspace, hide_isolated):
         notes.append("%d issue(s) without dependency hidden" % len(graph["isolated"]))
     if notes:
         w('<text class="sub" x="%d" y="%d">%s</text>' % (MARGIN, height - 24, escape("; ".join(notes))))
+    w(peek_script(peek))
     w("</svg>")
     return "\n".join(out) + "\n"
 
@@ -821,11 +959,16 @@ def main(argv=None):
     ap.add_argument("--external", choices=("drop", "show"), default="drop",
                     help="links to issues outside the project: drop (default, counted) or show as dashed boxes")
     ap.add_argument("--hide-isolated", action="store_true", help="hide issues that have no dependency")
+    ap.add_argument("--no-descriptions", action="store_true",
+                    help="do not fetch or embed description excerpts (hover preview, JSON); for SVGs that get shared")
     ap.add_argument("--api-url", default=API_URL, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
 
     workspace, slug = parse_project_url(args.project_url)
-    data = load_json(args.from_json) if args.from_json else fetch_live(slug, args.api_url)
+    data = (load_json(args.from_json) if args.from_json
+            else fetch_live(slug, args.api_url, descriptions=not args.no_descriptions))
+    if args.no_descriptions:
+        drop_descriptions(data)
     graph = build_graph(data, args.include_related, args.external)
     svg = render_svg(data, graph, workspace, args.hide_isolated)
     with open(args.output, "w", encoding="utf-8") as fh:

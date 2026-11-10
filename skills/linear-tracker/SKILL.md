@@ -555,6 +555,7 @@ the command line. Python standard library only; Docker is the execution rule.
 | `--include-related` | also draw "related" links, dotted. Off by default: they order nothing |
 | `--external show` | draw issues outside the project as dashed boxes. Default `drop`: the links to them are counted in a footer note |
 | `--hide-isolated` | hide issues without dependency. Default: a strip of clickable chips below the graph |
+| `--no-descriptions` | do not fetch or embed description excerpts (no text in the hover preview, `description_excerpt: null` in the JSON). Use it for an SVG that will be shared: descriptions can be sensitive |
 | `--from-json FILE` | no API call; read the normalized data from FILE (see below) |
 
 ### How to read the picture
@@ -576,6 +577,16 @@ the command line. Python standard library only; Docker is the execution rule.
   lines for "related", dashed red for the link that closes a cycle, and the type and
   label chips. It is built from the same functions as the cards (`state_look`,
   `state_glyph`), so nothing is drawn without being explained.
+- **Hover a card for about a second** to get a preview, like Linear's issue peek:
+  state icon, identifier, full title, state · assignee · milestone, type and label
+  chips, and the beginning of the description (about 500 characters, markdown noise
+  stripped). The click still opens the issue. The text is embedded **when the SVG is
+  generated**: the picture never calls Linear when viewed, so it is a snapshot, and
+  it holds the descriptions of the project until you regenerate it with
+  `--no-descriptions`. The preview needs the SVG opened directly in a browser (a
+  small inline script); where scripts are blocked (`<img>` embedding, GitHub's file
+  preview) the native tooltip (`<title>`) still shows the same facts and a shorter
+  excerpt.
 - **A card** shows the identifier, `↳ TT-1970` for the parent issue, the title, then
   the state name · assignee · milestone, then chips: the ticket type first (bold,
   bordered), then the other labels as `group/name` (`repo/modelo-hub`). What does not
@@ -599,12 +610,12 @@ Made-up sample, trimmed to two nodes and two edges
   {"identifier": "INV-1", "title": "Invitation API", "url": "https://linear.app/acme/issue/INV-1",
    "external": false, "state": "started", "state_name": null, "state_color": null, "assignee": null,
    "parent": null, "milestone": null,
-   "type": "Feature", "labels": [{"name": "Feature", "group": "Type"}],
+   "type": "Feature", "labels": [{"name": "Feature", "group": "Type"}], "description_excerpt": null,
    "blocked_by": [], "blocks": ["INV-3"]},
   {"identifier": "INV-4", "title": "Accept link works on staging", "url": "https://linear.app/acme/issue/INV-4",
    "external": false, "state": "unstarted", "state_name": null, "state_color": null, "assignee": null,
    "parent": null, "milestone": null,
-   "type": "Proof", "labels": [{"name": "Proof", "group": "Type"}],
+   "type": "Proof", "labels": [{"name": "Proof", "group": "Type"}], "description_excerpt": null,
    "blocked_by": ["INV-5"], "blocks": []}
  ],
  "edges": [
@@ -625,6 +636,9 @@ Made-up sample, trimmed to two nodes and two edges
 - **Outside issues** linked to the project are nodes too, `"external": true`, with
   their type when Linear returned their labels, and `state`/`parent` `null`.
   The drawing drops them by default; the JSON never does.
+- **`description_excerpt`**: the beginning of the description as plain text (about
+  500 characters, cut on a word with `…`), or `null` with `--no-descriptions`. Enough
+  to tell what an issue is about without a `get_issue` per node.
 - **`cycles`**: each loop of `blocks` links, as the sorted list of its issues.
 - **`no_dependency`**: project issues with no `blocks` link either way, outside
   links included. It can be shorter than the SVG's strip, which ignores dropped
@@ -707,7 +721,8 @@ one call per issue:
 ```
 
 `state` is the Linear state type (`unstarted`, `started`, `completed`, `canceled`).
-`state_name`, `state_color`, `assignee`, `milestone`, `labels` and `external_labels` are optional (without them `type` is
+`state_name`, `state_color`, `assignee`, `milestone`, `labels`, `external_labels` and
+`description` (raw markdown, or an already cut `description_excerpt`) are optional (without them `type` is
 `null`); a label may also be a bare name. A `{"type": "blocked_by", ...}` row is read
 as the inverse `blocks`. `tests/fixtures/linear-deps-demo.json` and
 `linear-deps-types-pass.json` are complete examples.
@@ -789,7 +804,11 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
 
 - `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
   `tests/run-linear-deps-in-docker.sh`, four made-up fixtures, one sample SVG.
-- 40 tests in Docker. The legend names every state drawn and only those; the colour
+- 46 tests in Docker. The excerpt strips markdown noise and cuts on a word; every
+  linked box has preview data; a description containing `]]>` or `</script>` cannot
+  break out of the embedded data; `--no-descriptions` removes the text from the SVG
+  and the JSON. The hover itself (delay, placement, hide on leave, dark and light) was
+  checked by hand in a browser, not by a test. The legend names every state drawn and only those; the colour
   comes from Linear, then from the type, and a malformed colour is refused; outline
   and icon follow the state type; outside issues are hatched, not dashed; a card
   carries type, labels, state, assignee and milestone; overflowing chips end with a

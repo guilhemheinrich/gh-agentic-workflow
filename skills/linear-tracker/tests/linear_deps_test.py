@@ -293,6 +293,65 @@ class CardAndLegendTests(unittest.TestCase):
         self.assertEqual(ld.state_kind({"external": False, "state": "triage"}), "triage")
 
 
+class PeekTests(unittest.TestCase):
+    def test_excerpt_strips_markdown_noise(self):
+        text = ld.excerpt(load(DEMO)["issues"][0]["description"])
+        self.assertEqual(text, "Context We need one state model for payments: pending, authorized, captured, refunded. "
+                               "See the ADR template and")
+        self.assertEqual(ld.excerpt("- [ ] retry\n- [x] key\n> quote\n1. first"), "retry key quote first")
+        self.assertIsNone(ld.excerpt(""))
+        self.assertIsNone(ld.excerpt("![only an image](https://x/y.png)"))
+
+    def test_excerpt_is_cut_on_a_word_with_an_ellipsis(self):
+        text = ld.excerpt("word " * 300)
+        self.assertTrue(text.endswith("word…"))
+        self.assertLessEqual(len(text), ld.EXCERPT_CHARS + 1)
+
+    def svg(self, data):
+        return ld.render_svg(data, ld.build_graph(data, False, "show"), "acme", False)
+
+    def peek_data(self, svg_text):
+        doc = minidom.parseString(svg_text)
+        blob = [e for e in doc.getElementsByTagName("script") if e.getAttribute("id") == "peek-data"][0]
+        return doc, json.loads("".join(c.data for c in blob.childNodes))
+
+    def test_every_linked_box_has_preview_data(self):
+        data = load(DEMO)
+        doc, peek = self.peek_data(self.svg(data))
+        ids = [a.getAttribute("data-id") for a in doc.getElementsByTagName("a")]
+        self.assertEqual(sorted(ids), sorted(peek))
+        self.assertEqual(peek["DEMO-7"]["state"], "In Review")
+        self.assertEqual(peek["DEMO-7"]["color"], "#26b37a")
+        self.assertEqual(peek["DEMO-7"]["type"], "Improvement")
+        self.assertTrue(peek["DEMO-7"]["text"].endswith("…"))
+        self.assertEqual(peek["DEMO-3"]["labels"], ["repo/backend", "database", "performance"])
+        self.assertTrue(peek["OTHER-77"]["state"].startswith("outside"))
+
+    def test_preview_data_cannot_break_out_of_its_script(self):
+        data = load(DEMO)
+        data["issues"][0]["description"] = "a ]]> </script><script>alert(1)</script> & b"
+        text = self.svg(data)
+        self.assertNotIn("alert(1)</script>", text)
+        _, peek = self.peek_data(text)        # still parses as XML and as JSON
+        self.assertIn("]]> alert(1) & b", peek["DEMO-1"]["text"])
+
+    def test_no_descriptions_drops_them_everywhere(self):
+        with tempfile.TemporaryDirectory() as d:
+            svg, js = os.path.join(d, "g.svg"), os.path.join(d, "g.json")
+            res = run_cli(URL, "--from-json", DEMO, "-o", svg, "--json-out", js, "--no-descriptions")
+            self.assertEqual(res.returncode, 0, res.stderr)
+            with open(svg, encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertNotIn("exponential backoff", text)
+            self.assertTrue(all(n["description_excerpt"] is None for n in load(js)["nodes"]))
+            res = run_cli(URL, "--from-json", DEMO, "-o", svg, "--json-out", js)
+            self.assertIn("exponential backoff", [n for n in load(js)["nodes"]
+                                                  if n["identifier"] == "DEMO-2"][0]["description_excerpt"])
+
+    def test_live_query_asks_for_the_description_only_when_wanted(self):
+        self.assertIn("        description\n", ld.QUERY_ISSUES)
+
+
 PASS = os.path.join(HERE, "fixtures", "linear-deps-types-pass.json")
 FAIL = os.path.join(HERE, "fixtures", "linear-deps-types-fail.json")
 
@@ -311,7 +370,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(n["milestone"], "Staging: invitations")
         self.assertEqual(n["blocked_by"], ["INV-1", "INV-2"])
         self.assertEqual(self.by_id["INV-1"]["blocks"], ["INV-3"])
-        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "state_color", "assignee", "parent", "milestone",
+        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "state_color", "assignee", "description_excerpt", "parent", "milestone",
                                   "type", "labels", "blocked_by", "blocks"})
         json.dumps(self.g)  # serializable as is
 
