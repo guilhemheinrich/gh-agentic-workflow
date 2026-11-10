@@ -2,7 +2,8 @@
 """Render the "blocks / blocked by" graph of a Linear project as a standalone SVG.
 
 Usage:
-    LINEAR_API_KEY=lin_api_... python linear_deps.py PROJECT_URL -o deps.svg
+    LINEAR_API_KEY=lin_api_... python linear_deps.py PROJECT_URL -o deps.svg [--json-out deps.json]
+    python linear_deps.py check deps.json --type Proof --blocked-by "Technical task,Feature,Improvement,Bug"
     python linear_deps.py PROJECT_URL --from-json ../tests/fixtures/linear-deps-demo.json -o deps.svg   # offline
 
 PROJECT_URL looks like https://linear.app/<workspace>/project/<name>-<slugId>.
@@ -21,6 +22,8 @@ from xml.sax.saxutils import escape, quoteattr
 
 API_URL = "https://api.linear.app/graphql"
 PAGE_SIZE = 25      # issues per page; relations are capped at the same size to stay under the complexity limit
+LABEL_PAGE = 10     # labels per issue
+EXTERNAL_PAGE = 50  # outside issues per label lookup
 BOX_W, BOX_H = 270, 54
 GAP_X, GAP_Y = 110, 14
 MARGIN = 24
@@ -44,18 +47,35 @@ query($id: String!, $after: String) {
         identifier title
         state { type }
         parent { identifier }
+        projectMilestone { name }
+        labels(first: %d) { nodes { name parent { name } } }
         relations(first: %d) {
           pageInfo { hasNextPage }
-          nodes { type relatedIssue { identifier title } }
+          nodes { type relatedIssue { id identifier title } }
         }
         inverseRelations(first: %d) {
           pageInfo { hasNextPage }
-          nodes { type issue { identifier title } }
+          nodes { type issue { id identifier title } }
         }
       }
     }
   }
-}""" % (PAGE_SIZE, PAGE_SIZE, PAGE_SIZE)
+}""" % (PAGE_SIZE, LABEL_PAGE, PAGE_SIZE, PAGE_SIZE)
+# Labels of issues outside the project, fetched by id once the project is read, so an
+# external blocker still carries its ticket type.
+QUERY_EXTERNAL_LABELS = """
+query($ids: [ID!]) {
+  issues(filter: {id: {in: $ids}}, first: %d) {
+    nodes { identifier labels(first: %d) { nodes { name parent { name } } } }
+  }
+}""" % (EXTERNAL_PAGE, LABEL_PAGE)
+
+# The eight ticket types of references/ticket-types.md; a type is the label of the
+# workspace label group "Type", or failing that a label named like one of these.
+TICKET_TYPES = ("Bug", "Blocker", "Question", "Research", "Feature", "Improvement", "Proof", "Technical task")
+TYPE_GROUP = "type"
+# Directed relation types keep their direction; the others are an unordered pair.
+DIRECTED = ("blocks", "duplicate")
 
 
 def parse_project_url(url):
@@ -99,7 +119,7 @@ def fetch_live(slug, api_url):
     if project is None:
         raise SystemExit("error: project not found for slug id %r" % slug)
 
-    issues, relations, external, truncated = [], set(), {}, []
+    issues, relations, external, other_ids, truncated = [], set(), {}, {}, []
     after = None
     while True:
         page = gql(api_url, key, QUERY_ISSUES, {"id": project["id"], "after": after})["project"]["issues"]
@@ -109,16 +129,20 @@ def fetch_live(slug, api_url):
                 "identifier": me, "title": n["title"],
                 "state": (n.get("state") or {}).get("type", ""),
                 "parent": (n.get("parent") or {}).get("identifier"),
+                "milestone": (n.get("projectMilestone") or {}).get("name"),
+                "labels": gql_labels(n),
             })
             if n["relations"]["pageInfo"]["hasNextPage"] or n["inverseRelations"]["pageInfo"]["hasNextPage"]:
                 truncated.append(me)
             for r in n["relations"]["nodes"]:
                 other = r["relatedIssue"]
                 external[other["identifier"]] = other["title"]
+                other_ids[other["identifier"]] = other.get("id")
                 relations.add((r["type"], me, other["identifier"]))
             for r in n["inverseRelations"]["nodes"]:
                 other = r["issue"]
                 external[other["identifier"]] = other["title"]
+                other_ids[other["identifier"]] = other.get("id")
                 relations.add((r["type"], other["identifier"], me))
         if not page["pageInfo"]["hasNextPage"]:
             break
@@ -126,12 +150,26 @@ def fetch_live(slug, api_url):
     if truncated:
         print("warning: more than %d relations on %s; some links may be missing"
               % (PAGE_SIZE, ", ".join(truncated)), file=sys.stderr)
+    inside = {i["identifier"] for i in issues}
+    external = {k: v for k, v in external.items() if k not in inside}
+    ids = sorted(other_ids[k] for k in external if other_ids.get(k))
+    external_labels = {}
+    for start in range(0, len(ids), EXTERNAL_PAGE):
+        found = gql(api_url, key, QUERY_EXTERNAL_LABELS, {"ids": ids[start:start + EXTERNAL_PAGE]})["issues"]["nodes"]
+        for n in found:
+            external_labels[n["identifier"]] = gql_labels(n)
     return {
         "project": {"name": project["name"]},
         "issues": issues,
         "relations": [{"type": t, "from": a, "to": b} for t, a, b in sorted(relations)],
         "external": external,
+        "external_labels": external_labels,
     }
+
+
+def gql_labels(node):
+    return [{"name": l["name"], "group": (l.get("parent") or {}).get("name")}
+            for l in (node.get("labels") or {}).get("nodes", [])]
 
 
 def load_json(path):
@@ -264,6 +302,180 @@ def clip(text, limit):
 
 def issue_url(workspace, ident):
     return "https://linear.app/%s/issue/%s" % (workspace, ident)
+
+
+def norm(name):
+    return " ".join(re.split(r"[\s_-]+", (name or "").strip().lower()))
+
+
+def norm_labels(labels):
+    """Labels in the normalized data are {"name", "group"} dicts or bare names."""
+    return [l if isinstance(l, dict) else {"name": l, "group": None} for l in labels or []]
+
+
+def ticket_type(labels):
+    """The label of the "Type" group, else a label named like one of the eight types, else None."""
+    canonical = {norm(t): t for t in TICKET_TYPES}
+    for l in labels:
+        if norm(l.get("group")) == TYPE_GROUP:
+            return canonical.get(norm(l["name"]), l["name"])
+    for l in labels:
+        if norm(l["name"]) in canonical:
+            return canonical[norm(l["name"])]
+    return None
+
+
+def find_cycles(nodes, edges):
+    """Strongly connected components of more than one issue (Tarjan, iterative)."""
+    succ = defaultdict(list)
+    for a, b in edges:
+        succ[a].append(b)
+    index, low, on_stack, stack, out, counter = {}, {}, set(), [], [], [0]
+    for root in sorted(nodes, key=sort_key):
+        if root in index:
+            continue
+        work = [(root, iter(sorted(succ[root], key=sort_key)))]
+        index[root] = low[root] = counter[0]
+        counter[0] += 1
+        stack.append(root)
+        on_stack.add(root)
+        while work:
+            node, it = work[-1]
+            for nxt in it:
+                if nxt not in index:
+                    index[nxt] = low[nxt] = counter[0]
+                    counter[0] += 1
+                    stack.append(nxt)
+                    on_stack.add(nxt)
+                    work.append((nxt, iter(sorted(succ[nxt], key=sort_key))))
+                    break
+                if nxt in on_stack:
+                    low[node] = min(low[node], index[nxt])
+            else:
+                work.pop()
+                if work:
+                    low[work[-1][0]] = min(low[work[-1][0]], low[node])
+                if low[node] == index[node]:
+                    comp = []
+                    while True:
+                        x = stack.pop()
+                        on_stack.discard(x)
+                        comp.append(x)
+                        if x == node:
+                            break
+                    if len(comp) > 1:
+                        out.append(sorted(comp, key=sort_key))
+    return sorted(out, key=lambda c: sort_key(c[0]))
+
+
+def build_export(data, project_url, workspace):
+    """The whole graph as plain JSON for an agent: every relation, outside issues included."""
+    internal = {i["identifier"]: i for i in data["issues"]}
+    ext_titles = data.get("external", {})
+    ext_labels = data.get("external_labels", {})
+    edges = set()
+    for r in data["relations"]:
+        t, a, b = r["type"], r["from"], r["to"]
+        if t == "blocked_by":
+            t, a, b = "blocks", b, a
+        if a == b:
+            continue
+        if t not in DIRECTED:
+            a, b = sorted((a, b), key=sort_key)
+        edges.add((t, a, b))
+    edges = sorted(edges, key=lambda e: (e[0], sort_key(e[1]), sort_key(e[2])))
+
+    idents = set(internal) | {x for _, a, b in edges for x in (a, b)}
+    blockers, blocked = defaultdict(list), defaultdict(list)
+    for t, a, b in edges:
+        if t == "blocks":
+            blocked[a].append(b)
+            blockers[b].append(a)
+    nodes = []
+    for ident in sorted(idents, key=sort_key):
+        src = internal.get(ident)
+        labels = norm_labels(src.get("labels") if src else ext_labels.get(ident))
+        nodes.append({
+            "identifier": ident,
+            "title": src["title"] if src else ext_titles.get(ident, ""),
+            "url": issue_url(workspace, ident),
+            "external": src is None,
+            "state": src.get("state", "") if src else None,
+            "parent": src.get("parent") if src else None,
+            "milestone": src.get("milestone") if src else None,
+            "type": ticket_type(labels),
+            "labels": labels,
+            "blocked_by": sorted(blockers[ident], key=sort_key),
+            "blocks": sorted(blocked[ident], key=sort_key),
+        })
+    block_edges = [(a, b) for t, a, b in edges if t == "blocks"]
+    return {
+        "format": "linear-deps/1",
+        "project": {"name": data["project"]["name"], "url": project_url},
+        "nodes": nodes,
+        "edges": [{"from": a, "to": b, "type": t} for t, a, b in edges],
+        "cycles": find_cycles(idents, block_edges),
+        "no_dependency": sorted((i for i in internal if not blockers[i] and not blocked[i]), key=sort_key),
+    }
+
+
+def check_types(graph, ticket, blocked_by, open_only=False):
+    """Every project issue of type `ticket` must be blocked by at least one issue of a type in `blocked_by`.
+
+    Returns (checked, failures, unknown): a failure has no qualifying blocker and no blocker of unknown
+    type; `unknown` has no qualifying blocker but at least one blocker whose type could not be read.
+    """
+    wanted = {norm(t) for t in blocked_by}
+    by_id = {n["identifier"]: n for n in graph["nodes"]}
+    checked, failures, unknown = [], [], []
+    for n in graph["nodes"]:
+        if n["external"] or norm(n["type"]) != norm(ticket):
+            continue
+        if open_only and n["state"] in ("completed", "canceled"):
+            continue
+        checked.append(n)
+        types = [by_id[b]["type"] if b in by_id else None for b in n["blocked_by"]]
+        if any(norm(t) in wanted for t in types if t):
+            continue
+        (unknown if None in types else failures).append(n)
+    return checked, failures, unknown
+
+
+def describe_blockers(graph, node):
+    by_id = {n["identifier"]: n for n in graph["nodes"]}
+    if not node["blocked_by"]:
+        return "no blocker"
+    return "blocked by " + ", ".join(
+        "%s (%s)" % (b, (by_id.get(b) or {}).get("type") or "type unknown") for b in node["blocked_by"])
+
+
+def check_main(argv):
+    ap = argparse.ArgumentParser(
+        prog="linear_deps.py check",
+        description="Check that every issue of one ticket type is blocked by at least one issue of other types.")
+    ap.add_argument("graph", help="JSON written by --json-out")
+    ap.add_argument("--type", required=True, help='ticket type to check, e.g. "Proof"')
+    ap.add_argument("--blocked-by", action="append", required=True, metavar="TYPES",
+                    help='accepted blocker type(s); repeatable or comma-separated, e.g. "Technical task,Feature"')
+    ap.add_argument("--open-only", action="store_true", help="skip completed and canceled issues of --type")
+    args = ap.parse_args(argv)
+    graph = load_json(args.graph)
+    accepted = [t.strip() for v in args.blocked_by for t in v.split(",") if t.strip()]
+    checked, failures, unknown = check_types(graph, args.type, accepted, args.open_only)
+    for n in failures:
+        print("FAIL     %s  %s  [%s] %s  %s" % (n["identifier"], n["url"], n["state"], n["title"],
+                                                describe_blockers(graph, n)))
+    for n in unknown:
+        print("UNKNOWN  %s  %s  [%s] %s  %s" % (n["identifier"], n["url"], n["state"], n["title"],
+                                                describe_blockers(graph, n)))
+    print("%d %s issue(s) checked against %s: %d ok, %d fail, %d unknown"
+          % (len(checked), args.type, " / ".join(accepted), len(checked) - len(failures) - len(unknown),
+             len(failures), len(unknown)))
+    if not checked:
+        print("note: no issue of type %r; types present: %s" % (
+            args.type, ", ".join(sorted({n["type"] for n in graph["nodes"] if n["type"]})) or "none"),
+            file=sys.stderr)
+    return 1 if failures or unknown else 0
 
 
 STYLE = """
@@ -420,9 +632,14 @@ def render_svg(data, graph, workspace, hide_isolated):
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:1] == ["check"]:
+        return check_main(argv[1:])
     ap = argparse.ArgumentParser(description="Render a Linear project's issue dependencies as a clickable SVG.")
     ap.add_argument("project_url", help="https://linear.app/<workspace>/project/<name>-<slugId>")
     ap.add_argument("-o", "--output", default="deps.svg", help="SVG file to write (default: deps.svg)")
+    ap.add_argument("--json-out", metavar="FILE",
+                    help="also write the graph as JSON for agents (nodes, edges, cycles); see `check`")
     ap.add_argument("--from-json", metavar="FILE", help="read normalized data from FILE instead of calling the API")
     ap.add_argument("--include-related", action="store_true", help="also draw 'related' links (dotted)")
     ap.add_argument("--external", choices=("drop", "show"), default="drop",
@@ -437,6 +654,10 @@ def main(argv=None):
     svg = render_svg(data, graph, workspace, args.hide_isolated)
     with open(args.output, "w", encoding="utf-8") as fh:
         fh.write(svg)
+    if args.json_out:
+        with open(args.json_out, "w", encoding="utf-8") as fh:
+            json.dump(build_export(data, args.project_url.strip(), workspace), fh, indent=1, ensure_ascii=False)
+            fh.write("\n")
 
     print("%s: %d issues, %d in chains, %d blocking links, %d without dependency, wrote %s"
           % (data["project"]["name"], len(data["issues"]), len(graph["nodes"]), len(graph["block"]),
@@ -446,7 +667,10 @@ def main(argv=None):
     if graph["back"]:
         print("warning: cycle detected; back edges: " + ", ".join("%s->%s" % e for e in sorted(graph["back"])),
               file=sys.stderr)
+    if args.json_out:
+        print("wrote " + args.json_out)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

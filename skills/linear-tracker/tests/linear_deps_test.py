@@ -140,6 +140,7 @@ class CliTests(unittest.TestCase):
 class StubHandler(http.server.BaseHTTPRequestHandler):
     """Answers the three queries of linear_deps with canned data, over two issue pages."""
     seen_auth = []
+    seen_external_ids = []
 
     def log_message(self, *args):
         pass
@@ -156,13 +157,17 @@ class StubHandler(http.server.BaseHTTPRequestHandler):
         q, v = body["query"], body["variables"]
         if "projects(filter" in q:
             data = {"projects": {"nodes": [{"id": "uuid-1", "name": "Stub project"}]}}
+        elif "issues(filter" in q:
+            StubHandler.seen_external_ids.append(v["ids"])
+            data = {"issues": {"nodes": [{"identifier": "OUT-9", "labels": {"nodes": [
+                {"name": "Technical task", "parent": {"name": "Type"}}]}}]}}
         elif "issues(first" in q:
             page2 = v.get("after") == "cursor-1"
             if not page2:
                 nodes = [self.node("S-1", [{"type": "blocks", "relatedIssue": {"identifier": "S-2", "title": "Title S-2"}}], [])]
             else:
                 nodes = [self.node("S-2", [], [{"type": "blocks", "issue": {"identifier": "S-1", "title": "Title S-1"}},
-                                              {"type": "blocks", "issue": {"identifier": "OUT-9", "title": "Outside"}}])]
+                                              {"type": "blocks", "issue": {"id": "uuid-out-9", "identifier": "OUT-9", "title": "Outside"}}])]
             data = {"project": {"issues": {"pageInfo": {"hasNextPage": not page2, "endCursor": "cursor-1"}, "nodes": nodes}}}
         else:
             data = {}
@@ -197,11 +202,117 @@ class LivePathTests(unittest.TestCase):
         self.assertIn({"type": "blocks", "from": "OUT-9", "to": "S-2"}, blocks)
         self.assertEqual(data["external"]["OUT-9"], "Outside")
         self.assertEqual(set(StubHandler.seen_auth), {"stub-key"})
+        self.assertEqual(StubHandler.seen_external_ids, [["uuid-out-9"]])
+        self.assertEqual(data["external_labels"]["OUT-9"], [{"name": "Technical task", "group": "Type"}])
+        self.assertNotIn("S-1", data["external"])
 
     def test_query_stays_far_below_the_complexity_limit(self):
         sizes = [int(n) for n in re.findall(r"first: (\d+)", ld.QUERY_ISSUES)]
-        self.assertEqual(len(sizes), 3)  # issues, relations, inverseRelations
-        self.assertLessEqual(sizes[0] * (sizes[1] + sizes[2]), 5000)  # Linear rejects above 10000
+        self.assertEqual(len(sizes), 4)  # issues, labels, relations, inverseRelations
+        self.assertLessEqual(sizes[0] * (1 + sum(sizes[1:])), 5000)  # Linear rejects above 10000
+        ext = [int(n) for n in re.findall(r"first: (\d+)", ld.QUERY_EXTERNAL_LABELS)]
+        self.assertLessEqual(ext[0] * (1 + ext[1]), 5000)
+
+
+PASS = os.path.join(HERE, "fixtures", "linear-deps-types-pass.json")
+FAIL = os.path.join(HERE, "fixtures", "linear-deps-types-fail.json")
+
+
+class ExportTests(unittest.TestCase):
+    def setUp(self):
+        self.g = ld.build_export(load(PASS), URL, "acme")
+        self.by_id = {n["identifier"]: n for n in self.g["nodes"]}
+
+    def test_shape(self):
+        self.assertEqual(self.g["format"], "linear-deps/1")
+        self.assertEqual(self.g["project"], {"name": "Invitations lot (made up)", "url": URL})
+        n = self.by_id["INV-3"]
+        self.assertEqual(n["url"], "https://linear.app/acme/issue/INV-3")
+        self.assertEqual(n["type"], "Proof")
+        self.assertEqual(n["milestone"], "Staging: invitations")
+        self.assertEqual(n["blocked_by"], ["INV-1", "INV-2"])
+        self.assertEqual(self.by_id["INV-1"]["blocks"], ["INV-3"])
+        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "parent", "milestone",
+                                  "type", "labels", "blocked_by", "blocks"})
+        json.dumps(self.g)  # serializable as is
+
+    def test_blocks_and_inverse_blocked_by_are_one_edge(self):
+        inv1_inv3 = [e for e in self.g["edges"] if {e["from"], e["to"]} == {"INV-1", "INV-3"}]
+        self.assertEqual(inv1_inv3, [{"from": "INV-1", "to": "INV-3", "type": "blocks"}])
+
+    def test_related_in_both_directions_is_one_edge(self):
+        rel = [e for e in self.g["edges"] if e["type"] == "related"]
+        self.assertEqual(rel, [{"from": "INV-1", "to": "INV-5", "type": "related"}])
+
+    def test_outside_issues_are_kept_with_their_type(self):
+        out = self.by_id["CORE-9"]
+        self.assertTrue(out["external"])
+        self.assertEqual(out["type"], "Technical task")
+        self.assertEqual(out["title"], "Shared token service")
+
+    def test_type_falls_back_to_a_bare_label_name(self):
+        self.assertEqual(self.by_id["INV-4"]["type"], "Proof")
+        self.assertEqual(self.by_id["INV-4"]["labels"], [{"name": "proof", "group": None}])
+
+    def test_no_dependency_counts_blocking_links_only(self):
+        self.assertEqual(self.g["no_dependency"], ["INV-5"])
+
+    def test_cycles_are_whole_loops(self):
+        g = ld.build_export(load(CYCLE), URL, "acme")
+        self.assertEqual(g["cycles"], [["X-1", "X-2", "X-3"]])
+        self.assertEqual(ld.build_export(load(DEMO), URL, "acme")["cycles"], [])
+
+    def test_old_fixtures_without_labels_give_no_type(self):
+        g = ld.build_export(load(DEMO), URL, "acme")
+        self.assertTrue(all(n["type"] is None for n in g["nodes"]))
+
+    def test_cli_writes_svg_and_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            svg, js = os.path.join(d, "g.svg"), os.path.join(d, "g.json")
+            res = run_cli(URL, "--from-json", PASS, "-o", svg, "--json-out", js)
+            self.assertEqual(res.returncode, 0, res.stderr)
+            self.assertTrue(os.path.exists(svg))
+            self.assertEqual(load(js), json.loads(json.dumps(self.g)))
+
+
+class CheckTests(unittest.TestCase):
+    def export(self, fixture, d):
+        path = os.path.join(d, "g.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(ld.build_export(load(fixture), URL, "acme"), fh)
+        return path
+
+    def test_every_proof_blocked_by_dev_work_passes(self):
+        with tempfile.TemporaryDirectory() as d:
+            res = run_cli("check", self.export(PASS, d), "--type", "Proof",
+                          "--blocked-by", "Technical task,Feature", "--blocked-by", "Improvement")
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("2 Proof issue(s) checked", res.stdout)
+        self.assertIn("2 ok, 0 fail, 0 unknown", res.stdout)
+
+    def test_violations_are_listed_with_their_links(self):
+        with tempfile.TemporaryDirectory() as d:
+            res = run_cli("check", self.export(FAIL, d), "--type", "proof", "--blocked-by", "technical-task,Feature")
+        self.assertEqual(res.returncode, 1)
+        lines = res.stdout.splitlines()
+        self.assertIn("FAIL     INV-4  https://linear.app/acme/issue/INV-4  [unstarted] Accept link works on staging"
+                      "  blocked by INV-5 (Question)", lines)
+        self.assertTrue(any(l.startswith("FAIL     INV-6") and l.endswith("no blocker") for l in lines))
+        self.assertTrue(any(l.startswith("UNKNOWN  INV-7") and "OUT-1 (type unknown)" in l for l in lines))
+        self.assertFalse(any("INV-3" in l for l in lines[:-1]))
+        self.assertIn("4 proof issue(s) checked against technical-task / Feature: 1 ok, 2 fail, 1 unknown", lines)
+
+    def test_open_only_skips_closed_issues(self):
+        g = ld.build_export(load(FAIL), URL, "acme")
+        checked, failures, unknown = ld.check_types(g, "Proof", ["Feature"], open_only=True)
+        self.assertEqual([n["identifier"] for n in failures], ["INV-4"])
+        self.assertEqual(len(checked), 3)
+
+    def test_absent_type_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            res = run_cli("check", self.export(PASS, d), "--type", "Bug", "--blocked-by", "Feature")
+        self.assertEqual(res.returncode, 0)
+        self.assertIn("no issue of type 'Bug'; types present: Feature, Proof, Question, Technical task", res.stderr)
 
 
 if __name__ == "__main__":
