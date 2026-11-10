@@ -1555,17 +1555,20 @@ assets:
       on behalf of the `grievances` skill, and read-only triage across a workspace. It also installs, once, a repo-local
       advisory Stop hook and per-phase templates that follow a spec-kit change in Linear — issue at specify, In Progress
       at the first ticked task, In Review when a PR opens — from file, git and PR facts only, asking once per fact and
-      never blocking. It also draws the dependency tree of a Linear project ("blocks / blocked by" between its issues)
-      as a clickable SVG, with `scripts/linear_deps.py` and a Linear API key read from `LINEAR_API_KEY`. `publish` is a
-      verb of the `grievances` skill; this skill is one backend that answers it, and it never writes a ledger. Use when
-      wiring a repository to a Linear project, when a finding must leave a repository and become an issue someone can
-      own, when auditing which findings are already tracked, or when deciding what a tracker can and cannot hold.
-      It also proposes eight issue types (Bug, Blocker, Question, Research, Feature, Improvement, Proof, Technical
-      task), the order of questions that picks one, and a workspace template body for each. Use it too when choosing
-      which ticket type to open, telling a Question from a Blocker, proving a merged lot on an environment, or drafting
-      Linear templates. Triggers on "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding",
-      "which project does this repo belong to", "follow a spec in Linear", "spec-kit lifecycle", "ticket type", "Linear
-      template", "proof ticket", "dependency tree", "what blocks this issue", "LINEAR_API_KEY".
+      never blocking. It also draws the dependency graph of a Linear project ("blocks / blocked by" between its issues)
+      as a clickable SVG for humans and exports it as a JSON graph agents can query, with `scripts/linear_deps.py` and a
+      Linear API key read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline whether every issue of one type
+      (every Proof) is blocked by an issue of other types (a development task). `publish` is a verb of the `grievances`
+      skill; this skill is one backend that answers it, and it never writes a ledger. Use when wiring a repository to a
+      Linear project, when a finding must leave a repository and become an issue someone can own, when auditing which
+      findings are already tracked, or when deciding what a tracker can and cannot hold. It also proposes eight issue
+      types (Bug, Blocker, Question, Research, Feature, Improvement, Proof, Technical task), the order of questions that
+      picks one, and a workspace template body for each. Use it too when choosing which ticket type to open, telling a
+      Question from a Blocker, proving a merged lot on an environment, or drafting Linear templates. Triggers on
+      "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding", "which project does this repo
+      belong to", "follow a spec in Linear", "spec-kit lifecycle", "ticket type", "Linear template", "proof ticket",
+      "dependency tree", "dependency graph", "draw Linear tickets", "what blocks this issue", "is every proof blocked",
+      "LINEAR_API_KEY".
     category: workflows-and-processes
   - path: skills/lit-web-components/
     type: skill
