@@ -577,6 +577,12 @@ the command line. Python standard library only; Docker is the execution rule.
   lines for "related", dashed red for the link that closes a cycle, and the type and
   label chips. It is built from the same functions as the cards (`state_look`,
   `state_glyph`), so nothing is drawn without being explained.
+- **Point at a card** and what leads to it stands out at once: its direct blockers
+  and the links into it in full strength, the rest of the chain upstream (blockers
+  of blockers, outside issues included when drawn) a little lighter, everything else
+  faded. Downstream issues are not lit: the question is what stands in the way of
+  this one. The chains are computed when the SVG is generated (a cycle ends, an issue
+  is never its own blocker); the legend's last two lines show the two strengths.
 - **Hover a card for about a second** to get a preview, like Linear's issue peek:
   state icon, identifier, full title, state · assignee · milestone, type and label
   chips, and the beginning of the description (about 500 characters, markdown noise
@@ -804,11 +810,14 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
 
 - `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
   `tests/run-linear-deps-in-docker.sh`, four made-up fixtures, one sample SVG.
-- 46 tests in Docker. The excerpt strips markdown noise and cuts on a word; every
+- 51 tests in Docker. The upstream chains: direct and transitive blockers, outside
+  blockers only when drawn, a cycle that ends without listing the issue itself, the
+  chains and edge ends embedded in the SVG, and the highlight still present with
+  `--no-descriptions`. The excerpt strips markdown noise and cuts on a word; every
   linked box has preview data; a description containing `]]>` or `</script>` cannot
   break out of the embedded data; `--no-descriptions` removes the text from the SVG
-  and the JSON. The hover itself (delay, placement, hide on leave, dark and light) was
-  checked by hand in a browser, not by a test. The legend names every state drawn and only those; the colour
+  and the JSON. The hover itself (highlight, preview delay, placement, reset on leave, dark
+  and light) was checked by hand in a browser, not by a test. The legend names every state drawn and only those; the colour
   comes from Linear, then from the type, and a malformed colour is refused; outline
   and icon follow the state type; outside issues are hatched, not dashed; a card
   carries type, labels, state, assignee and milestone; overflowing chips end with a

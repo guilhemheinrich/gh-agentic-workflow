@@ -352,6 +352,51 @@ class PeekTests(unittest.TestCase):
         self.assertIn("        description\n", ld.QUERY_ISSUES)
 
 
+class UpstreamTests(unittest.TestCase):
+    def chains(self, path, external="drop"):
+        data = load(path)
+        return ld.upstream_chains(ld.build_graph(data, False, external))
+
+    def test_direct_and_transitive_blockers(self):
+        c = self.chains(DEMO)
+        self.assertEqual(c["DEMO-4"], {"blockers": ["DEMO-2"], "upstream": ["DEMO-1", "DEMO-3"]})
+        self.assertEqual(c["DEMO-5"], {"blockers": ["DEMO-2", "DEMO-6"], "upstream": ["DEMO-1", "DEMO-3"]})
+        self.assertEqual(c["DEMO-1"], {"blockers": [], "upstream": []})
+
+    def test_outside_blockers_count_when_drawn(self):
+        self.assertIn("OTHER-77", self.chains(DEMO, "show")["DEMO-3"]["blockers"])
+        self.assertNotIn("OTHER-77", self.chains(DEMO)["DEMO-3"]["blockers"])
+
+    def test_a_cycle_ends_and_never_lists_the_issue_itself(self):
+        c = self.chains(CYCLE)
+        for ident, chain in c.items():
+            self.assertNotIn(ident, chain["blockers"] + chain["upstream"])
+            self.assertFalse(set(chain["blockers"]) & set(chain["upstream"]))
+        self.assertEqual(sorted(c["X-1"]["blockers"] + c["X-1"]["upstream"]), ["X-2", "X-3", "X-4"])
+
+    def test_chains_and_edge_ends_are_embedded(self):
+        data = load(DEMO)
+        text = ld.render_svg(data, ld.build_graph(data, False, "drop"), "acme", False)
+        doc = minidom.parseString(text)
+        blob = [e for e in doc.getElementsByTagName("script") if e.getAttribute("id") == "peek-data"][0]
+        peek = json.loads("".join(c.data for c in blob.childNodes))
+        self.assertEqual(peek["DEMO-4"]["blockers"], ["DEMO-2"])
+        self.assertEqual(peek["DEMO-8"], dict(peek["DEMO-8"], blockers=[], upstream=[]))
+        ends = {(p.getAttribute("data-from"), p.getAttribute("data-to")) for p in doc.getElementsByTagName("path")
+                if p.getAttribute("data-blocks")}
+        self.assertEqual(ends, ld.build_graph(data, False, "drop")["block"])
+        self.assertIn("on hover: direct blocker", text)
+
+    def test_highlight_works_without_descriptions(self):
+        with tempfile.TemporaryDirectory() as d:
+            svg = os.path.join(d, "g.svg")
+            self.assertEqual(run_cli(URL, "--from-json", DEMO, "-o", svg, "--no-descriptions").returncode, 0)
+            with open(svg, encoding="utf-8") as fh:
+                text = fh.read()
+        self.assertIn('"blockers": ["DEMO-2"]', text)
+        self.assertIn("function focus(", text)
+
+
 PASS = os.path.join(HERE, "fixtures", "linear-deps-types-pass.json")
 FAIL = os.path.join(HERE, "fixtures", "linear-deps-types-fail.json")
 

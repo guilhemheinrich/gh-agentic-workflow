@@ -567,6 +567,10 @@ a:hover .box { stroke-width: 2.6; }
 .arrow { fill: var(--edge); } .arrow-c { fill: var(--cycle); }
 .warn { font-size: 12px; fill: var(--cycle); font-weight: 600; }
 .lg { font-size: 11px; fill: var(--muted); }
+.focus a[data-id] > g, .focus path[data-to] { opacity: .15; transition: opacity .12s; }
+.focus a.hl0 > g, .focus a.hl1 > g, .focus path.hl1 { opacity: 1; } .focus a.hl2 > g, .focus path.hl2 { opacity: .7; }
+a.hl0 .box { stroke-width: 3.2; } a.hl1 .box { stroke-width: 2.6; }
+path.hl1 { stroke: var(--fg); stroke-width: 2.8; opacity: 1; } path.hl2 { stroke-width: 2; }
 """
 CHAR_W = 6.1        # rough width of one 10-11px character, to fit text without a layout engine
 CHIP_CHAR_W = 5.5   # the same for the 10px chip text
@@ -681,6 +685,9 @@ def legend_items(graph, isolated, cards):
         items.append(("chip", "tchip", "ticket type"))
     if any(r for _, r in cards):
         items.append(("chip", "chip", "label"))
+    if graph["block"]:
+        items.append(("line", "edge hl1", "on hover: direct blocker"))
+        items.append(("line", "edge hl2", "on hover: further upstream"))
     return items
 
 
@@ -743,16 +750,55 @@ PEEK_JS = """(function () {
   function grow(hgt) { svg.setAttribute('height', hgt); svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + hgt); }
   function shrink() { if (svg.getAttribute('height') != base[0]) { svg.setAttribute('height', base[0]);
     svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + base[1]); } }
+  var cards = {}, links = Array.prototype.slice.call(document.querySelectorAll('path[data-to]'));
+  Array.prototype.forEach.call(document.querySelectorAll('a[data-id]'), function (a) { cards[a.getAttribute('data-id')] = a; });
+  var lit = [];
+  function mark(e, cls) { e.classList.add(cls); lit.push([e, cls]); }
+  function focus(id, d) {   // the card, what blocks it directly, and the rest of the chain upstream
+    var one = {}, two = {}; d.blockers.forEach(function (b) { one[b] = 1; }); d.upstream.forEach(function (b) { two[b] = 1; });
+    svg.classList.add('focus'); if (cards[id]) mark(cards[id], 'hl0');
+    d.blockers.forEach(function (b) { if (cards[b]) mark(cards[b], 'hl1'); });
+    d.upstream.forEach(function (b) { if (cards[b]) mark(cards[b], 'hl2'); });
+    links.forEach(function (e) { if (!e.hasAttribute('data-blocks')) return;
+      var f = e.getAttribute('data-from'), t = e.getAttribute('data-to');
+      if (t === id && one[f]) mark(e, 'hl1'); else if ((one[t] || two[t]) && (one[f] || two[f])) mark(e, 'hl2'); });
+  }
+  function unfocus() { svg.classList.remove('focus'); lit.forEach(function (x) { x[0].classList.remove(x[1]); }); lit = []; }
   Array.prototype.forEach.call(document.querySelectorAll('a[data-id]'), function (a) {
     var d = data[a.getAttribute('data-id')]; if (!d) return;
     var t = a.querySelector('title'); if (t) t.remove();   // the panel replaces the native tooltip
     var last = null;
-    a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer);
+    a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer); focus(d.id, d);
       timer = setTimeout(function () { show(d, last); }, %d); });
     a.addEventListener('mousemove', function (ev) { last = ev; });
-    a.addEventListener('mouseleave', hide);
+    a.addEventListener('mouseleave', function () { hide(); unfocus(); });
   });
 })();""" % PEEK_DELAY_MS
+
+
+NO_CHAIN = {"blockers": [], "upstream": []}
+
+
+def upstream_chains(graph):
+    """For every drawn issue: its direct blockers, and the blockers further up the chain.
+
+    Breadth-first over "blocks" links, back edges included, with a visited set, so a cycle ends
+    instead of looping; the issue itself is never its own upstream.
+    """
+    preds = defaultdict(set)
+    for a, b in graph["block"]:
+        preds[b].add(a)
+    out = {}
+    for ident in graph["nodes"]:
+        direct = preds[ident] - {ident}
+        seen, todo = set(direct), list(direct)
+        while todo:
+            for p in preds[todo.pop()]:
+                if p not in seen and p != ident:
+                    seen.add(p)
+                    todo.append(p)
+        out[ident] = {"blockers": sorted(direct, key=sort_key), "upstream": sorted(seen - direct, key=sort_key)}
+    return out
 
 
 def peek_entry(ident, n):
@@ -836,7 +882,7 @@ def render_svg(data, graph, workspace, hide_isolated):
         elif kind == "ext":
             w('<g class="ext"><rect class="box" x="%d" y="%d" width="26" height="14" rx="4"/></g>' % (x, y - 11))
         elif kind == "line":
-            marker = {"edge": ' marker-end="url(#ar)"', "cyc": ' marker-end="url(#ac)"'}.get(cls, "")
+            marker = ' marker-end="url(#ac)"' if cls == "cyc" else (' marker-end="url(#ar)"' if "edge" in cls else "")
             w('<path class="%s" d="M%d %d L%d %d"%s/>' % (cls, x, y - 4, x + 26, y - 4, marker))
         else:
             w('<g class="%s"><rect x="%d" y="%d" width="26" height="14" rx="7"/></g>' % (cls, x, y - 11))
@@ -859,22 +905,24 @@ def render_svg(data, graph, workspace, hide_isolated):
 
     for a, b in sorted(graph["related"]):
         if a in pos and b in pos:
-            w('<path class="rel" d="%s"><title>related</title></path>' % edge_path(a, b))
+            w('<path class="rel" d="%s" data-from=%s data-to=%s><title>related</title></path>'
+              % (edge_path(a, b), quoteattr(a), quoteattr(b)))
     for a, b in sorted(graph["block"] - graph["back"]):
-        w('<path class="edge" d="%s" marker-end="url(#ar)"><title>%s blocks %s</title></path>'
-          % (edge_path(a, b), a, b))
+        w('<path class="edge" d="%s" marker-end="url(#ar)" data-from=%s data-to=%s data-blocks="1">'
+          '<title>%s blocks %s</title></path>' % (edge_path(a, b), quoteattr(a), quoteattr(b), a, b))
     for a, b in sorted(graph["back"]):
-        w('<path class="cyc" d="%s" marker-end="url(#ac)"><title>cycle: %s blocks %s</title></path>'
-          % (edge_path(a, b), a, b))
+        w('<path class="cyc" d="%s" marker-end="url(#ac)" data-from=%s data-to=%s data-blocks="1">'
+          '<title>cycle: %s blocks %s</title></path>' % (edge_path(a, b), quoteattr(a), quoteattr(b), a, b))
 
     peek = {}
+    chains = upstream_chains(graph)
 
     def box(ident, x, y):
         n = nodes[ident]
         url = issue_url(workspace, ident)
         kind, rest = card_labels(n)
         skind, color, _ = state_look(n)
-        peek[ident] = peek_entry(ident, n)
+        peek[ident] = dict(peek_entry(ident, n), **chains.get(ident, NO_CHAIN))
         w('<a href=%s xlink:href=%s target="_blank" rel="noopener" data-id=%s><g class="%s">'
           % (quoteattr(url), quoteattr(url), quoteattr(ident), skind))
         w('<title>%s</title>' % escape(card_tooltip(ident, n)))
@@ -922,7 +970,7 @@ def render_svg(data, graph, workspace, hide_isolated):
             url = issue_url(workspace, ident)
             n = dict(issue, external=False)
             skind, color, _ = state_look(n)
-            peek[ident] = peek_entry(ident, n)
+            peek[ident] = dict(peek_entry(ident, n), **chains.get(ident, NO_CHAIN))
             w('<a href=%s xlink:href=%s target="_blank" rel="noopener" data-id=%s><g class="%s"><title>%s</title>'
               '<rect class="box" x="%d" y="%d" width="%d" height="%d" rx="6" style="stroke:%s"/>%s'
               '<text class="id" x="%d" y="%d">%s</text></g></a>'
