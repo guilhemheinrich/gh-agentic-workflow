@@ -561,13 +561,21 @@ the command line. Python standard library only; Docker is the execution rule.
 
 - **Columns** come from the longest path: an issue sits one column to the right of
   its furthest blocker. The leftmost issues are what to unblock first.
-- **A legend** under the title explains every colour and line style the picture
-  actually uses. It is generated from the same table (`BOX_STYLES`) as the CSS, so a
-  colour cannot be drawn without being explained: one colour per Linear state type
-  (triage purple, backlog slate, unstarted blue, started orange, completed green,
-  canceled grey with the title struck through, any other state yellow), dashed boxes
-  for issues outside the project, solid arrows for "blocks", dotted lines for
-  "related", dashed red for the link that closes a cycle.
+- **States follow Linear's own code.** Each card's border and left strip take the
+  colour of its workflow state as the team configured it in Linear (`state.color`),
+  so "In Review" keeps its own green although its type is `started`. The icon next to
+  the identifier mirrors Linear's: dashed circle backlog, empty circle todo,
+  half-filled in progress, filled with a check done, filled with a cross canceled,
+  ringed dot triage. Backlog cards also have a dashed outline; canceled titles are
+  struck through. Offline data without a colour falls back to Linear's defaults per
+  type (backlog `#bec2c8`, unstarted `#e2e2e2`, started `#f2c94c`, completed
+  `#5e6ad2`, canceled `#95a2b3`, triage `#fc7840`).
+- **A legend** under the title lists every state present, by its Linear name, with
+  its icon and colour, then the other markers drawn: hatched boxes with an
+  `external` chip for issues outside the project, solid arrows for "blocks", dotted
+  lines for "related", dashed red for the link that closes a cycle, and the type and
+  label chips. It is built from the same functions as the cards (`state_look`,
+  `state_glyph`), so nothing is drawn without being explained.
 - **A card** shows the identifier, `↳ TT-1970` for the parent issue, the title, then
   the state name · assignee · milestone, then chips: the ticket type first (bold,
   bordered), then the other labels as `group/name` (`repo/modelo-hub`). What does not
@@ -589,11 +597,13 @@ Made-up sample, trimmed to two nodes and two edges
              "url": "https://linear.app/acme/project/invitations-0123456789ab"},
  "nodes": [
   {"identifier": "INV-1", "title": "Invitation API", "url": "https://linear.app/acme/issue/INV-1",
-   "external": false, "state": "started", "parent": null, "milestone": null,
+   "external": false, "state": "started", "state_name": null, "state_color": null, "assignee": null,
+   "parent": null, "milestone": null,
    "type": "Feature", "labels": [{"name": "Feature", "group": "Type"}],
    "blocked_by": [], "blocks": ["INV-3"]},
   {"identifier": "INV-4", "title": "Accept link works on staging", "url": "https://linear.app/acme/issue/INV-4",
-   "external": false, "state": "unstarted", "parent": null, "milestone": null,
+   "external": false, "state": "unstarted", "state_name": null, "state_color": null, "assignee": null,
+   "parent": null, "milestone": null,
    "type": "Proof", "labels": [{"name": "Proof", "group": "Type"}],
    "blocked_by": ["INV-5"], "blocks": []}
  ],
@@ -689,7 +699,7 @@ one call per issue:
 {
   "project": {"name": "Checkout redesign"},
   "issues": [{"identifier": "DEMO-2", "title": "...", "state": "started", "parent": null,
-              "milestone": null, "labels": [{"name": "Proof", "group": "Type"}]}],
+              "state_name": "In Review", "state_color": "#0f783c", "assignee": "Sam K.", "milestone": null, "labels": [{"name": "Proof", "group": "Type"}]}],
   "relations": [{"type": "blocks", "from": "DEMO-1", "to": "DEMO-2"}],
   "external": {"OTHER-77": "title of an issue outside the project"},
   "external_labels": {"OTHER-77": [{"name": "Technical task", "group": "Type"}]}
@@ -697,7 +707,7 @@ one call per issue:
 ```
 
 `state` is the Linear state type (`unstarted`, `started`, `completed`, `canceled`).
-`milestone`, `labels` and `external_labels` are optional (without them `type` is
+`state_name`, `state_color`, `assignee`, `milestone`, `labels` and `external_labels` are optional (without them `type` is
 `null`); a label may also be a bare name. A `{"type": "blocked_by", ...}` row is read
 as the inverse `blocks`. `tests/fixtures/linear-deps-demo.json` and
 `linear-deps-types-pass.json` are complete examples.
@@ -779,9 +789,11 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
 
 - `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
   `tests/run-linear-deps-in-docker.sh`, four made-up fixtures, one sample SVG.
-- 37 tests in Docker. The legend lists every box style drawn and only those, every
-  style has its CSS, a card carries type, labels, state, assignee and milestone, and
-  overflowing chips end with a count. The JSON export: its shape, a `blocks` and its inverse
+- 40 tests in Docker. The legend names every state drawn and only those; the colour
+  comes from Linear, then from the type, and a malformed colour is refused; outline
+  and icon follow the state type; outside issues are hatched, not dashed; a card
+  carries type, labels, state, assignee and milestone; overflowing chips end with a
+  count. The JSON export: its shape, a `blocks` and its inverse
   `blocked_by` as one edge, `related` both ways as one edge, outside issues kept with
   their type, the type read from the Type group or a bare label name, whole cycles,
   and the CLI writing both files. `check`: one passing fixture, one failing fixture
@@ -794,7 +806,7 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
 - Live run (2026-11-10) on a real 53-issue project with `--external show`: 56 blocking
   links, no cycle, 12 issues without dependency, 9 outside issues; the schema fields
   (`slugId` lookup, `inverseRelations`, `labels { parent }`, `projectMilestone`,
-  `assignee`, the outside-issue lookup by `id: {in: ...}`) and the
+  `assignee`, `state.color`, the outside-issue lookup by `id: {in: ...}`) and the
   `Authorization: <key>` header all answered. Not measured: how close the queries come
   to the complexity limit on a project with many relations per issue. The first live run settles them.
 - The first hand-drawn graph this script generalizes covered a real 49-issue project;

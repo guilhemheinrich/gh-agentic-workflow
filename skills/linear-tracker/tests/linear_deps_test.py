@@ -225,26 +225,51 @@ class CardAndLegendTests(unittest.TestCase):
         g = [g for g in doc.getElementsByTagName("g") if g.getAttribute("class") == "legend"][0]
         return [t.firstChild.data for t in g.getElementsByTagName("text")]
 
-    def test_every_box_class_drawn_is_in_the_legend(self):
+    def test_every_state_drawn_is_in_the_legend_with_its_name(self):
         for path, kw in ((DEMO, {"external": "show", "related": True}), (CYCLE, {}), (PASS, {"external": "show"})):
-            text = self.svg(path, **kw)
-            legend = self.legend(text)
-            doc = minidom.parseString(text)
-            drawn = {a.getElementsByTagName("g")[0].getAttribute("class") for a in doc.getElementsByTagName("a")}
-            texts = {c: t for c, t, *_ in ld.BOX_STYLES}
-            for cls in drawn:
-                self.assertIn(texts[cls], legend, (path, cls))
+            data = load(path)
+            legend = self.legend(self.svg(path, **kw))
+            graph = ld.build_graph(data, kw.get("related", False), kw.get("external", "drop"))
+            for n in list(graph["nodes"].values()) + [dict(i, external=False) for i in data["issues"]
+                                                      if i["identifier"] in graph["isolated"]]:
+                kind, _, name = ld.state_look(n)
+                self.assertIn("outside the project (hatched)" if kind == "ext" else name, legend, (path, n))
 
     def test_legend_names_only_what_is_drawn(self):
         legend = self.legend(self.svg(CYCLE))
         self.assertIn("link closing a cycle", legend)
         self.assertNotIn("related (dotted)", legend)
         self.assertNotIn("Triage", legend)
-        self.assertIn("related (dotted)", self.legend(self.svg(related=True)))
+        self.assertNotIn("outside the project (hatched)", legend)
+        legend = self.legend(self.svg(related=True, external="show"))
+        self.assertIn("related (dotted)", legend)
+        self.assertIn("In Review", legend)
+        self.assertIn("outside the project (hatched)", legend)
 
-    def test_every_style_has_css(self):
-        for cls, *_ in ld.BOX_STYLES:
-            self.assertIn(".%s { fill: var(--%s-bg)" % (cls, cls), ld.STYLE)
+    def test_colour_comes_from_linear_then_from_the_type(self):
+        self.assertEqual(ld.state_look({"state": "started", "state_name": "In Review", "state_color": "#26b37a"}),
+                         ("started", "#26b37a", "In Review"))
+        self.assertEqual(ld.state_look({"state": "completed"}), ("completed", "#5e6ad2", "Done"))
+        self.assertEqual(ld.state_look({"state": "backlog", "state_color": "red;}<script>"})[1], "#bec2c8")
+        self.assertEqual(ld.state_look({"external": True}), ("ext", None, None))
+
+    def test_outline_and_icon_follow_the_state_type(self):
+        self.assertIn(".backlog .box { stroke-dasharray", ld.STYLE)
+        self.assertNotIn("dasharray", ld.STYLE.split(".ext .box")[1].split("}")[0])
+        self.assertIn("stroke-dasharray:2 1.7", ld.state_glyph("backlog", "#bec2c8", 0, 0))
+        self.assertIn(" A", ld.state_glyph("started", "#f2c94c", 0, 0))
+        self.assertIn("l2.2 2.2", ld.state_glyph("completed", "#5e6ad2", 0, 0))
+        self.assertIn("l-5 5", ld.state_glyph("canceled", "#95a2b3", 0, 0))
+
+    def test_card_is_tinted_with_the_state_colour(self):
+        text = self.svg()
+        self.assertIn('style="stroke:#26b37a"', text)
+        self.assertIn('style="fill:#26b37a"', text)
+
+    def test_external_box_is_hatched_and_tagged(self):
+        text = self.svg(external="show")
+        self.assertIn('<pattern id="hatch"', text)
+        self.assertIn(">external<", text)
 
     def test_card_shows_type_labels_state_assignee_milestone(self):
         text = self.svg()
@@ -264,8 +289,8 @@ class CardAndLegendTests(unittest.TestCase):
         self.assertLessEqual(sum(w for _, _, w in chips) + 4 * (len(chips) - 1), 250)
 
     def test_unknown_state_type_is_other(self):
-        self.assertEqual(ld.state_class({"external": False, "state": "paused"}), "other")
-        self.assertEqual(ld.state_class({"external": False, "state": "triage"}), "triage")
+        self.assertEqual(ld.state_kind({"external": False, "state": "paused"}), "other")
+        self.assertEqual(ld.state_kind({"external": False, "state": "triage"}), "triage")
 
 
 PASS = os.path.join(HERE, "fixtures", "linear-deps-types-pass.json")
@@ -286,7 +311,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(n["milestone"], "Staging: invitations")
         self.assertEqual(n["blocked_by"], ["INV-1", "INV-2"])
         self.assertEqual(self.by_id["INV-1"]["blocks"], ["INV-3"])
-        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "assignee", "parent", "milestone",
+        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "state_color", "assignee", "parent", "milestone",
                                   "type", "labels", "blocked_by", "blocks"})
         json.dumps(self.g)  # serializable as is
 

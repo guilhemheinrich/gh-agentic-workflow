@@ -28,7 +28,7 @@ BOX_W, BOX_H = 270, 86
 GAP_X, GAP_Y = 110, 14
 MARGIN = 24
 TITLE_CHARS = 33
-CHIP_W, CHIP_H = 84, 24
+CHIP_W, CHIP_H = 96, 24
 
 PROJECT_URL_RE = re.compile(r"^https?://linear\.app/([^/]+)/project/([^/?#]+)")
 
@@ -45,7 +45,7 @@ query($id: String!, $after: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         identifier title
-        state { type name }
+        state { type name color }
         assignee { displayName }
         parent { identifier }
         projectMilestone { name }
@@ -130,6 +130,7 @@ def fetch_live(slug, api_url):
                 "identifier": me, "title": n["title"],
                 "state": (n.get("state") or {}).get("type", ""),
                 "state_name": (n.get("state") or {}).get("name"),
+                "state_color": (n.get("state") or {}).get("color"),
                 "assignee": (n.get("assignee") or {}).get("displayName"),
                 "parent": (n.get("parent") or {}).get("identifier"),
                 "milestone": (n.get("projectMilestone") or {}).get("name"),
@@ -408,6 +409,7 @@ def build_export(data, project_url, workspace):
             "external": src is None,
             "state": src.get("state", "") if src else None,
             "state_name": src.get("state_name") if src else None,
+            "state_color": src.get("state_color") if src else None,
             "assignee": src.get("assignee") if src else None,
             "parent": src.get("parent") if src else None,
             "milestone": src.get("milestone") if src else None,
@@ -486,49 +488,37 @@ def check_main(argv):
     return 1 if failures or unknown else 0
 
 
-# One entry per box style: the CSS and the legend are both generated from this table,
-# so a colour cannot be drawn without being explained. (class, legend text, light, dark),
-# each colour triple being (fill, stroke, text).
-BOX_STYLES = [
-    ("triage", "Triage", ("#f1e8fb", "#8a4fd1", "#4b1f80"), ("#2b1d42", "#b98cf0", "#e6d6ff")),
-    ("backlog", "Backlog", ("#f0f2f5", "#9aa5b8", "#3b4556"), ("#1f242c", "#7d8899", "#c3cad6")),
-    ("unstarted", "Todo (unstarted)", ("#e8edfc", "#3d5bd9", "#1f2f78"), ("#1d2748", "#8ea2f5", "#d3dbff")),
-    ("started", "In progress (started)", ("#fdebdc", "#c2530f", "#6e2d06"), ("#3d2312", "#f0944f", "#ffddc2")),
-    ("completed", "Done (completed)", ("#e3f4e8", "#2f8f4e", "#17502b"), ("#16301f", "#5cc27f", "#cdeed7")),
-    ("canceled", "Canceled (title struck through)", ("#e6e9ee", "#8b93a1", "#4a5262"), ("#232933", "#7c8594", "#b7bfcc")),
-    ("other", "Other state", ("#fff7d6", "#a88a00", "#5c4b00"), ("#352e10", "#d8b93a", "#f5e7a8")),
-    ("ext", "Outside the project (dashed)", ("#ffffff", "#8b93a1", "#4a5262"), ("#181d25", "#7c8594", "#b7bfcc")),
-]
-STATE_TYPES = {c for c, *_ in BOX_STYLES} - {"other", "ext"}
+# Linear's own state code: each workflow state carries its team's colour (`state.color`), and its
+# type gives the icon. The fallback colours, used only when the data has no colour (offline
+# fixtures), are Linear's defaults per type. The legend is built from the same functions.
+STATE_ORDER = ("triage", "backlog", "unstarted", "started", "completed", "canceled")
+FALLBACK_COLORS = {"triage": "#fc7840", "backlog": "#bec2c8", "unstarted": "#e2e2e2", "started": "#f2c94c",
+                   "completed": "#5e6ad2", "canceled": "#95a2b3"}
+FALLBACK_NAMES = {"triage": "Triage", "backlog": "Backlog", "unstarted": "Todo", "started": "In Progress",
+                  "completed": "Done", "canceled": "Canceled"}
+OTHER_COLOR = "#95a2b3"
+HEX_RE = re.compile(r"^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$")
 
-
-def box_css():
-    light, dark = [], []
-    for cls, _, (lb, ls, lf), (db, ds, df) in BOX_STYLES:
-        light.append("--%s-bg:%s; --%s-bd:%s; --%s-fg:%s;" % (cls, lb, cls, ls, cls, lf))
-        dark.append("--%s-bg:%s; --%s-bd:%s; --%s-fg:%s;" % (cls, db, cls, ds, cls, df))
-    rules = [".%s { fill: var(--%s-bg); stroke: var(--%s-bd); } .%s text { fill: var(--%s-fg); }"
-             % (c, c, c, c, c) for c, *_ in BOX_STYLES]
-    return "\n".join([
-        "svg { --bg:#f5f6f8; --fg:#151a22; --muted:#5a6372; --edge:#4a5262; --cycle:#c2330f; --chip:#ffffffb0; "
-        + " ".join(light) + " }",
-        "@media (prefers-color-scheme: dark) { svg { --bg:#11151b; --fg:#e8ebf0; --muted:#9aa3b2; --edge:#a8b0be; "
-        "--cycle:#ff8a65; --chip:#00000040; " + " ".join(dark) + " } }",
-    ] + rules)
-
-
-STYLE = box_css() + """
+STYLE = """
+svg { --bg:#f5f6f8; --fg:#151a22; --muted:#5a6372; --edge:#4a5262; --cycle:#c2330f; --card:#ffffff;
+  --chip:#f0f2f5; --hatch:#d5d9e0; }
+@media (prefers-color-scheme: dark) { svg { --bg:#11151b; --fg:#e8ebf0; --muted:#9aa3b2; --edge:#a8b0be;
+  --cycle:#ff8a65; --card:#1a1f27; --chip:#252b35; --hatch:#2f3642; } }
 text { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif; fill: var(--fg); }
 .bg { fill: var(--bg); }
 .h { font-size: 16px; font-weight: 600; } .sub { font-size: 12px; fill: var(--muted); }
 .id { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 11.5px; font-weight: 500; }
-.ttl { font-size: 12.5px; } .tag { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; }
-.meta { font-size: 10.5px; opacity: .85; }
-.box { stroke-width: 1.5; }
-.canceled .ttl { text-decoration: line-through; }
-.ext { stroke-dasharray: 5 3; }
+.ttl { font-size: 12.5px; } .tag { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; font-size: 10.5px; fill: var(--muted); }
+.meta { font-size: 10.5px; fill: var(--muted); }
+.box { fill: var(--card); stroke-width: 1.5; }
+.backlog .box { stroke-dasharray: 5 3; }
+.canceled .ttl { text-decoration: line-through; fill: var(--muted); }
+.ext .box { fill: url(#hatch); stroke: var(--muted); }
+.ext .ttl, .ext .id { fill: var(--muted); }
 .chip rect { fill: var(--chip); stroke: var(--muted); stroke-width: .6; } .chip text { font-size: 10px; }
-.tchip rect { fill: var(--chip); stroke-width: 1.2; } .tchip text { font-size: 10px; font-weight: 700; }
+.tchip rect { fill: var(--chip); stroke: var(--fg); stroke-width: 1.1; } .tchip text { font-size: 10px; font-weight: 700; }
+.xchip rect { fill: var(--bg); stroke: var(--muted); stroke-width: .8; stroke-dasharray: 1 1.5; }
+.xchip text { font-size: 10px; font-style: italic; fill: var(--muted); }
 a:hover .box { stroke-width: 2.6; }
 .edge { stroke: var(--edge); stroke-width: 1.4; fill: none; opacity: .8; }
 .rel { stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 2 3; fill: none; }
@@ -542,12 +532,48 @@ CHIP_CHAR_W = 5.5   # the same for the 10px chip text
 CHIP_PAD = 6
 
 
-def state_class(node):
-    if node["external"]:
+def state_kind(node):
+    """The state type that picks the icon and the outline: one of STATE_ORDER, "other" or "ext"."""
+    if node.get("external"):
         return "ext"
     if not node.get("state"):
         return "unstarted"      # normalized data written before states were fetched
-    return node["state"] if node["state"] in STATE_TYPES else "other"
+    return node["state"] if node["state"] in STATE_ORDER else "other"
+
+
+def state_look(node):
+    """(kind, colour, name): colour from Linear when present and well formed, else the type default."""
+    kind = state_kind(node)
+    if kind == "ext":
+        return kind, None, None
+    color = node.get("state_color")
+    if not (isinstance(color, str) and HEX_RE.match(color)):
+        color = FALLBACK_COLORS.get(kind, OTHER_COLOR)
+    name = node.get("state_name") or FALLBACK_NAMES.get(kind) or node.get("state") or "Unknown state"
+    return kind, color, name
+
+
+def state_glyph(kind, color, cx, cy, r=6):
+    """Linear's status icon: dashed circle, empty circle, half-filled, filled with a check or a cross."""
+    c = "stroke:%s" % color
+    f = "fill:%s" % color
+    if kind == "backlog":
+        return ('<circle cx="%.1f" cy="%.1f" r="%.1f" style="fill:none;%s;stroke-width:1.6;stroke-dasharray:2 1.7"/>'
+                % (cx, cy, r, c))
+    if kind == "started":
+        return ('<circle cx="%.1f" cy="%.1f" r="%.1f" style="fill:none;%s;stroke-width:1.6"/>'
+                '<path d="M%.1f %.1f A%.1f %.1f 0 0 1 %.1f %.1f Z" style="%s"/>'
+                % (cx, cy, r, c, cx, cy - r + 2, r - 2, r - 2, cx, cy + r - 2, f))
+    if kind in ("completed", "canceled"):
+        mark = ("M%.1f %.1f l2.2 2.2 l4 -4.4" % (cx - 3.2, cy) if kind == "completed"
+                else "M%.1f %.1f l5 5 M%.1f %.1f l-5 5" % (cx - 2.5, cy - 2.5, cx + 2.5, cy - 2.5))
+        return ('<circle cx="%.1f" cy="%.1f" r="%.1f" style="%s"/>'
+                '<path d="%s" style="fill:none;stroke:#ffffff;stroke-width:1.6;stroke-linecap:round"/>'
+                % (cx, cy, r, f, mark))
+    if kind == "triage":
+        return ('<circle cx="%.1f" cy="%.1f" r="%.1f" style="fill:none;%s;stroke-width:1.6"/>'
+                '<circle cx="%.1f" cy="%.1f" r="2.4" style="%s"/>' % (cx, cy, r, c, cx, cy, f))
+    return '<circle cx="%.1f" cy="%.1f" r="%.1f" style="fill:none;%s;stroke-width:1.6"/>' % (cx, cy, r, c)
 
 
 def card_labels(node):
@@ -590,9 +616,17 @@ def fit_chips(names, width):
 
 
 def legend_items(graph, isolated, cards):
-    used = {state_class(n) for n in graph["nodes"].values()} | {state_class(dict(n, external=False))
-                                                              for n in isolated}
-    items = [("box", c, text) for c, text, *_ in BOX_STYLES if c in used]
+    """Every marker actually drawn: one entry per state (type, colour, name) present, then the rest."""
+    states = {}
+    for n in list(graph["nodes"].values()) + [dict(n, external=False) for n in isolated]:
+        kind, color, name = state_look(n)
+        if kind != "ext":
+            states[(kind, color.lower(), name)] = None
+    order = {k: i for i, k in enumerate(STATE_ORDER + ("other",))}
+    items = [("state", (kind, color), name)
+             for kind, color, name in sorted(states, key=lambda t: (order[t[0]], t[2]))]
+    if any(n["external"] for n in graph["nodes"].values()):
+        items.append(("ext", None, "outside the project (hatched)"))
     if graph["block"] - graph["back"]:
         items.append(("line", "edge", "A blocks B (arrow)"))
     if graph["related"]:
@@ -652,7 +686,10 @@ def render_svg(data, graph, workspace, hide_isolated):
     w('<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">'
       '<path class="arrow" d="M0 0 L10 5 L0 10 z"/></marker>'
       '<marker id="ac" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">'
-      '<path class="arrow-c" d="M0 0 L10 5 L0 10 z"/></marker></defs>')
+      '<path class="arrow-c" d="M0 0 L10 5 L0 10 z"/></marker>'
+      '<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+      '<rect width="6" height="6" style="fill:var(--card)"/><rect width="2.2" height="6" style="fill:var(--hatch)"/>'
+      '</pattern></defs>')
     w('<rect class="bg" width="100%" height="100%"/>')
     w('<text class="h" x="%d" y="28">%s</text>' % (MARGIN, escape(data["project"]["name"])))
     n_edges = len(graph["block"])
@@ -661,14 +698,15 @@ def render_svg(data, graph, workspace, hide_isolated):
 
     w('<g class="legend">')
     for (kind, cls, text), x, y in lg_pos:
-        if kind == "box":
-            w('<g class="%s"><rect class="box" x="%d" y="%d" width="26" height="14" rx="4"/></g>' % (cls, x, y - 11))
+        if kind == "state":
+            w(state_glyph(cls[0], cls[1], x + 13, y - 4))
+        elif kind == "ext":
+            w('<g class="ext"><rect class="box" x="%d" y="%d" width="26" height="14" rx="4"/></g>' % (x, y - 11))
         elif kind == "line":
             marker = {"edge": ' marker-end="url(#ar)"', "cyc": ' marker-end="url(#ac)"'}.get(cls, "")
             w('<path class="%s" d="M%d %d L%d %d"%s/>' % (cls, x, y - 4, x + 26, y - 4, marker))
         else:
-            w('<g class="unstarted"><g class="%s"><rect x="%d" y="%d" width="26" height="14" rx="7"/></g></g>'
-              % (cls, x, y - 11))
+            w('<g class="%s"><rect x="%d" y="%d" width="26" height="14" rx="7"/></g>' % (cls, x, y - 11))
         w('<text class="lg" x="%d" y="%d">%s</text>' % (x + 34, y, escape(text)))
     w("</g>")
 
@@ -700,11 +738,17 @@ def render_svg(data, graph, workspace, hide_isolated):
         n = nodes[ident]
         url = issue_url(workspace, ident)
         kind, rest = card_labels(n)
+        skind, color, _ = state_look(n)
         w('<a href=%s xlink:href=%s target="_blank" rel="noopener"><g class="%s">'
-          % (quoteattr(url), quoteattr(url), state_class(n)))
+          % (quoteattr(url), quoteattr(url), skind))
         w('<title>%s</title>' % escape(card_tooltip(ident, n)))
-        w('<rect class="box" x="%.1f" y="%.1f" width="%d" height="%d" rx="8"/>' % (x, y, BOX_W, BOX_H))
-        w('<text class="id" x="%.1f" y="%.1f">%s</text>' % (x + 12, y + 18, escape(ident)))
+        stroke = ' style="stroke:%s"' % color if color else ""
+        w('<rect class="box" x="%.1f" y="%.1f" width="%d" height="%d" rx="8"%s/>' % (x, y, BOX_W, BOX_H, stroke))
+        if color:
+            w('<rect x="%.1f" y="%.1f" width="4" height="%d" rx="2" style="fill:%s"/>'
+              % (x + 1.5, y + 8, BOX_H - 16, color))
+            w(state_glyph(skind, color, x + 18, y + 14))
+        w('<text class="id" x="%.1f" y="%.1f">%s</text>' % (x + (30 if color else 12), y + 18, escape(ident)))
         if n.get("parent"):
             w('<text class="tag" x="%.1f" y="%.1f" text-anchor="end">↳ %s</text>'
               % (x + BOX_W - 10, y + 18, escape(n["parent"])))
@@ -714,7 +758,8 @@ def render_svg(data, graph, workspace, hide_isolated):
         if meta:
             w('<text class="meta" x="%.1f" y="%.1f">%s</text>'
               % (x + 12, y + 53, escape(clip(meta, int((BOX_W - 24) / CHAR_W)))))
-        chips = ([("tchip", kind)] if kind else []) + [("chip", r) for r in rest]
+        chips = ([("xchip", "external")] if n.get("external") else []) + \
+            ([("tchip", kind)] if kind else []) + [("chip", r) for r in rest]
         cx = x + 10
         fitted = fit_chips([c[1] for c in chips], BOX_W - 20)
         for i, label, cw in fitted:
@@ -740,11 +785,13 @@ def render_svg(data, graph, workspace, hide_isolated):
             y = strip_top + 16 + r * (CHIP_H + 8)
             url = issue_url(workspace, ident)
             n = dict(issue, external=False)
+            skind, color, _ = state_look(n)
             w('<a href=%s xlink:href=%s target="_blank" rel="noopener"><g class="%s"><title>%s</title>'
-              '<rect class="box" x="%d" y="%d" width="%d" height="%d" rx="6"/>'
+              '<rect class="box" x="%d" y="%d" width="%d" height="%d" rx="6" style="stroke:%s"/>%s'
               '<text class="id" x="%d" y="%d">%s</text></g></a>'
-              % (quoteattr(url), quoteattr(url), state_class(n), escape(card_tooltip(ident, n)),
-                 x, y, CHIP_W, CHIP_H, x + 9, y + 16, escape(ident)))
+              % (quoteattr(url), quoteattr(url), skind, escape(card_tooltip(ident, n)),
+                 x, y, CHIP_W, CHIP_H, color, state_glyph(skind, color, x + 13, y + 12, 5),
+                 x + 24, y + 16, escape(ident)))
 
     notes = []
     if graph["dropped"]:

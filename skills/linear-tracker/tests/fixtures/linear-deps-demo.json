@@ -42,7 +42,8 @@
     {
      "name": "payments"
     }
-   ]
+   ],
+   "state_color": "#f2c94c"
   },
   {
    "identifier": "DEMO-3",
@@ -111,9 +112,9 @@
   {
    "identifier": "DEMO-7",
    "title": "Admin screen for stuck payments",
-   "state": "unstarted",
+   "state": "started",
    "parent": null,
-   "state_name": "Todo",
+   "state_name": "In Review",
    "assignee": "Alex M.",
    "milestone": "M1 · Payments on staging",
    "labels": [
@@ -125,7 +126,8 @@
      "name": "admin",
      "group": "repo"
     }
-   ]
+   ],
+   "state_color": "#26b37a"
   },
   {
    "identifier": "DEMO-8",
