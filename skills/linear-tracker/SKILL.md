@@ -10,7 +10,13 @@ description: >-
   Stop hook and per-phase templates that follow a spec-kit change in Linear —
   issue at specify, In Progress at the first ticked task, In Review when a PR
   opens — from file, git and PR facts only, asking once per fact and never
-  blocking. `publish` is a verb of the `grievances`
+  blocking. It also draws the dependency graph of a Linear project ("blocks /
+  blocked by" between its issues) as a clickable SVG for humans and exports it
+  as a JSON graph agents can query, with `scripts/linear_deps.py` and a Linear
+  API key read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline
+  whether every issue of one type (every Proof) is blocked by an issue of
+  other types (a development task).
+  `publish` is a verb of the `grievances`
   skill; this skill is one backend that answers it, and it never writes a
   ledger. Use when wiring a repository to a Linear project, when a finding must
   leave a repository and become an issue someone can own, when auditing which
@@ -23,7 +29,9 @@ description: >-
   Triggers on "Linear", "linear.json", "publish a grievance", "tracker",
   "issue from a finding", "which project does this repo belong to",
   "follow a spec in Linear", "spec-kit lifecycle", "ticket type",
-  "Linear template", "proof ticket".
+  "Linear template", "proof ticket", "dependency tree", "dependency graph",
+  "draw Linear tickets", "what blocks this issue", "is every proof blocked",
+  "LINEAR_API_KEY".
 license: Apache-2.0
 tags:
   - hooks
@@ -35,6 +43,16 @@ tags:
 ---
 
 # Linear — the tracker a repository publishes findings to
+
+## At a glance
+
+| Need | Where |
+|---|---|
+| **Draw a project's dependency graph** ("blocks / blocked by"), clickable boxes | `scripts/linear_deps.py URL -o deps.svg` — [Dependency graph](#dependency-graph-of-a-project--svg-for-humans-json-for-agents) |
+| **Query that graph as an agent** (who blocks what, cycles, types) | `--json-out deps.json`, then `linear_deps.py check deps.json --type Proof --blocked-by "Technical task,Feature,Improvement,Bug"` |
+| Pick a ticket type and its template | [Ticket types](#ticket-types--which-issue-to-open-and-its-template) |
+| Publish a grievance as an issue | the publish contract below |
+| Follow a spec-kit change in Linear | the lifecycle hook below |
 
 ## What this skill is, and what it is not
 
@@ -497,6 +515,224 @@ would also stay mute for any tool that writes spec-kit artifacts directly.
 - PR detection through a Bitbucket CLI.
 - Re-asking when `plan.md` changes after its comment.
 
+## Dependency graph of a project — SVG for humans, JSON for agents
+
+Linear stores "blocks / blocked by" between issues, and shows it nowhere as a
+picture: the issue sidebar lists the relations of one issue, and the Timeline
+view draws **projects**, never issues. `scripts/linear_deps.py` fills that gap
+with one read of the project and two outputs:
+
+- **for a human, a clickable SVG** (`-o deps.svg`, always written): issues in
+  columns, blockers on the left, an arrow per blocking link, and **every box a
+  link to its issue**;
+- **for an agent, a JSON graph** (`--json-out deps.json`): every issue with its
+  ticket type, its direct blockers and blocked issues, every relation once, the
+  cycles, and the issues with no dependency. `linear_deps.py check` then answers,
+  offline, "is every issue of type X blocked by at least one issue of type Y?".
+  Reason over that file instead of calling `get_issue` once per issue.
+
+![example: a made-up checkout project](references/linear-deps-demo.svg)
+
+*Open `references/linear-deps-demo.svg` in a browser: the boxes are clickable.*
+
+### Run it
+
+```bash
+export LINEAR_API_KEY=...   # see "The API key" below; never paste it in a chat
+docker run --rm -e LINEAR_API_KEY -v "$PWD":/work -w /work python:3.12-slim \
+  python skills/linear-tracker/scripts/linear_deps.py \
+  "https://linear.app/<workspace>/project/<name>-<slugId>" -o deps.svg --json-out deps.json
+```
+
+Run it from the repository root; adjust the script path if the skill is installed
+elsewhere. `-e LINEAR_API_KEY` forwards the variable without writing its value on
+the command line. Python standard library only; Docker is the execution rule.
+
+| Option | Effect |
+|---|---|
+| `-o FILE` | SVG file (default `deps.svg`) |
+| `--json-out FILE` | also write the JSON graph (see [The JSON graph](#the-json-graph)); independent of the drawing options below |
+| `--include-related` | also draw "related" links, dotted. Off by default: they order nothing |
+| `--external show` | draw issues outside the project as dashed boxes. Default `drop`: the links to them are counted in a footer note |
+| `--hide-isolated` | hide issues without dependency. Default: a strip of clickable chips below the graph |
+| `--no-descriptions` | do not fetch or embed description excerpts (no text in the hover preview, `description_excerpt: null` in the JSON). Use it for an SVG that will be shared: descriptions can be sensitive |
+| `--from-json FILE` | no API call; read the normalized data from FILE (see below) |
+
+### How to read the picture
+
+- **Columns** come from the longest path: an issue sits one column to the right of
+  its furthest blocker. The leftmost issues are what to unblock first.
+- **States follow Linear's own code.** Each card's border and left strip take the
+  colour of its workflow state as the team configured it in Linear (`state.color`),
+  so "In Review" keeps its own green although its type is `started`. The icon next to
+  the identifier mirrors Linear's: dashed circle backlog, empty circle todo,
+  half-filled in progress, filled with a check done, filled with a cross canceled,
+  ringed dot triage. Backlog cards also have a dashed outline; canceled titles are
+  struck through. Offline data without a colour falls back to Linear's defaults per
+  type (backlog `#bec2c8`, unstarted `#e2e2e2`, started `#f2c94c`, completed
+  `#5e6ad2`, canceled `#95a2b3`, triage `#fc7840`).
+- **A legend** under the title lists every state present, by its Linear name, with
+  its icon and colour, then the other markers drawn: hatched boxes with an
+  `external` chip for issues outside the project, solid arrows for "blocks", dotted
+  lines for "related", dashed red for the link that closes a cycle, and the type and
+  label chips. It is built from the same functions as the cards (`state_look`,
+  `state_glyph`), so nothing is drawn without being explained.
+- **Point at a card** and what leads to it stands out at once: its direct blockers
+  and the links into it in full strength, the rest of the chain upstream (blockers
+  of blockers, outside issues included when drawn) a little lighter, everything else
+  faded. Downstream issues are not lit: the question is what stands in the way of
+  this one. The chains are computed when the SVG is generated (a cycle ends, an issue
+  is never its own blocker); the legend's last two lines show the two strengths.
+- **Hover a card for about a second** to get a preview, like Linear's issue peek:
+  state icon, identifier, full title, state · assignee · milestone, type and label
+  chips, and the beginning of the description (about 500 characters, markdown noise
+  stripped). The click still opens the issue. The text is embedded **when the SVG is
+  generated**: the picture never calls Linear when viewed, so it is a snapshot, and
+  it holds the descriptions of the project until you regenerate it with
+  `--no-descriptions`. The preview needs the SVG opened directly in a browser (a
+  small inline script); where scripts are blocked (`<img>` embedding, GitHub's file
+  preview) the native tooltip (`<title>`) still shows the same facts and a shorter
+  excerpt.
+- **A card** shows the identifier, `↳ TT-1970` for the parent issue, the title, then
+  the state name · assignee · milestone, then chips: the ticket type first (bold,
+  bordered), then the other labels as `group/name` (`repo/modelo-hub`). What does not
+  fit ends with `…` or a `+N` chip; the **tooltip** holds everything: full title,
+  state, type, assignee, milestone, parent and every label.
+- A **cycle** (A blocks B blocks A) is reported on stderr and in the SVG; the link
+  that closes it is drawn dashed in red. The run still succeeds: a cycle is data
+  worth showing, not a failure.
+
+### The JSON graph
+
+Made-up sample, trimmed to two nodes and two edges
+(`tests/fixtures/linear-deps-types-fail.json`, exported with `--json-out`):
+
+```json
+{
+ "format": "linear-deps/1",
+ "project": {"name": "Invitations lot, broken (made up)",
+             "url": "https://linear.app/acme/project/invitations-0123456789ab"},
+ "nodes": [
+  {"identifier": "INV-1", "title": "Invitation API", "url": "https://linear.app/acme/issue/INV-1",
+   "external": false, "state": "started", "state_name": null, "state_color": null, "assignee": null,
+   "parent": null, "milestone": null,
+   "type": "Feature", "labels": [{"name": "Feature", "group": "Type"}], "description_excerpt": null,
+   "blocked_by": [], "blocks": ["INV-3"]},
+  {"identifier": "INV-4", "title": "Accept link works on staging", "url": "https://linear.app/acme/issue/INV-4",
+   "external": false, "state": "unstarted", "state_name": null, "state_color": null, "assignee": null,
+   "parent": null, "milestone": null,
+   "type": "Proof", "labels": [{"name": "Proof", "group": "Type"}], "description_excerpt": null,
+   "blocked_by": ["INV-5"], "blocks": []}
+ ],
+ "edges": [
+  {"from": "INV-1", "to": "INV-3", "type": "blocks"},
+  {"from": "INV-5", "to": "INV-4", "type": "blocks"}
+ ],
+ "cycles": [],
+ "no_dependency": ["INV-6"]
+}
+```
+
+- **`edges`**: one per relation. A `blocks` on A and the inverse "blocked by" on B
+  are one edge, `from` blocks `to`. `related` and `similar` are an unordered pair
+  (sorted `from`/`to`), `duplicate` keeps its direction.
+- **`type`**: the label of the workspace label group **Type** of
+  [`references/ticket-types.md`](references/ticket-types.md); failing that, a label
+  named like one of the eight types (`proof`, `technical-task`); else `null`.
+- **Outside issues** linked to the project are nodes too, `"external": true`, with
+  their type when Linear returned their labels, and `state`/`parent` `null`.
+  The drawing drops them by default; the JSON never does.
+- **`description_excerpt`**: the beginning of the description as plain text (about
+  500 characters, cut on a word with `…`), or `null` with `--no-descriptions`. Enough
+  to tell what an issue is about without a `get_issue` per node.
+- **`cycles`**: each loop of `blocks` links, as the sorted list of its issues.
+- **`no_dependency`**: project issues with no `blocks` link either way, outside
+  links included. It can be shorter than the SVG's strip, which ignores dropped
+  outside links.
+
+### Checking a typing rule — `linear_deps.py check`
+
+```bash
+docker run --rm -v "$PWD":/work -w /work python:3.12-slim \
+  python skills/linear-tracker/scripts/linear_deps.py check deps.json \
+  --type Proof --blocked-by "Technical task,Feature,Improvement,Bug"
+```
+
+Every project issue of `--type` must be blocked by at least one issue whose type is
+in `--blocked-by` (repeatable or comma-separated; names compare case- and
+dash-insensitively). `--open-only` skips completed and canceled issues. Output on
+the same made-up fixture:
+
+```text
+FAIL     INV-4  https://linear.app/acme/issue/INV-4  [unstarted] Accept link works on staging  blocked by INV-5 (Question)
+FAIL     INV-6  https://linear.app/acme/issue/INV-6  [completed] Old proof, done  no blocker
+UNKNOWN  INV-7  https://linear.app/acme/issue/INV-7  [unstarted] Resend works on staging  blocked by OUT-1 (type unknown)
+4 Proof issue(s) checked against Technical task / Feature / Improvement / Bug: 1 ok, 2 fail, 1 unknown
+```
+
+`UNKNOWN` means no qualifying blocker was found but at least one blocker has no
+readable type: open it before calling it a violation. Exit code 0 when every issue
+passes, 1 otherwise. When no issue has `--type`, a note on stderr lists the types
+present, so a misspelt type is not read as "all good".
+
+### The API key — where it comes from, where it lives
+
+The script talks to Linear's GraphQL API directly. It does **not** reuse the MCP
+server's session, so it needs a credential of its own: a **personal API key**.
+
+- **Create it:** Linear → Settings → Account → Security & access → API keys
+  ([API and webhooks](https://linear.app/docs/api-and-webhooks)). A workspace admin
+  may switch off member-created keys (Settings → Administration → API), in which case
+  an admin has to create it.
+- **Scope it down:** the script only reads. Give the key the **Read** permission and,
+  if the workspace offers it, limit it to the teams of the project.
+- **Hold it:** in the shell or the secret store of the person running the command, as
+  `LINEAR_API_KEY`. Never in a file of the repository, never in `.linear.json`
+  (that file records the *command* that retrieves a credential, never its value),
+  never in a chat. The script never prints it: an unreachable API or a refusal shows
+  the HTTP status or Linear's message, and a test pins it.
+- **Not set?** Do not ask for it in the conversation. Give the command above and stop,
+  or use the MCP fallback below.
+
+### What it queries
+
+One paginated GraphQL query per page of 25 issues, with at most 10 labels, 25
+`relations` and 25 `inverseRelations` each, well under Linear's complexity limit of
+10000; then one query per 50 outside issues for their labels, so an outside blocker
+still has a type. Only `blocks` relations are drawn as dependencies. `inverseRelations`
+is what catches a blocker that lives **outside** the project: a relation is stored
+once, on its source issue. The drawing ignores `duplicate` and `similar`; the JSON
+keeps them. A warning names any issue that has more relations than one page returns.
+
+### Without a key — the MCP fallback
+
+The same picture can be drawn from the Linear MCP, which needs no key, at the price of
+one call per issue:
+
+1. `list_issues` with `project` → every issue, with `parentId` and its labels.
+2. `get_issue` with `fields: ["relations"]` **for every issue**, not only the parents.
+   Reading only the parents of a 49-issue project missed 4 blocking links that sat on
+   sub-issues (a question to a partner blocking two tasks, for instance).
+3. Write the normalized file and run with `--from-json`:
+
+```json
+{
+  "project": {"name": "Checkout redesign"},
+  "issues": [{"identifier": "DEMO-2", "title": "...", "state": "started", "parent": null,
+              "state_name": "In Review", "state_color": "#0f783c", "assignee": "Sam K.", "milestone": null, "labels": [{"name": "Proof", "group": "Type"}]}],
+  "relations": [{"type": "blocks", "from": "DEMO-1", "to": "DEMO-2"}],
+  "external": {"OTHER-77": "title of an issue outside the project"},
+  "external_labels": {"OTHER-77": [{"name": "Technical task", "group": "Type"}]}
+}
+```
+
+`state` is the Linear state type (`unstarted`, `started`, `completed`, `canceled`).
+`state_name`, `state_color`, `assignee`, `milestone`, `labels`, `external_labels` and
+`description` (raw markdown, or an already cut `description_excerpt`) are optional (without them `type` is
+`null`); a label may also be a bare name. A `{"type": "blocked_by", ...}` row is read
+as the inverse `blocks`. `tests/fixtures/linear-deps-demo.json` and
+`linear-deps-types-pass.json` are complete examples.
+
 ## Ticket types — which issue to open, and its template
 
 Status: **proposal**. Eight types, picked by asking eight questions in order and
@@ -537,6 +773,7 @@ Three rules carry most of the weight:
 | Deciding a finding may leave the repository | The `grievances` boundary and promotion rules |
 | Writing `specs/GRIEVANCES.md` | The `grievances` CLI, exclusively |
 | Holding a Linear token | The MCP server configuration, per machine, never committed |
+| Holding the API key `linear_deps.py` reads | The shell or secret store of the person running it, as `LINEAR_API_KEY`; never a file of the repository |
 | Choosing a project when the config has none | A human, once, in `.linear.json` |
 | Mirroring every record into Linear | Nothing. A mirror is two homes for one fact, and they drift |
 | Deciding what a repository's Linear project is called | The team, in the tracker |
@@ -566,6 +803,42 @@ Three rules carry most of the weight:
   artifact: record the *command* that retrieves a credential, never its value.
 
 ## Implementation Status
+
+**Dependency graph — built, tested offline and against a stub server, run once
+against a live project** (2026-11-09; JSON export, `check`, legend and richer cards
+2026-11-10):
+
+- `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
+  `tests/run-linear-deps-in-docker.sh`, four made-up fixtures, one sample SVG.
+- 51 tests in Docker. The upstream chains: direct and transitive blockers, outside
+  blockers only when drawn, a cycle that ends without listing the issue itself, the
+  chains and edge ends embedded in the SVG, and the highlight still present with
+  `--no-descriptions`. The excerpt strips markdown noise and cuts on a word; every
+  linked box has preview data; a description containing `]]>` or `</script>` cannot
+  break out of the embedded data; `--no-descriptions` removes the text from the SVG
+  and the JSON. The hover itself (highlight, preview delay, placement, reset on leave, dark
+  and light) was checked by hand in a browser, not by a test. The legend names every state drawn and only those; the colour
+  comes from Linear, then from the type, and a malformed colour is refused; outline
+  and icon follow the state type; outside issues are hatched, not dashed; a card
+  carries type, labels, state, assignee and milestone; overflowing chips end with a
+  count. The JSON export: its shape, a `blocks` and its inverse
+  `blocked_by` as one edge, `related` both ways as one edge, outside issues kept with
+  their type, the type read from the Type group or a bare label name, whole cycles,
+  and the CLI writing both files. `check`: one passing fixture, one failing fixture
+  (a Proof blocked by a Question, one with no blocker, one blocked by an outside issue
+  of unknown type), `--open-only`, and the note when the type is absent. The rest: layering by longest path, cycles, external links, every box
+  linking to `https://linear.app/<workspace>/issue/<ID>`, XML escaping, the key never
+  printed, and the live path against a local stub server (two pages, deduplicated
+  relations, the key only in the `Authorization` header). A mutation that breaks the
+  issue URL turns two tests red.
+- Live run (2026-11-10) on a real 53-issue project with `--external show`: 56 blocking
+  links, no cycle, 12 issues without dependency, 9 outside issues; the schema fields
+  (`slugId` lookup, `inverseRelations`, `labels { parent }`, `projectMilestone`,
+  `assignee`, `state.color`, the outside-issue lookup by `id: {in: ...}`) and the
+  `Authorization: <key>` header all answered. Not measured: how close the queries come
+  to the complexity limit on a project with many relations per issue. The first live run settles them.
+- The first hand-drawn graph this script generalizes covered a real 49-issue project;
+  its data is not committed here (fixtures are made up).
 
 **Lifecycle hook — built and tested on a fixture, never run against Linear**
 (2026-10-28):
@@ -614,6 +887,9 @@ priority scale, the label names and the team's initial state.
 
 ## See also
 
+- Linear docs: [Issue relations](https://linear.app/docs/issue-relations),
+  [Project dependencies](https://linear.app/docs/project-dependencies) (projects, drawn
+  on the Timeline), [API and webhooks](https://linear.app/docs/api-and-webhooks) (API keys).
 - [`grievances`](../grievances/SKILL.md) — the ledger, the record, the boundary
   rules that decide whether a finding may leave, and the owner of the `publish`
   verb this skill answers.

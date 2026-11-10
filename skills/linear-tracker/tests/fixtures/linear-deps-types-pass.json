@@ -1,0 +1,25 @@
+{
+ "project": {"name": "Invitations lot (made up)"},
+ "issues": [
+  {"identifier": "INV-1", "title": "Invitation API", "state": "completed", "parent": null, "milestone": "Staging: invitations",
+   "labels": [{"name": "Feature", "group": "Type"}]},
+  {"identifier": "INV-2", "title": "Upgrade the mailer library", "state": "completed", "parent": null, "milestone": "Staging: invitations",
+   "labels": [{"name": "Technical task", "group": "Type"}, {"name": "backend", "group": null}]},
+  {"identifier": "INV-3", "title": "Invite e-mail arrives on staging", "state": "unstarted", "parent": null, "milestone": "Staging: invitations",
+   "labels": [{"name": "Proof", "group": "Type"}]},
+  {"identifier": "INV-4", "title": "Accept link works on staging", "state": "unstarted", "parent": null, "milestone": "Staging: invitations",
+   "labels": ["proof"]},
+  {"identifier": "INV-5", "title": "Which sender address do we use?", "state": "started", "parent": null,
+   "labels": [{"name": "Question", "group": "Type"}]}
+ ],
+ "relations": [
+  {"type": "blocks", "from": "INV-1", "to": "INV-3"},
+  {"type": "blocked_by", "from": "INV-3", "to": "INV-1"},
+  {"type": "blocks", "from": "INV-2", "to": "INV-3"},
+  {"type": "blocks", "from": "CORE-9", "to": "INV-4"},
+  {"type": "related", "from": "INV-5", "to": "INV-1"},
+  {"type": "related", "from": "INV-1", "to": "INV-5"}
+ ],
+ "external": {"CORE-9": "Shared token service"},
+ "external_labels": {"CORE-9": [{"name": "technical-task", "group": "type"}]}
+}
