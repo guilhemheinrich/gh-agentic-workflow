@@ -2,8 +2,9 @@
 name: linear-tracker
 description: >-
   Use Linear as the tracker a repository publishes findings to, through the
-  Linear MCP. Covers the per-repository configuration that names a team and a
-  project (`.linear.json`), the mapping from a grievance record to a Linear
+  Linear MCP. Covers how a repository knows its Linear team (`team` in the
+  lifecycle `phases.json`) and why the project is never a repository property
+  (it is given per call, or recorded per spec), the mapping from a grievance record to a Linear
   issue and the two mappings that silently corrupt data if taken literally, the
   publish contract this skill answers on behalf of the `grievances` skill, and
   read-only triage across a workspace. It also installs, once, a repo-local advisory
@@ -26,8 +27,8 @@ description: >-
   picks one, and a workspace template body for each. Use it too when choosing
   which ticket type to open, telling a Question from a Blocker, proving a
   merged lot on an environment, or drafting Linear templates.
-  Triggers on "Linear", "linear.json", "publish a grievance", "tracker",
-  "issue from a finding", "which project does this repo belong to",
+  Triggers on "Linear", "phases.json", "publish a grievance", "tracker",
+  "issue from a finding", "which project does this spec belong to",
   "follow a spec in Linear", "spec-kit lifecycle", "ticket type",
   "Linear template", "proof ticket", "dependency tree", "dependency graph",
   "draw Linear tickets", "what blocks this issue", "is every proof blocked",
@@ -111,7 +112,8 @@ workflow.
 | The record: id, short, severity, impact, `×N` | `grievances` |
 | Writing anything into `specs/GRIEVANCES.md` | `grievances`, exclusively |
 | The `publish` verb, and when it runs | `grievances` |
-| Which team and project this repository publishes to | **this skill** (`.linear.json`) |
+| Which team this repository files in | **this skill** (`team` in `phases.json`, or `--team`) |
+| Which project an issue goes to | the **caller**: the pilot's charter or brief, else a human (never the repository) |
 | Turning a record into an issue | **this skill** |
 | Talking to the Linear MCP | **this skill** |
 | The reference returned, and its format | **this skill** |
@@ -211,48 +213,46 @@ routine work, and the severity is lost in the framing. **Refuse, and say which
 rule applies.** The correct destination is decided in the grievances skill,
 before this one is called.
 
-## Configuration — how a repository knows its Linear root
+## Configuration — where the team lives, and why the project does not
 
-**File: `<repo>/.linear.json`.** Committed. Override the path with
-`LINEAR_CONFIG`.
+There is **no repository-level Linear config file.** The old `.linear.json`
+(one repository → one team and one project) is gone: a monorepo holds several
+Linear projects, and two pilots on two projects would route each other's issues
+into the wrong one. To migrate, move its `team` into `phases.json`
+(`install-lifecycle.sh <repo> --team NAME`), give each spec its `project` (below),
+pass `--project` to `grievances.py publish`, and delete `.linear.json`.
 
-```json
-{
-  "team": "Tiger Team",
-  "project": "Broker PA · Run & évolutions — courant",
-  "labels": ["modelo-broker-pa"]
-}
-```
-
-| Key | Required | Meaning |
+| Fact | Lives in | Why there |
 |---|---|---|
-| `team` | yes | The Linear team that owns published issues. |
-| `project` | yes | The project they are attached to. **No default, no guess.** |
-| `labels` | no | Labels applied to every published issue, on top of the record's own tags. |
+| **Linear is on here, and which team** | `team` in `.claude/linear/phases.json` (committed, written by `install-lifecycle.sh --team`) | The Stop hook is bash: it cannot call MCP and cannot read a pilot's charter. It needs a local, offline signal. A non-empty `team` arms the hook; absent or empty, the hook is silent and the repository keeps its findings locally. |
+| **Which project** | `"project"` at the top of `specs/NNN-slug/linear.json`, or `--project` on a grievance publish | The project follows the work, never the repository. Written by the pilot or the brief before the spec exists, or by `linear-record.sh <spec-dir> project NAME`. |
+| **Which issue** | the same log, `created` / `linked` events | Once an issue exists, later phases need no project at all. |
+| **Credentials** | the Linear MCP server's own configuration, or `LINEAR_API_KEY` in the shell, per machine | Never in a repository file. |
 
-**Five rules, each with a reason:**
+**Rules, each with a reason:**
 
-1. **It is committed.** A fresh clone must publish to the same place as the
-   machine it was cloned from. A config that lives in one developer's home
-   directory routes the same repository to two projects.
-2. **It holds no credential.** Not a token, not a key, not a URL carrying one.
-   Authentication belongs to the MCP server's own configuration, which is
-   per-machine and never committed. A `.linear.json` containing a secret is a
-   committed secret.
-3. **It is readable without any Linear access.** An agent with no network can
-   still answer "which project does this repository publish to?". That is what
-   makes an audit possible offline.
-4. **Its absence is a valid state, and it means "do not publish".** No
-   configuration is not an error and not a warning. It is a repository that
-   keeps its findings locally.
-5. **A missing `project` refuses the publish.** Guessing a project from the
-   repository name puts findings in the wrong board, where nobody who could act
-   on them will look. Refuse and name the missing key.
+1. **The team is committed, the project is not a repository fact.** A fresh
+   clone must file in the same team; but the same repository legitimately
+   serves several projects.
+2. **No credential in any committed file.** `phases.json` holds a team name and
+   switches, nothing else.
+3. **The team is readable without any Linear access**, so an audit works offline.
+4. **No project means no creation.** An empty project is a trap: the hook would
+   arm, mark its fact as asked and ask for `project ""`; once the projects
+   exist, that spec would never be asked again. The hook therefore never emits
+   an empty or guessed project (see the lifecycle section), and
+   `grievances.py publish --prepare` refuses without `--project`.
+5. **Where does the agent learn the project?** In this order: the spec's log,
+   its session brief or charter, a search of the team for an existing issue to
+   link, and otherwise a human. Never the repository name.
 
-**The mapping is not derivable, which is why it is written down.** A repository
+`LINEAR_CONFIG=PATH` still overrides the `phases.json` both the hook and
+`grievances.py` read (it is a path to that file, not a second config).
+
+**The mapping is not derivable, which is why it is never inferred.** A repository
 does not name its project; the relation is neither one-to-one nor stable. Two
-repositories can share a project, and one repository's findings can belong to a
-project named after a product rather than after the code.
+repositories can share a project, one repository can serve several, and a
+project may be named after a product rather than after the code.
 
 ## The mapping — a record to an issue
 
@@ -328,8 +328,9 @@ grievances.py publish GRV-worker-hosted-api-scale --prepare --json
 grievances.py publish GRV-worker-hosted-api-scale --record TT-412 --url "https://linear.app/…"
 ```
 
-1. **Read `.linear.json`.** Absent → `status: not-configured`, exit 0. This is
-   not a failure.
+1. **Resolve team and project.** `--project NAME` is required: absent →
+   refusal, nothing guessed. The team is `--team`, else `team` in
+   `.claude/linear/phases.json`, else refusal. Both refusals name the flag.
 2. **Read the record** — the JSON header plus the prose body.
 3. **Check the binding.** A `linear:` tag already present → `already-published`,
    exit 0. Publishing twice makes two issues nobody reconciles.
@@ -375,26 +376,32 @@ configuration beyond the MCP itself, and changes nothing.
 
 **This is a second job, separate from publishing.** Publishing sends one finding
 out. The lifecycle keeps one Linear issue in step with one spec-kit change,
-`specs/NNN-slug/`, from its spec to its pull request. It shares `.linear.json`
-with publishing and nothing else; the grievance contract above is unchanged.
+`specs/NNN-slug/`, from its spec to its pull request. It shares only the team (`team` in `phases.json`)
+with publishing; the grievance contract above is unchanged.
 
 **It is a hook factory.** `scripts/install-lifecycle.sh` copies a hook and
 templates into the consumer repository once. From then on the repository owns
 them, edits them freely, and depends on nothing in this skill.
 
 ```bash
-bash skills/linear-tracker/scripts/install-lifecycle.sh /path/to/consumer-repo
+bash skills/linear-tracker/scripts/install-lifecycle.sh /path/to/consumer-repo --team "Tiger Team"
 ```
+
+The consumer is Claude Code only: files go under `.claude/` and the Stop entry
+runs `"$CLAUDE_PROJECT_DIR/.claude/hooks/linear-lifecycle.sh"`. `--team` writes
+`"team"` into `phases.json` (also into one that already exists); that field is
+the switch that arms the hook. Installed without a team, the hook stays silent.
 
 | Installed path | Role | Committed |
 |---|---|---|
-| `.agents/hooks/linear-lifecycle.sh` | The Stop hook: gathers facts, asks once per fact | yes |
-| `.agents/hooks/linear-record.sh` | Appends an event to a spec's log | yes |
-| `.agents/linear/phases.json` | Phase switches, state names (EN + FR), duplicate-search size | yes |
-| `.agents/linear/*.md` | One template per phase | yes |
+| `.claude/hooks/linear-lifecycle.sh` | The Stop hook: gathers facts, asks once per fact | yes |
+| `.claude/hooks/linear-record.sh` | Appends an event to a spec's log | yes |
+| `.claude/linear/phases.json` | **`team` (arms the hook)**, phase switches, state names (EN + FR), duplicate-search size | yes |
+| `.claude/linear/*.md` | One template per phase | yes |
 | `.claude/settings.json` | One `Stop` entry, merged once | yes |
-| `specs/NNN-slug/linear.json` | The spec's event log: `created`, `linked`, `in_progress`, `in_review`, `unavailable` | yes |
+| `specs/NNN-slug/linear.json` | The spec's `project` and its event log: `created`, `linked`, `in_progress`, `in_review` | yes |
 | `<git-common-dir>/linear-lifecycle/asked.json` | Fact keys already asked | no — inside `.git/`, shared by every worktree |
+| `<git-common-dir>/linear-lifecycle/unavailable.json` | Specs marked "no Linear connector here", with a timestamp | no — same place, expires |
 
 Existing files are kept on re-install; `--force` overwrites them. The hook needs
 bash, jq and git; `gh` is optional and only feeds the PR phase.
@@ -407,10 +414,27 @@ folder with uncommitted files.
 
 | Phase | Fact | Key (asked once) | Asks the agent to | Then records |
 |---|---|---|---|---|
-| specify | `spec.md` exists; the log has no `created`/`linked` | `specify:<slug>` | search issues by title (≤ 20 candidates), show a possible duplicate and ask, else render `specify.issue.md` and `save_issue` | `created ID URL` or `linked ID URL` |
+| specify (project known) | `spec.md` exists; the log has no `created`/`linked` and has a `project` | `specify:<slug>` | search issues by title (≤ 20 candidates), show a possible duplicate and ask, else render `specify.issue.md` and `save_issue` in the spec's project | `created ID URL` or `linked ID URL` |
+| specify (project unknown) | same, but the log has no `project` | `specify-project:<slug>` | create nothing. Search the team for an issue to link; else take the project from the session brief or charter; else ask the human | `linked ID URL`, or `project NAME` |
 | implement | ≥ 1 `- [x]` in `tasks.md`; no `in_progress` | `implement:<slug>` | move the issue to In Progress / En cours, comment `implement.comment.md` | `in_progress ID` |
 | pr-open | `gh pr view <branch>` says `OPEN`; no `in_review` | `pr-open:<slug>:<pr>` | move the issue to In Review / En revue, comment `pr-open.comment.md` with the link | `in_review ID PR-URL` |
-| — | the agent has no Linear MCP tool | — | run `linear-record.sh <spec> unavailable` | `unavailable`: the hook stays silent for that spec |
+| — | the agent has no Linear MCP tool | — | run `linear-record.sh <spec> unavailable` | local mark, 4 h TTL: the hook stays silent for that spec on this machine |
+
+**Why two keys for specify.** A fact key is consumed when the hook asks. If the
+create reminder were consumed while the project is still unknown, the agent
+could defer (nothing to create into) and the reminder would never come back.
+So the "find a project" reminder has its own key, and `specify:<slug>` is only
+consumed when the hook can actually ask for a creation, i.e. once a project is
+recorded. A pilot or brief that records the project before `spec.md` exists
+skips the first reminder entirely.
+
+**Why `unavailable` is local and expires.** It used to be an event in the
+committed log, so one session without the Linear MCP silenced a spec on every
+machine, forever. It now lives in `<git-common-dir>/linear-lifecycle/` next to
+`asked.json`, keyed by spec, and expires after 4 hours
+(`LINEAR_LIFECYCLE_UNAVAILABLE_TTL`, seconds). A TTL rather than a session
+scope because `linear-record.sh` runs from the agent's shell and has no session
+id. `unavailable` events already present in committed logs are ignored.
 
 Example: on branch `042-webhook-202` the agent writes
 `specs/042-webhook-202/spec.md`. At the end of that turn the hook asks for the
@@ -433,7 +457,7 @@ you pick up the implementation.
    asks you and records `linked`. If the title differs, link it yourself:
 
    ```bash
-   .agents/hooks/linear-record.sh specs/042-webhook-202 linked TT-412 https://linear.app/acme/issue/TT-412
+   .claude/hooks/linear-record.sh specs/042-webhook-202 linked TT-412 https://linear.app/acme/issue/TT-412
    ```
 
 From there the hook catches up one phase per stop: ticked tasks ask for In
@@ -488,10 +512,11 @@ merge.
 2. **Its only output is `{"decision":"block","reason":…}` on `Stop`.** On a Stop
    hook that means "take one more turn". It refuses nothing.
 3. **One ask per fact key, ever.** The key is written before the ask, so an
-   ignored ask is not repeated. A new PR number is a new fact.
+   ignored ask is not repeated. Never before the hook can act on the fact (no
+   project: see the two specify keys). A new PR number is a new fact.
 4. **Silent when the turn ended on a question**, and the key stays unconsumed so
-   the fact is asked at a later stop. Silent on `stop_hook_active`, without
-   `.linear.json`, after `unavailable`, and on any missing tool.
+   the fact is asked at a later stop. Silent on `stop_hook_active`, without a
+   `team` in `phases.json`, while a local `unavailable` mark is fresh, and on any missing tool.
 5. **Facts only.** File presence, ticked-box count, branch, PR state, the log.
    Never the quality or completeness of a document: that is a judgement, and
    deterministic checks of it proved too heavy and too brittle.
@@ -687,9 +712,7 @@ server's session, so it needs a credential of its own: a **personal API key**.
 - **Scope it down:** the script only reads. Give the key the **Read** permission and,
   if the workspace offers it, limit it to the teams of the project.
 - **Hold it:** in the shell or the secret store of the person running the command, as
-  `LINEAR_API_KEY`. Never in a file of the repository, never in `.linear.json`
-  (that file records the *command* that retrieves a credential, never its value),
-  never in a chat. The script never prints it: an unreachable API or a refusal shows
+  `LINEAR_API_KEY`. Never in a file of the repository, never in a chat. The script never prints it: an unreachable API or a refusal shows
   the HTTP status or Linear's message, and a test pins it.
 - **Not set?** Do not ask for it in the conversation. Give the command above and stop,
   or use the MCP fallback below.
@@ -774,7 +797,8 @@ Three rules carry most of the weight:
 | Writing `specs/GRIEVANCES.md` | The `grievances` CLI, exclusively |
 | Holding a Linear token | The MCP server configuration, per machine, never committed |
 | Holding the API key `linear_deps.py` reads | The shell or secret store of the person running it, as `LINEAR_API_KEY`; never a file of the repository |
-| Choosing a project when the config has none | A human, once, in `.linear.json` |
+| Choosing a project | The pilot's charter or brief; else a human, once, recorded on the spec (`linear-record.sh … project NAME`) |
+| Deciding what team a repository files in | `phases.json` (`install-lifecycle.sh --team`) |
 | Mirroring every record into Linear | Nothing. A mirror is two homes for one fact, and they drift |
 | Deciding what a repository's Linear project is called | The team, in the tracker |
 
@@ -788,19 +812,24 @@ Three rules carry most of the weight:
 - **Copying `status` into `state`.** Creates issues that are already closed.
 - **Publishing without the provenance header.** The id, the declaration date and
   `×N` have no field of their own; omitted, they are gone.
-- **Guessing a project from the repository name.** Findings land on a board
-  nobody who could act on them watches.
+- **Guessing a project from the repository name, or from the repository.**
+  Findings land on a board nobody who could act on them watches. A repository
+  has no project; a spec does.
+- **Creating an issue with `project ""`.** The hook never asks for it, and a
+  hand-written call must not either.
+- **Committing "Linear is unavailable".** It is a fact about one machine and one
+  moment. Keep it in the local state dir, with an expiry.
 - **Publishing on every declaration.** Declaration must stay cheap — local, no
   network, no audience — or fewer findings get declared, which is the failure
   the ledger exists to prevent. Publishing is a separate, later, deliberate act.
-- **Treating "not configured" as an error.** A repository without Linear is
-  working normally.
+- **Treating "no team in `phases.json`" as an error.** A repository without
+  Linear is working normally; the hook is silent.
 - **A silent failure.** A publish that reports success while creating nothing
   loses the finding and the trust in the mechanism at once.
 - **Publishing a security or regulatory finding as routine work.** It was never
   a grievance; the framing hides the severity.
-- **Committing a token in `.linear.json`.** Same rule as every other committed
-  artifact: record the *command* that retrieves a credential, never its value.
+- **Committing a token in `phases.json` or a spec log.** Credentials live in the
+  MCP server's configuration or in `LINEAR_API_KEY`, never in the repository.
 
 ## Implementation Status
 
@@ -847,12 +876,13 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
   `templates/hooks/linear-record.sh`, three templates and `phases.json`.
 - `tests/lifecycle.test.sh` runs the **installed** copy in a fixture repository,
   through `bash skills/linear-tracker/tests/run-in-docker.sh` (alpine + bash +
-  jq + git, gh stubbed). 37 checks: no run emits a deny, exactly 6 asks over the
-  whole scenario, a hand-linked takeover catching up on In Progress, the
-  no-regression guard and the sub-issue step in every state-move ask, silence on a question, on `stop_hook_active`, without
-  `.linear.json` and after `unavailable`, keys shared across worktrees,
-  idempotent install that keeps edited templates. The PR-phase run measured
-  under 200 ms. A mutation that makes the hook emit a deny turns the
+  jq + git, gh stubbed). 55 checks: no run emits a deny, exactly 10 asks over the
+  whole scenario, silence without a `team`, no `project ""` and an unconsumed
+  create reminder when the project is unknown, two specs routed to two
+  projects, a local expiring `unavailable` that never touches the committed
+  log, a hand-linked takeover catching up on In Progress, the
+  no-regression guard and the sub-issue step in every state-move ask, silence on a question, on `stop_hook_active`, keys shared across worktrees,
+  idempotent install that keeps edited templates. The PR-phase run is budgeted at 200 ms (a slow machine may exceed it; the check fails identically on the previous version). A mutation that makes the hook emit a deny turns the
   suite red.
 - Not verified: the Linear MCP calls the hook asks for, and state names in a
   live workspace.
@@ -862,15 +892,16 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
 **Built and exercised** — `../grievances/scripts/grievances.py`, subcommand
 `publish` (2026-09-23):
 
-- `--prepare` reads `.linear.json`, validates it, builds the issue payload and
-  returns one of `prepared` / `not-configured` / `already-published`. It writes
-  nothing.
+- `--prepare` takes `--project` (required) and `--team` (else `team` in
+  `phases.json`), builds the issue payload and returns `prepared` or
+  `already-published`; it refuses, loudly, without a project or a team. It
+  writes nothing. (The former `not-configured` status no longer exists.)
 - `--record <REF>` writes the `linear:<REF>` tag and a `published` log line.
 - 19 unit tests cover it, inside the suite's 75. Run them the documented way:
   `docker run --rm -v "$PWD:/repo" -w /repo/skills/grievances/scripts
   python:3.12-alpine python3 -m unittest`.
 - Exercised end to end in a throwaway repository: `init` → `add` → `bump ×2` →
-  `publish --prepare` with no config (`not-configured`, exit 0) → with a config
+  `publish --prepare` (refused without `--project`) → with `--project` and a team
   (payload, priority 2, `×3` in the header) → `--record TT-412` → the same
   `--record` again (`already-recorded`) → `--record TT-999` (refused without
   `--force`). The rewritten ledger reloads, and the header keys stay inside the
@@ -881,7 +912,7 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
 displayed **Resolved** for a finding nothing had resolved. A test now pins it.
 
 **Not verified: every Linear-side claim.** No issue has been created through this
-skill, no `.linear.json` exists in any repository of the fleet, and the mapping
+skill, and the mapping
 has never met a live workspace. The first real publish is what proves the
 priority scale, the label names and the team's initial state.
 

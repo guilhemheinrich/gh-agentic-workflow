@@ -163,9 +163,8 @@ class Backend:
     """A tracker a repository can publish to."""
 
     name: str
-    config_basename: str
-    config_env: str
-    required_keys: tuple[str, ...]
+    phases_relpath: str  # the consumer's lifecycle file, whose `team` is the fallback
+    phases_env: str
     ref_re: re.Pattern[str]
     ref_example: str
 
@@ -177,9 +176,8 @@ class Backend:
 BACKENDS: dict[str, Backend] = {
     "linear": Backend(
         name="linear",
-        config_basename=".linear.json",
-        config_env="LINEAR_CONFIG",
-        required_keys=("team", "project"),
+        phases_relpath=".claude/linear/phases.json",
+        phases_env="LINEAR_CONFIG",
         # Linear issue identifiers: a team key, a hyphen, a counter — `TT-412`.
         ref_re=re.compile(r"^[A-Z][A-Z0-9]{1,9}-\d+$"),
         ref_example="TT-412",
@@ -191,9 +189,6 @@ DEFAULT_BACKEND = "linear"
 # four severities map onto 1-4 and never onto 0 — an issue with no priority
 # sorts below everything and is read by nobody.
 SEVERITY_TO_PRIORITY = {"critical": 1, "high": 2, "medium": 3, "low": 4}
-
-# A committed config carrying one of these keys is a committed secret.
-SECRETISH_RE = re.compile(r"token|secret|password|api[-_]?key|credential", re.IGNORECASE)
 
 # Tags suggesting the finding never belonged in the ledger at all (see the
 # skill's boundary table). They produce a WARNING and never a refusal: whether a
@@ -913,45 +908,47 @@ def emit(payload: dict[str, Any], as_json: bool, human: str) -> None:
 # ── Tracker helpers (shared with the tracker-adapter skills) ───────────────
 
 
-def resolve_config_path(args: argparse.Namespace, backend: Backend) -> Path:
-    """Where this repository declares which project it publishes to."""
-    if getattr(args, "config", None):
-        return Path(args.config).expanduser().resolve()
-    env = os.environ.get(backend.config_env)
+def phases_path(args: argparse.Namespace, backend: Backend) -> Path:
+    """The consumer's lifecycle file (`phases.json`), the only repository-level Linear file."""
+    if getattr(args, "phases", None):
+        return Path(args.phases).expanduser().resolve()
+    env = os.environ.get(backend.phases_env)
     if env:
         return Path(env).expanduser().resolve()
     repo = Path(getattr(args, "repo", None) or ".").expanduser().resolve()
     root = git_root(repo) or repo
-    return root / backend.config_basename
+    return root / backend.phases_relpath
 
 
-def load_tracker_config(path: Path, backend: Backend) -> dict[str, Any]:
-    """Read and validate a backend's committed configuration."""
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise UserError(f"{path}: invalid JSON: {exc}") from exc
-    except OSError as exc:
-        raise UserError(f"{path}: cannot be read: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise UserError(f"{path}: expected a JSON object, got {type(raw).__name__}")
-    leaked = sorted(k for k in raw if SECRETISH_RE.search(k))
-    if leaked:
+def resolve_team(args: argparse.Namespace, backend: Backend) -> tuple[str, str]:
+    """(team, where it came from): `--team`, else `team` in phases.json, else refuse."""
+    if getattr(args, "team", None):
+        return args.team.strip(), "--team"
+    path = phases_path(args, backend)
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise UserError(f"{path}: cannot be read as JSON: {exc}") from exc
+        team = raw.get("team") if isinstance(raw, dict) else None
+        if isinstance(team, str) and team.strip():
+            return team.strip(), str(path)
+    raise UserError(
+        f"no {backend.name} team: pass --team NAME, or install the lifecycle hook with "
+        f"`install-lifecycle.sh <repo> --team NAME` so that {path} carries one"
+    )
+
+
+def resolve_project(args: argparse.Namespace, backend: Backend) -> str:
+    """The project is never read from the repository: a monorepo holds several."""
+    project = (getattr(args, "project", None) or "").strip()
+    if not project:
         raise UserError(
-            f"{path} carries {', '.join(leaked)} and this file is committed. "
-            f"Authentication belongs to the {backend.name} MCP server configuration, per machine"
+            f"no {backend.name} project: pass --project NAME. A repository does not own a project, "
+            "so none is guessed from it; take the name from your charter or brief, or ask the human. "
+            "A project guessed from the repository name files findings on a board nobody who could act on them watches"
         )
-    missing = [k for k in backend.required_keys if not raw.get(k)]
-    if missing:
-        raise UserError(
-            f"{path}: missing required key(s): {', '.join(missing)}. "
-            "Name them by hand: a project guessed from the repository name files findings "
-            "on a board nobody who could act on them watches"
-        )
-    labels = raw.get("labels") or []
-    if not isinstance(labels, list) or any(not isinstance(x, str) for x in labels):
-        raise UserError(f"{path}: 'labels' must be a list of strings")
-    return raw
+    return project
 
 
 def binding_tag(backend: Backend, ref: str) -> str:
@@ -999,7 +996,9 @@ def provenance_header(grievance: Grievance) -> str:
     return "\n".join(lines)
 
 
-def build_issue(grievance: Grievance, prose: str, config: dict[str, Any], backend: Backend) -> dict[str, Any]:
+def build_issue(
+    grievance: Grievance, prose: str, team: str, project: str, labels_extra: list[str], backend: Backend
+) -> dict[str, Any]:
     """Map one record onto the fields a tracker issue is created with.
 
     Three fields are deliberately absent, and their absence is the contract:
@@ -1015,7 +1014,7 @@ def build_issue(grievance: Grievance, prose: str, config: dict[str, Any], backen
         git blame or the last committer; ask a human, or publish unassigned.
     """
     labels = [t for t in grievance.tags if not t.startswith(backend.tag_prefix)]
-    for label in config.get("labels") or []:
+    for label in labels_extra:
         if label not in labels:
             labels.append(label)
     description = provenance_header(grievance)
@@ -1026,8 +1025,8 @@ def build_issue(grievance: Grievance, prose: str, config: dict[str, Any], backen
         "title": grievance.short,
         "description": description,
         "priority": SEVERITY_TO_PRIORITY[grievance.severity],
-        "team": config["team"],
-        "project": config["project"],
+        "team": team,
+        "project": project,
         "labels": labels,
     }
 
@@ -1240,17 +1239,6 @@ def publish_prepare(
     args: argparse.Namespace, backend: Backend, ledger: Ledger, grievance: Grievance, path: Path
 ) -> int:
     """Step 1 — build the issue payload. Reads only; the ledger is untouched."""
-    config_path = resolve_config_path(args, backend)
-    if not config_path.exists():
-        # Not an error and not a warning. A repository that keeps its findings
-        # locally is working normally, and `publish` must exit 0 so a batch over
-        # a whole fleet does not stop on the first unconfigured repository.
-        emit(
-            {"id": grievance.id, "status": "not-configured", "backend": backend.name, "config": str(config_path)},
-            args.json,
-            f"{grievance.id}: no {config_path} — this repository does not publish to {backend.name}. Not an error.",
-        )
-        return 0
     existing = find_binding(grievance, backend)
     if existing and not args.force:
         emit(
@@ -1260,13 +1248,16 @@ def publish_prepare(
             "publishing twice makes two issues nobody reconciles",
         )
         return 0
-    config = load_tracker_config(config_path, backend)
-    issue = build_issue(grievance, ledger.prose[grievance.id], config, backend)
+    project = resolve_project(args, backend)
+    team, team_source = resolve_team(args, backend)
+    issue = build_issue(
+        grievance, ledger.prose[grievance.id], team, project, list(getattr(args, "label", None) or []), backend
+    )
     payload = {
         "id": grievance.id,
         "status": "prepared",
         "backend": backend.name,
-        "config": str(config_path),
+        "team_source": team_source,
         "file": str(path),
         "issue": issue,
         "warnings": boundary_warnings(grievance),
@@ -1612,7 +1603,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_pub.add_argument("--record", metavar="REF", help="step 3: write the reference the tracker returned")
     p_pub.add_argument("--url", help="the issue URL, kept in the log line")
     p_pub.add_argument("--backend", choices=sorted(BACKENDS), default=DEFAULT_BACKEND)
-    p_pub.add_argument("--config", help="tracker config path (default: <git root>/.linear.json)")
+    p_pub.add_argument("--project", help="the tracker project to file in (required by --prepare; never guessed)")
+    p_pub.add_argument("--team", help="the tracker team (default: `team` in <git root>/.claude/linear/phases.json)")
+    p_pub.add_argument("--label", action="append", help="extra label, repeatable")
+    p_pub.add_argument("--phases", help="phases.json path (default: <git root>/.claude/linear/phases.json)")
     p_pub.add_argument("--date", help="publication date, YYYY-MM-DD (default: today)")
     p_pub.add_argument("--note", help="one line on why it left the repository")
     p_pub.add_argument("--force", action="store_true", help="prepare or rebind although a reference already exists")

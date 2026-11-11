@@ -118,8 +118,8 @@ is appended to the detail block.
 Some findings deserve to leave the repository and become work someone can own.
 `publish` is that verb, and it belongs here because **only this skill writes the
 ledger**. A tracker is one backend answering it — for Linear, see the
-[`linear-tracker`](../linear-tracker/SKILL.md) skill, which documents the
-`.linear.json` configuration and the field mapping this script implements.
+[`linear-tracker`](../linear-tracker/SKILL.md) skill, which documents
+the team/project rules and the field mapping this script implements.
 
 **The script never talks to the tracker.** Authentication lives in the caller's
 MCP configuration, per machine, never in a committed file. So the verb is a
@@ -127,21 +127,26 @@ handshake in two steps, with the network call in between, made by whoever holds
 the credentials:
 
 ```bash
-grievances.py publish GRV-0007 --prepare --json     # 1. the payload. Writes nothing.
+grievances.py publish GRV-0007 --prepare --project "Broker PA · Run" --json   # 1. the payload. Writes nothing.
 # 2. the caller creates the issue through the tracker's MCP, and gets TT-412 back
 grievances.py publish GRV-0007 --record TT-412 --url "https://linear.app/…"
 ```
 
-**Step 1 answers with a status, and two of its three answers are not failures:**
+**The project is always given, never inferred.** `--project NAME` is required: a
+repository does not own a project (a monorepo holds several), so take the name
+from your charter or brief, or ask the human. The team is `--team NAME`, else
+`team` in `.claude/linear/phases.json` (written by the lifecycle installer); with
+neither, `--prepare` refuses. `--label` (repeatable) adds labels to the record's tags.
+
+**Step 1 answers with a status, and neither is a failure:**
 
 | Status | Exit | Meaning |
 |---|---|---|
 | `prepared` | 0 | The payload is in `issue`; create it, then record the reference. |
-| `not-configured` | 0 | No `.linear.json`. This repository keeps its findings locally, which is the normal mode — not a degraded one. |
 | `already-published` | 0 | A `linear:` tag is already there. Publishing twice makes two issues nobody reconciles. |
 
-A missing `project` key, a config carrying a credential, a malformed reference
-and a rebinding without `--force` all exit 2 with a message naming the fix.
+A missing `--project`, an unresolvable team, a malformed reference and a
+rebinding without `--force` all exit 2 with a message naming the fix.
 
 **The reference lands in the record's `tags`, as `linear:TT-412`.** That choice
 is forced: `Grievance.from_meta` validates the JSON header against a closed field

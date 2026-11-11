@@ -9,7 +9,8 @@
 #   - which specs/NNN-slug/ is current (git branch, else uncommitted files),
 #   - whether spec.md exists, how many tasks of tasks.md are ticked,
 #   - the PR state of the branch (gh, bounded and cached),
-#   - the per-spec event log specs/NNN-slug/linear.json.
+#   - the per-spec event log specs/NNN-slug/linear.json (events + the spec's
+#     Linear `project`).
 # It never judges a document. When a fact has no matching event in the log,
 # it asks the agent ONCE to render a template and make the Linear MCP call,
 # then to append the event with linear-record.sh.
@@ -18,17 +19,20 @@
 # twice for the same fact key, and stays silent when:
 #   - the turn ended on a question (the key is not consumed: asked later),
 #   - a Stop hook already continued this stop (stop_hook_active=true),
-#   - the repository has no .linear.json (absence means "do not publish"),
-#   - the spec's log holds an `unavailable` event (no Linear connector),
+#   - phases.json is absent or names no `team` (that file is the switch: no
+#     team, no Linear in this repository),
+#   - this machine recorded `unavailable` for the spec less than a TTL ago
+#     (no Linear connector; kept in the local state dir, never committed),
 #   - anything it needs is missing (jq, git, a spec folder).
 # The only output is {"decision":"block","reason":…}: on a Stop hook that
 # means "take one more turn", not "refuse".
 #
 # Env knobs (all optional):
 #   LINEAR_LIFECYCLE=0                 disable unconditionally
-#   LINEAR_LIFECYCLE_DIR=PATH          templates + phases.json (default ../linear)
+#   LINEAR_LIFECYCLE_DIR=PATH          templates + phases.json (default ../linear, i.e. .claude/linear)
 #   LINEAR_LIFECYCLE_STATE=PATH        asked-keys store (default <git-common-dir>/linear-lifecycle)
-#   LINEAR_CONFIG=PATH                 repo config (default <root>/.linear.json)
+#   LINEAR_CONFIG=PATH                 phases.json to use (default: LINEAR_LIFECYCLE_DIR/phases.json)
+#   LINEAR_LIFECYCLE_UNAVAILABLE_TTL=14400  seconds an `unavailable` mark silences a spec
 #   LINEAR_LIFECYCLE_GH=0              disable PR lookups
 #   LINEAR_LIFECYCLE_GH_TIMEOUT=3      seconds before a gh call is abandoned
 #   LINEAR_LIFECYCLE_GH_TTL=60         seconds a gh answer is reused
@@ -41,7 +45,8 @@ command -v git >/dev/null 2>&1 || exit 0
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TPL_DIR="${LINEAR_LIFECYCLE_DIR:-$HERE/../linear}"
-PHASES="$TPL_DIR/phases.json"
+PHASES="${LINEAR_CONFIG:-$TPL_DIR/phases.json}"
+UNAVAILABLE_TTL="${LINEAR_LIFECYCLE_UNAVAILABLE_TTL:-14400}"
 RECORD="$HERE/linear-record.sh"
 GH_ENABLED="${LINEAR_LIFECYCLE_GH:-1}"
 GH_TIMEOUT="${LINEAR_LIFECYCLE_GH_TIMEOUT:-3}"
@@ -55,9 +60,10 @@ cwd="$(field '.cwd')"; [[ -n "$cwd" && -d "$cwd" ]] || cwd="$(pwd)"
 transcript="$(field '.transcript_path')"
 
 root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)" || exit 0
-config="${LINEAR_CONFIG:-$root/.linear.json}"
-[[ -f "$config" ]] || exit 0
 [[ -f "$PHASES" ]] || exit 0
+# The switch: phases.json names the Linear team. Absent or empty -> silent.
+team="$(jq -r '.team // ""' "$PHASES" 2>/dev/null)"
+[[ -n "$team" ]] || exit 0
 [[ -d "$root/specs" ]] || exit 0
 
 # ── The turn ended on a question: stay silent, consume nothing ──────────────
@@ -79,6 +85,16 @@ ASKED="$STATE_DIR/asked.json"
 asked_has() {
   [[ -s "$ASKED" ]] || return 1
   jq -e --arg k "$1" '.keys[$k] != null' "$ASKED" >/dev/null 2>&1
+}
+
+# `unavailable` is a machine-local fact: no Linear connector in a session here.
+# Kept next to asked.json (never in the committed log), keyed by spec, and it
+# expires after UNAVAILABLE_TTL so a later session that has the connector asks again.
+UNAVAILABLE="$STATE_DIR/unavailable.json"
+unavailable_active() {
+  [[ -s "$UNAVAILABLE" ]] || return 1
+  jq -e --arg s "$1" --argjson now "$(date +%s)" --argjson ttl "$UNAVAILABLE_TTL" \
+    '.[$s] != null and ($now - .[$s]) < $ttl' "$UNAVAILABLE" >/dev/null 2>&1
 }
 
 asked_add() {
@@ -160,8 +176,6 @@ fi
 
 repo_name="$(git -C "$root" remote get-url origin 2>/dev/null | sed -E 's#\.git$##; s#.*[/:]##')"
 [[ -n "$repo_name" ]] || repo_name="$(basename "$root")"
-team="$(jq -r '.team // ""' "$config" 2>/dev/null)"
-project="$(jq -r '.project // ""' "$config" 2>/dev/null)"
 
 emit() { # KEY REASON — mark the key, then ask the agent once
   asked_add "$1"
@@ -177,23 +191,38 @@ for slug in "${candidates[@]}"; do
   events='[]'
   [[ -s "$log" ]] && events="$(jq -c '.events // []' "$log" 2>/dev/null || echo '[]')"
   has() { printf '%s' "$events" | jq -e --arg e "$1" 'any(.[]; .event == $e)' >/dev/null 2>&1; }
-  has unavailable && continue
+  unavailable_active "$slug" && continue
+  project=""
+  [[ -s "$log" ]] && project="$(jq -r '.project // ""' "$log" 2>/dev/null)"
   issue="$(printf '%s' "$events" | jq -r '[.[] | select(.event == "created" or .event == "linked") | .id] | last // ""')"
-  record="\"\$CLAUDE_PROJECT_DIR/.agents/hooks/linear-record.sh\" $rel"
+  record="\"\$CLAUDE_PROJECT_DIR/.claude/hooks/linear-record.sh\" $rel"
   noregress="If it is already at that state or later (In Review, Done, Canceled), do not move it: skip step 1 and still run step 3. A lifecycle move never goes backwards."
   subissues="List the sub-issues of $issue (list_issues, parentId $issue). One that this change resolves gets its own comment and moves to Done; never post its answer on $issue, and name sub-issues by identifier."
   footer="If no Linear MCP tool is available in this session, run instead: $record unavailable — and stop. Do not mention this hook to the user unless the Linear call needs their decision."
 
   # specify — spec.md exists, no issue known yet
   if [[ -z "$issue" ]] && phase_enabled specify && [[ -f "$dir/spec.md" ]]; then
-    key="specify:$slug"
-    asked_has "$key" && continue
     tpl="$(phase_template specify)"
     title="$(spec_title "$dir/spec.md")"; [[ -n "$title" ]] || title="$slug"
     max="$(jq -r '.duplicateSearch.maxCandidates // 20' "$PHASES")"
+    if [[ -z "$project" ]]; then
+      # The project follows the spec, never the repository. None is recorded:
+      # do not create anything. The `specify:` key stays unconsumed, so the
+      # create reminder comes back once a project is recorded; this
+      # distinct key only keeps the "find a project" reminder from repeating.
+      key="specify-project:$slug"
+      asked_has "$key" && continue
+      emit "$key" "[linear-lifecycle] Fact: $rel/spec.md exists, no Linear issue is recorded for it, and no Linear project is recorded for this spec ($rel/linear.json has no \"project\"). Do not create an issue yet, and never with an empty or guessed project.
+1. Search Linear for an existing issue with this title (list_issues, query \"$title\", team \"$team\", at most $max candidates). If one may be the same work, show it to the user and ask; if they confirm, run: $record linked <ID> <URL> (a linked issue needs no project).
+2. Otherwise find the project, in this order: your session brief or charter; else ask the human which Linear project this spec belongs to. Then run: $record project \"<project name>\"
+Once a project is recorded, the next stop will ask you to create the issue.
+$footer"
+    fi
+    key="specify:$slug"
+    asked_has "$key" && continue
     emit "$key" "[linear-lifecycle] Fact: $rel/spec.md exists and no Linear issue is recorded for it.
 1. Search Linear for an existing issue with this title (list_issues, query \"$title\", team \"$team\", at most $max candidates). If one may be the same work, show it to the user and ask; if they confirm, run: $record linked <ID> <URL>.
-2. Otherwise render .agents/linear/$tpl with: title=\"$title\", repo=$repo_name, spec_path=$rel/spec.md, branch=${branch:-?}, commit=$(git -C "$root" rev-parse --short HEAD 2>/dev/null). Create the issue with save_issue in team \"$team\", project \"$project\", using the rendered body as description.
+2. Otherwise render .claude/linear/$tpl with: title=\"$title\", repo=$repo_name, spec_path=$rel/spec.md, branch=${branch:-?}, commit=$(git -C "$root" rev-parse --short HEAD 2>/dev/null). Create the issue with save_issue in team \"$team\", project \"$project\", using the rendered body as description.
 3. Then run: $record created <ID> <URL>
 $footer"
   fi
@@ -209,7 +238,7 @@ $footer"
         emit "$key" "[linear-lifecycle] Fact: $ticked/$total tasks are ticked in $rel/tasks.md and $issue is not recorded as In Progress.
 0. Read the current state of $issue first (get_issue). $noregress
 1. Move $issue to the first existing state among $(state_names in_progress) (save_issue; list_issue_statuses if the name is unknown; else the team's first state of type started).
-2. Render .agents/linear/$tpl with: issue=$issue, ticked=$ticked, total=$total, branch=${branch:-?}, and post it with save_comment on $issue.
+2. Render .claude/linear/$tpl with: issue=$issue, ticked=$ticked, total=$total, branch=${branch:-?}, and post it with save_comment on $issue.
 Also: $subissues
 3. Then run: $record in_progress $issue
 $footer"
@@ -228,7 +257,7 @@ $footer"
         emit "$key" "[linear-lifecycle] Fact: PR #$num is open on branch $branch ($url) and $issue is not recorded as In Review.
 0. Read the current state of $issue first (get_issue). $noregress
 1. Move $issue to the first existing state among $(state_names in_review) (save_issue; list_issue_statuses if the name is unknown; else the team's first state of type started that follows In Progress).
-2. Render .agents/linear/$tpl with: issue=$issue, pr_number=$num, pr_url=$url, branch=$branch, and post it with save_comment on $issue. Attach the PR link to the issue if the tool allows it.
+2. Render .claude/linear/$tpl with: issue=$issue, pr_number=$num, pr_url=$url, branch=$branch, and post it with save_comment on $issue. Attach the PR link to the issue if the tool allows it.
 Also: $subissues
 3. Then run: $record in_review $issue $url
 $footer"

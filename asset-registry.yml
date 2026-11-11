@@ -1550,7 +1550,8 @@ assets:
       - workflow
     description: >-
       Use Linear as the tracker a repository publishes findings to, through the Linear MCP. Covers the per-repository
-      configuration that names a team and a project (`.linear.json`), the mapping from a grievance record to a Linear
+      how a repository knows its Linear team (`team` in the lifecycle `phases.json`) and why the project is never a repository property
+      (given per call, or recorded per spec), the mapping from a grievance record to a Linear
       issue and the two mappings that silently corrupt data if taken literally, the publish contract this skill answers
       on behalf of the `grievances` skill, and read-only triage across a workspace. It also installs, once, a repo-local
       advisory Stop hook and per-phase templates that follow a spec-kit change in Linear — issue at specify, In Progress
@@ -1565,7 +1566,7 @@ assets:
       types (Bug, Blocker, Question, Research, Feature, Improvement, Proof, Technical task), the order of questions that
       picks one, and a workspace template body for each. Use it too when choosing which ticket type to open, telling a
       Question from a Blocker, proving a merged lot on an environment, or drafting Linear templates. Triggers on
-      "Linear", "linear.json", "publish a grievance", "tracker", "issue from a finding", "which project does this repo
+      "Linear", "phases.json", "publish a grievance", "tracker", "issue from a finding", "which project does this spec
       belong to", "follow a spec in Linear", "spec-kit lifecycle", "ticket type", "Linear template", "proof ticket",
       "dependency tree", "dependency graph", "draw Linear tickets", "what blocks this issue", "is every proof blocked",
       "LINEAR_API_KEY".
