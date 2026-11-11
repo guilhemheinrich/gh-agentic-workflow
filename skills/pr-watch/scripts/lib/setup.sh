@@ -32,8 +32,10 @@ cmd_setup() {
   # `--github` sets up GitHub only: a machine that pushes to GitHub alone has no
   # Atlassian account to give, and an empty answer used to abort before the
   # GitHub prompt. Bitbucket stays a separate `prw setup` run.
-  if [ "$github" = 1 ]; then
-    : # Bitbucket untouched; its placeholder means "no Bitbucket token" to the daemon
+  if [ "$github" = 1 ] || [ "$claude" = 1 ]; then
+    : # Bitbucket untouched: `--github` and `--claude` are their own steps, and a
+      # GitHub-only machine has no Atlassian account. The placeholder means
+      # "no Bitbucket token" to the daemon.
   elif [ "$rotate" = 1 ] || grep -q 'PASTE_YOUR_TOKEN_HERE' "$env_file"; then
     echo "Create a token at https://id.atlassian.com/manage-profile/security/api-tokens"
     echo "  (API token with scopes, Bitbucket app): read:repository:bitbucket read:pullrequest:bitbucket read:pipeline:bitbucket"

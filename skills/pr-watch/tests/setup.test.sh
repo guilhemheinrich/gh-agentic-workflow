@@ -38,6 +38,11 @@ out="$(printf 'ghp-ONLY-789\n' | env -u BITBUCKET_WATCH_USER -u BITBUCKET_WATCH_
 check "--github alone stores the GitHub token" '[ "$rc" = 0 ] && grep -q "^export GITHUB_WATCH_TOKEN=\"ghp-ONLY-789\"$" "$gh_env/pr-watch/env"' "rc=$rc $out"
 check "--github alone never asks for Bitbucket" '! printf "%s" "$out" | grep -q "id.atlassian.com"' "$out"
 check "--github alone leaves the Bitbucket placeholder" 'grep -q "^export BITBUCKET_WATCH_USER=\"PASTE_YOUR_EMAIL_HERE\"$" "$gh_env/pr-watch/env"'
+
+# --claude on that machine: wiring the hooks must not stop on a Bitbucket prompt.
+out="$(env -u BITBUCKET_WATCH_USER -u BITBUCKET_WATCH_TOKEN XDG_CONFIG_HOME="$gh_env" SHELL=/bin/zsh \
+  PRW_ASSUME_YES=1 "$PRW" setup --non-interactive --claude </dev/null 2>&1)"; rc=$?
+check "--claude alone never asks for Bitbucket" '[ "$rc" = 0 ] && ! printf "%s" "$out" | grep -q "id.atlassian.com"' "rc=$rc $out"
 rm -rf "$gh_env"
 
 # doctor
