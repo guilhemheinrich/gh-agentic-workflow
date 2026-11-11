@@ -31,6 +31,15 @@ sed 's/tok-NEW-456/tok-OLD-000/' "$ENVF" >"$ENVF.x" && cat "$ENVF.x" >"$ENVF" &&
 run_setup --rotate >/dev/null
 check "--rotate replaces the token" 'grep -q "tok-NEW-456" "$ENVF" && ! grep -q "tok-OLD-000" "$ENVF"'
 
+# --github alone: a GitHub-only machine is never asked for an Atlassian account.
+gh_env="$(mktemp -d)"
+out="$(printf 'ghp-ONLY-789\n' | env -u BITBUCKET_WATCH_USER -u BITBUCKET_WATCH_TOKEN \
+  XDG_CONFIG_HOME="$gh_env" SHELL=/bin/zsh "$PRW" setup --non-interactive --github 2>&1)"; rc=$?
+check "--github alone stores the GitHub token" '[ "$rc" = 0 ] && grep -q "^export GITHUB_WATCH_TOKEN=\"ghp-ONLY-789\"$" "$gh_env/pr-watch/env"' "rc=$rc $out"
+check "--github alone never asks for Bitbucket" '! printf "%s" "$out" | grep -q "id.atlassian.com"' "$out"
+check "--github alone leaves the Bitbucket placeholder" 'grep -q "^export BITBUCKET_WATCH_USER=\"PASTE_YOUR_EMAIL_HERE\"$" "$gh_env/pr-watch/env"'
+rm -rf "$gh_env"
+
 # doctor
 mkdir -p "$WORK/fx"
 use_fixture "$WORK/fx"
