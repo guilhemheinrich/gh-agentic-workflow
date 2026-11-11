@@ -358,7 +358,12 @@ A dot ages only while the session is idle **and** has no news. Example:
 "🧭 Piloting 0/2 · Calendar" stays 🟢 as long as one of its side sessions
 wears 🔵, and its age afterwards counts from the latest child activity, not
 from the pilot's own last turn. A side session is any session file whose
-`spawnedFrom.sessionId` names the pilot; archived ones do not count.
+`spawnedFrom.sessionId` names the pilot; archived ones do not count, nor do
+detached lineages (`lineageDetached: true` in the file), nor the freshness
+watcher (title starting with `freshness.watcherIcon` in `titles.json`, or the id
+given to `watch --session`). The watcher keeps the `spawnedFrom` of the pilot
+that launched it, and each of its wakes bumps its `lastActivityAt`: counted as a
+child, it would re-light the pilot's dot at every wake, forever.
 
 A rename leaves `lastActivityAt` unchanged: renaming `local_3f5a96d8…` kept
 `14:13:50.723Z`. Only titles built from the templates are repainted; running

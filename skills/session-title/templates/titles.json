@@ -5,6 +5,7 @@
   "freshness": {
     "$comment": "Age dot prefixed to every title: '🟡 🔀 À merger #12 · 042-webhook'. Age = now - lastActivityAt of the session (a rename does not touch lastActivityAt). The first level whose belowMinutes exceeds the age wins; the last level has no bound. The sweep frequency lives in the user config (session-title.sh config), not here.",
     "workingDot": "🔵",
+    "watcherIcon": "🛰️",
     "levels": [
       { "dot": "🟢", "belowMinutes": 5 },
       { "dot": "🟡", "belowMinutes": 60 },

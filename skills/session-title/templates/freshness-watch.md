@@ -28,6 +28,9 @@ If neither exists, stop.
 3. Rename this session to `🛰️ Session title watcher` with
    `mcp__ccd_session_mgmt__set_session_title` (`session_id: "self"`). That
    title is not built from the templates, so no sweep ever repaints it.
+   The icon `🛰️` is `freshness.watcherIcon` in `titles.json`: the sweep and the
+   "Piloting x/N" count ignore any session whose title starts with it, so keep
+   that prefix.
 
 ## Arm the trigger
 
