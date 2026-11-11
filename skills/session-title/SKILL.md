@@ -422,6 +422,7 @@ open. If a `session-title-freshness` scheduled task exists, disable it.
 | Platform | Session files (`SESSION_TITLE_APP_DIR` overrides) |
 |---|---|
 | macOS | `~/Library/Application Support/Claude/claude-code-sessions/<org>/<account>/` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/Claude/claude-code-sessions/<org>/<account>/` |
 | Windows (Git Bash) | `%APPDATA%\Claude\claude-code-sessions\<org>\<account>\` |
 
 Facts measured on 2026-10-29 shape the design:
@@ -565,8 +566,9 @@ session-title.sh config                                                # effecti
 
 5. **The watcher reads an undocumented format.** The session file layout may
    change with any app update. An empty or missing directory makes `watch`
-   silent, never wrong. The Windows path is derived from `%APPDATA%` and has
-   not been tested on a Windows machine yet.
+   silent, never wrong. The Linux path follows the XDG config dir (checked on Linux).
+   The Windows path is derived from `%APPDATA%` and has not been tested on a
+   Windows machine yet.
 6. **The watcher session must stay open.** If the app quits or the watcher
    is archived, no dot moves until it is started again. Nothing restarts it
    by itself: the next session opened proposes a card, and a human clicks it.

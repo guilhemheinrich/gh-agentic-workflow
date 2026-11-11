@@ -52,7 +52,8 @@
 #   SESSION_TITLE_GH_TIMEOUT=4     seconds before a gh call is abandoned
 #   SESSION_TITLE_GH_TTL=60        seconds a gh answer is reused
 #   SESSION_TITLE_GATE_TTL=300     seconds the question gate stays open after a deny
-#   SESSION_TITLE_APP_DIR=DIR      desktop app session files (default ~/Library/Application Support/Claude/claude-code-sessions)
+#   SESSION_TITLE_APP_DIR=DIR      desktop app session files (default ~/Library/Application Support/Claude/claude-code-sessions
+#                                  on macOS, ${XDG_CONFIG_HOME:-~/.config}/Claude/claude-code-sessions on Linux)
 #   SESSION_TITLE_CHILD_STALE=7200 seconds a working-dot (🔵) title stays a live turn: not aged, child counted running
 
 set -uo pipefail
@@ -65,11 +66,13 @@ GH_ENABLED="${SESSION_TITLE_GH:-1}"
 GH_TIMEOUT="${SESSION_TITLE_GH_TIMEOUT:-4}"
 GH_TTL="${SESSION_TITLE_GH_TTL:-60}"
 CONFIG_FILE="${SESSION_TITLE_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/session-title/config.json}"
-# Desktop app session files: macOS, then Windows (Git Bash exports APPDATA as a
-# Windows path, so it is converted when cygpath exists).
+# Desktop app session files: Windows (Git Bash exports APPDATA as a Windows
+# path, so it is converted when cygpath exists), Linux (XDG config dir), macOS.
 if [[ -n "${SESSION_TITLE_APP_DIR:-}" ]]; then APP_DIR="$SESSION_TITLE_APP_DIR"
 elif [[ -n "${APPDATA:-}" ]]; then
   APP_DIR="$(cygpath -u "$APPDATA" 2>/dev/null || printf '%s' "$APPDATA")/Claude/claude-code-sessions"
+elif [[ "$(uname -s)" == Linux ]]; then
+  APP_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude-code-sessions"
 else APP_DIR="$HOME/Library/Application Support/Claude/claude-code-sessions"; fi
 # Seconds a working-dot title counts as a live turn before it is a crashed one.
 STALE="${SESSION_TITLE_CHILD_STALE:-7200}"

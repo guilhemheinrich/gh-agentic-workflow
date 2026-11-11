@@ -58,7 +58,7 @@ plan_token_state() {
 # server, or nothing.
 plan_bitbucket_mcp() {
   local f
-  for f in "$HOME/.claude.json" "$(claude_settings)" "$HOME/Library/Application Support/Claude/claude_desktop_config.json"; do
+  for f in "$HOME/.claude.json" "$(claude_settings)" "$(claude_desktop_dir)/claude_desktop_config.json"; do
     [ -f "$f" ] || continue
     if jq -e '[(.mcpServers // {}) | keys[] | test("bitbucket"; "i")] | any' "$f" >/dev/null 2>&1; then
       printf '%s\n' "$f"
