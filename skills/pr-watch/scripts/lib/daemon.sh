@@ -126,7 +126,7 @@ daemon_once() {
   # SessionStart restart a daemon that is only waiting for `prw setup`.
   printf '%s\n' "$now" >"$root/heartbeat"
   prw_source_credentials
-  if [ -z "${BITBUCKET_WATCH_TOKEN:-}" ] && [ -z "${GITHUB_WATCH_TOKEN:-}" ]; then
+  if [ -z "${BITBUCKET_WATCH_TOKEN:-}" ] && [ -z "$(github_tokens)" ]; then
     daemon_log "credential missing: run prw setup"
     return 1
   fi

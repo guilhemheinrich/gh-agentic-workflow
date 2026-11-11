@@ -156,7 +156,7 @@ monitor fixes (Auto-fix) and pr-watch informs; see the table in the lead.
 | | Bitbucket Cloud | GitHub |
 |---|---|---|
 | Repo key | `WS/REPO` | `github:OWNER/REPO` |
-| Credential | `BITBUCKET_WATCH_USER` + `BITBUCKET_WATCH_TOKEN` | `GITHUB_WATCH_TOKEN` |
+| Credential | `BITBUCKET_WATCH_USER` + `BITBUCKET_WATCH_TOKEN` | `GITHUB_WATCH_TOKENS` (a list; `GITHUB_WATCH_TOKEN` still read) |
 | CI it follows | commit statuses (Pipelines and external builds) | check runs and commit statuses |
 | Comments the agent posts | MCP `add_pull_request_comment` | `gh pr comment`, `gh api` (Bash) |
 | Worked example | `references/example-bitbucket.md` | `references/example-github.md` |
@@ -180,13 +180,41 @@ not built.
   `read:pullrequest:bitbucket`, `read:pipeline:bitbucket`. Read-only and
   dedicated: revoking it never breaks the Bitbucket MCP. `prw setup` asks for
   the account email and the token.
-- **GitHub.** A fine-grained token at
-  `https://github.com/settings/personal-access-tokens`, read-only, on the
-  repositories to watch: Pull requests, Checks, Commit statuses, Issues.
-  **That permission list is from the documentation, not yet confirmed with a
-  real token** (`references/example-github.md`).
+- **GitHub: a list of tokens.** `GITHUB_WATCH_TOKENS` holds one or several
+  tokens, separated by whitespace or commas; `GITHUB_WATCH_TOKEN` (the original
+  variable) is read as one more and the two may coexist, duplicates ignored.
+  A fine-grained token covers **one resource owner** (a user or an
+  organization), so the recommended setup is **one read-only fine-grained
+  token per owner**, at `https://github.com/settings/personal-access-tokens`
+  (pick the owner, then the repositories), with the repository permissions
+  Pull requests, Checks, Commit statuses and Issues (all read), plus Metadata
+  (read, always on). **That permission list is from the documentation, not yet
+  confirmed with a real token** (`references/example-github.md`).
+  The quick alternative is **one classic token with the `repo` scope**: it
+  reads every repository its user can reach, whatever the owner. Its risk: it
+  also grants **write** access, and an organization that enforces SSO needs the
+  token authorized for it (Configure SSO on the token page). prw sends both
+  kinds the same way (`Authorization: Bearer`, same calls) and the list may mix
+  them, so **switching later means only changing the list**: add the
+  fine-grained tokens, remove the classic one, nothing else.
 
-Re-running `setup` keeps existing values; `--rotate` replaces them.
+  For each repository prw uses the first token, in list order, that can read
+  it (401, 403 and 404 move on to the next). The choice is remembered per
+  `owner/repo` in `~/.local/state/pr-watch/github-tokens/`, as a hash of the
+  token, never the token: a poll makes one request, and a token that starts
+  failing is dropped from that memory and the list is walked again. A repo no
+  token reads is not asked again for 10 minutes unless the list changes
+  (`PRW_GITHUB_NEGATIVE_TTL`). A spent rate limit (403 with
+  `x-ratelimit-remaining: 0`, 429) never moves on to another token: the tokens
+  of one user share one quota. With a single token nothing is remembered and
+  nothing changes from before.
+
+Re-running `setup` keeps existing Bitbucket values; `--rotate` replaces them.
+`prw setup --github` **adds** one token to the list on each run (hidden prompt,
+0600 env file, never printed); `--github --list` shows how many tokens exist
+and what each reaches (kind, repos and owners read), without printing them;
+`--github --rotate N` replaces token number N, `--github --remove N` removes it
+(revoke it on GitHub too).
 
 ## 4. Why it is built this way: tokens
 
@@ -221,7 +249,7 @@ errors), `pending/`, `events/`, `daemon.log`, `heartbeat`, `daemon.started`.
 
 | Command | Does |
 |---|---|
-| `prw plan [--roots DIR[:DIR]]` | read the machine; print what an instance needs |
+| `prw plan [--roots DIR[:DIR]]` | read the machine; print what an instance needs, with the GitHub owners under the code roots and the ones no token reads |
 | `prw migrate [--yes]` | move a legacy `bitbucket-pr-watch` instance onto the generic names, one confirmed step at a time |
 | `prw subscribe --branch B --session ID [--head SHA]` | watch the open PR of branch B (pending until it exists; given up after 24 h) |
 | `prw subscribe REPO PR --session ID` | watch a known PR; once merged, its merge commit (see below) |
@@ -229,7 +257,8 @@ errors), `pending/`, `events/`, `daemon.log`, `heartbeat`, `daemon.started`.
 | `prw wait --session ID [--timeout S]` | block until a wake line; exit 0 with the lines, 2 on timeout, 3 when nothing is watched any more (PR declined, or the post-merge build phase ended), 4 when another wait already runs for this session (do not re-arm) |
 | `prw status [--session ID \| REPO PR]` | the last snapshot, one line per PR and per followed commit, no API call |
 | `prw list [--session ID]` / `prw unsubscribe REPO (PR \| --commit SHA)` / `prw ignore-comment` | maintenance; `list` shows `open`, `pending` or `build BRANCH@SHA` |
-| `prw doctor [--quiet]` | deps, each credential, daemon heartbeat, then per subscription: `FAIL` after 3 consecutive fetch errors (`PRW_DOCTOR_ERRORS`) with the HTTP code and URL, or when no snapshot exists 3 polls after subscribing, or when a diff failed (change held back); `FAIL` on an `error` line in `daemon.out` since the daemon started, and when the daemon runs code older than the scripts on disk |
+| `prw setup --github [--list \| --rotate N \| --remove N]` | add a GitHub token to the list; list them (count, kind, what each reads, never the value); replace or remove token N |
+| `prw doctor [--quiet]` | deps, each credential (one line per GitHub token: number, kind classic or fine-grained, how many watched repos it reads; then one `FAIL` per watched repo no token reads), daemon heartbeat, then per subscription: `FAIL` after 3 consecutive fetch errors (`PRW_DOCTOR_ERRORS`) with the HTTP code and URL, or when no snapshot exists 3 polls after subscribing, or when a diff failed (change held back); `FAIL` on an `error` line in `daemon.out` since the daemon started, and when the daemon runs code older than the scripts on disk |
 | `prw daemon run\|once\|alive\|start\|stop` | the poll loop (60 s, 20 s while a pipeline runs; `PRW_POLL_SECONDS`, `PRW_FAST_POLL_SECONDS`, `PRW_SETTLE_SECONDS`) |
 
 `REPO` is `WS/REPO` on Bitbucket and `github:OWNER/REPO` on GitHub.

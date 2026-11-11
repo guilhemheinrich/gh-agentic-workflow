@@ -8,8 +8,10 @@ and its own token.
 
 ```bash
 prw plan                  # "tokens … github missing", "next: prw setup --github"
-prw setup --github        # hidden prompt; stores GITHUB_WATCH_TOKEN in the same env file
-prw doctor                # "ok GitHub token accepted"
+prw setup --github        # hidden prompt; adds a token to GITHUB_WATCH_TOKENS in the same env file
+prw setup --github        # once more per extra owner (a fine-grained token covers one owner)
+prw setup --github --list # how many tokens, what each reads
+prw doctor                # "ok GitHub token 1 (fine-grained) accepted; reads 3 of 3 watched repositories"
 ```
 
 A GitHub PR is named `github:OWNER/REPO`:

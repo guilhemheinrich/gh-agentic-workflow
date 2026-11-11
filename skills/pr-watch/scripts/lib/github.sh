@@ -33,10 +33,10 @@ github_repo_from_url() {
   return 0
 }
 
-# github_check_credential — the token is loaded, or say how to fix it.
+# github_check_credential — a token is loaded, or say how to fix it.
 github_check_credential() {
   prw_source_credentials
-  if [ -z "${GITHUB_WATCH_TOKEN:-}" ]; then
+  if [ -z "$(github_tokens)" ]; then
     echo "GitHub credential missing: run prw setup --github" >&2
     return 1
   fi
