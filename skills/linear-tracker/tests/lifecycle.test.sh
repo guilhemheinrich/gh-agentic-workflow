@@ -62,10 +62,13 @@ git -C "$REPO" switch -qc 042-webhook-202
 # A gh stub whose answer the test controls; absent file = no PR.
 cat >"$WORK/bin/gh" <<'EOF'
 #!/usr/bin/env bash
-[[ -f "$GH_STUB_PR" ]] && cat "$GH_STUB_PR" || exit 1
+case "$1" in
+  run) [[ -f "$GH_STUB_RUNS" ]] && cat "$GH_STUB_RUNS" || exit 1 ;;
+  *)   [[ -f "$GH_STUB_PR" ]] && cat "$GH_STUB_PR" || exit 1 ;;
+esac
 EOF
 chmod +x "$WORK/bin/gh"
-export PATH="$WORK/bin:$PATH" GH_STUB_PR="$WORK/pr.json" LINEAR_LIFECYCLE_GH_TTL=0
+export PATH="$WORK/bin:$PATH" GH_STUB_PR="$WORK/pr.json" GH_STUB_RUNS="$WORK/runs.json" LINEAR_LIFECYCLE_GH_TTL=0
 
 echo "install"
 bash "$SKILL_DIR/scripts/install-lifecycle.sh" "$REPO" >"$WORK/install1.log" 2>&1
@@ -79,7 +82,7 @@ bash "$SKILL_DIR/scripts/install-lifecycle.sh" "$REPO" --team "Tiger Team" >"$WO
 check "--team writes the team into phases.json" '[[ "$(jq -r .team "$REPO/.claude/linear/phases.json")" == "Tiger Team" ]]'
 check "no .linear.json anywhere" '[[ ! -e "$REPO/.linear.json" ]]' 
 check "installer copies the hook" '[[ -x "$REPO/.claude/hooks/linear-lifecycle.sh" ]]'
-check "installer copies 3 templates and phases.json" '[[ $(ls "$REPO/.claude/linear" | wc -l) -eq 4 ]]'
+check "installer copies 4 templates and phases.json" '[[ $(ls "$REPO/.claude/linear" | wc -l) -eq 5 ]]'
 check "settings point at .claude/hooks via CLAUDE_PROJECT_DIR" 'jq -e ".hooks.Stop[0].hooks[0].command | test(\"CLAUDE_PROJECT_DIR.*/.claude/hooks/\")" "$REPO/.claude/settings.json" >/dev/null'
 check "nothing is installed under .agents" '[[ ! -e "$REPO/.agents" ]]'
 check "settings register exactly one Stop hook" '[[ $(jq "[.hooks.Stop[].hooks[]] | length" "$REPO/.claude/settings.json") == 1 ]]'
@@ -152,7 +155,7 @@ git -C "$REPO" switch -qc 043-retry
 git -C "$REPO" add -A && git -C "$REPO" commit -qm "spec 043"
 "$rec" "$REPO/specs/043-retry" unavailable >/dev/null
 hook; check "unavailable recorded: silent for that spec" '[[ -z "$OUT" ]]'
-check "unavailable is not written to the committed log" '[[ ! -e "$REPO/specs/043-retry/linear.json" ]] && [[ -z "$(git -C "$REPO" status --porcelain)" ]]'
+check "unavailable is not written to the committed log" '[[ ! -e "$REPO/specs/043-retry/linear.json" ]] && [[ -z "$(git -C "$REPO" status --porcelain -- specs)" ]]'
 check "unavailable lives in the git common dir" 'jq -e ".\"043-retry\" != null" "$REPO/.git/linear-lifecycle/unavailable.json" >/dev/null'
 LINEAR_LIFECYCLE_UNAVAILABLE_TTL=0 hook
 check "expired unavailable: asks again" 'asks "no Linear project is recorded"'
@@ -204,10 +207,67 @@ hook
 check "linked by hand: next stop catches up on In Progress" 'asks "2/3 tasks are ticked" && asks "TT-500" && asks "never goes backwards"'
 check "linked by hand: specify is not asked" '! asks "spec.md exists"'
 
+echo "deployed: merged is not deployed"
+bash "$SKILL_DIR/scripts/install-lifecycle.sh" "$REPO" --team-key MVP >/dev/null 2>&1
+check "--team-key writes teamKey" '[[ "$(jq -r .teamKey "$REPO/.claude/linear/phases.json")" == MVP ]]'
+check "deployed is off by default, targets develop" '[[ "$(jq -r .phases.deployed.enabled "$REPO/.claude/linear/phases.json")" == false ]] && [[ "$(jq -c .phases.deployed.targets "$REPO/.claude/linear/phases.json")" == "[\"develop\"]" ]]'
+git -C "$REPO" add -A >/dev/null && git -C "$REPO" commit -qm "wip teamkey"
+git -C "$REPO" switch -qc alice/mvp-373-widget-title
+pr_json() { jq -n --arg st "$1" --arg b "$2" --arg c "$3" --arg t "${4:-Widget}" --arg m "${5:-2026-01-01T00:00:00Z}" \
+  '{number: 9, state: $st, url: "https://example.test/acme/widget-api/pull/9", title: $t, baseRefName: $b, mergeCommit: {oid: $c}, mergedAt: $m}' >"$WORK/pr.json"; }
+run_json() { printf '%s' "$1" >"$WORK/runs.json"; }
+SHA1=aaaaaaa1111111111111111111111111111111aa
+pr_json MERGED develop $SHA1; run_json '[{"databaseId":1,"status":"completed","conclusion":"success","workflowName":"CI","url":"https://ex.test/runs/1"}]'
+hook; check "phase disabled: silent even when merged and green" '[[ -z "$OUT" ]]'
+jq '.phases.deployed.enabled = true' "$REPO/.claude/linear/phases.json" >"$WORK/p.json" && cp "$WORK/p.json" "$REPO/.claude/linear/phases.json"
+pr_json OPEN develop ""; hook; check "PR still open: silent" '[[ -z "$OUT" ]]'
+pr_json MERGED main $SHA1; hook; check "merged into a branch outside targets: silent" '[[ -z "$OUT" ]]'
+pr_json MERGED develop $SHA1
+run_json '[{"databaseId":1,"status":"completed","conclusion":"success","workflowName":"CI","url":"https://ex.test/runs/1"},{"databaseId":2,"status":"in_progress","conclusion":"","workflowName":"Deploy dev","url":"https://ex.test/runs/2"}]'
+hook; check "a run still in progress: silent" '[[ -z "$OUT" ]]'
+check "pending run: no key consumed" '! jq -e ".keys | keys | any(startswith(\"deployed:\"))" "$REPO/.git/linear-lifecycle/asked.json" >/dev/null 2>&1'
+run_json '[{"databaseId":1,"status":"completed","conclusion":"success","workflowName":"CI","url":"https://ex.test/runs/1"},{"databaseId":2,"status":"completed","conclusion":"skipped","workflowName":"Lint","url":"https://ex.test/runs/3"},{"databaseId":3,"status":"completed","conclusion":"success","workflowName":"Deploy dev","url":"https://ex.test/runs/2"}]'
+hook
+check "all green: one Done ask, ticket found in the branch name" 'asks "MVP-373" && asks "every pipeline of commit aaaaaaa is green" && asks "Terminé" && asks "deployed.comment.md" && asks "Deploy dev → success"'
+check "all green: records through the spec-less form" 'asks "linear-record.sh\" - deployed MVP-373"'
+hook; check "second pass, same facts: silent" '[[ -z "$OUT" ]]'
+SHA2=bbbbbbb2222222222222222222222222222222bb
+pr_json MERGED develop $SHA2
+run_json '[{"databaseId":4,"status":"completed","conclusion":"success","workflowName":"CI","url":"https://ex.test/runs/4"},{"databaseId":5,"status":"completed","conclusion":"failure","workflowName":"Deploy dev","url":"https://ex.test/runs/5"}]'
+hook
+check "a failed run: failure fact naming run and link" 'asks "did not succeed" && asks "Deploy dev → failure" && asks "https://ex.test/runs/5"'
+check "a failed run: no Done, no save_issue" '! asks "save_issue" && asks "Do NOT move"'
+hook; check "failure asked once" '[[ -z "$OUT" ]]'
+SHA3=ccccccc3333333333333333333333333333333cc
+pr_json MERGED develop $SHA3 Widget "$(date -u +%Y-%m-%dT%H:%M:%SZ)"; run_json '[]'
+hook; check "no pipeline yet, delay not elapsed: silent" '[[ -z "$OUT" ]]'
+pr_json MERGED develop $SHA3
+hook; check "no pipeline after the delay: asks the agent to judge" 'asks "no pipeline ran" && asks "MVP-373"'
+hook; check "no-pipeline asked once" '[[ -z "$OUT" ]]'
+check "record deployed without a spec" '[[ $(cd "$REPO" && "$rec" - deployed MVP-373 https://example.test/acme/widget-api/pull/9) == recorded ]]'
+check "deployed memory is local, not committed" 'jq -e ".\"MVP-373\" != null" "$REPO/.git/linear-lifecycle/deployed.json" >/dev/null && [[ -z "$(git -C "$REPO" status --porcelain -- specs)" ]]'
+SHA4=ddddddd4444444444444444444444444444444dd
+pr_json MERGED develop $SHA4
+run_json '[{"databaseId":6,"status":"completed","conclusion":"success","workflowName":"CI","url":"https://ex.test/runs/6"}]'
+hook; check "issue already recorded Done: silent on a new green commit" '[[ -z "$OUT" ]]'
+git -C "$REPO" switch -qc alice/no-ticket-here
+pr_json MERGED develop $SHA4 "MVP-12 Add the widget"
+hook; check "ticket found in the PR title" 'asks "MVP-12" && asks "Terminé"'
+jq '.teamKey = ""' "$REPO/.claude/linear/phases.json" >"$WORK/p.json" && cp "$WORK/p.json" "$REPO/.claude/linear/phases.json"
+git -C "$REPO" switch -qc alice/mvp-999-other
+SHA5=eeeeeee5555555555555555555555555555555ee
+pr_json MERGED develop $SHA5 "MVP-999"
+hook; check "no teamKey: never guessed, silent" '[[ -z "$OUT" ]]'
+jq '.teamKey = "MVP"' "$REPO/.claude/linear/phases.json" >"$WORK/p.json" && cp "$WORK/p.json" "$REPO/.claude/linear/phases.json"
+git -C "$REPO" switch -qc alice/other-team-ABC-5
+pr_json MERGED develop $SHA5 "unrelated"
+hook; check "no identifier of the team key: silent" '[[ -z "$OUT" ]]'
+rm -f "$WORK/pr.json" "$WORK/runs.json"
+
 echo "global invariants"
 check "no run ever emitted a deny" '! grep -qiE "deny|permissionDecision" <<<"$ALL_OUT"'
 count="$(printf '%s' "$ALL_OUT" | grep -c '"decision"' || true)"
-check "exactly 10 asks over the whole scenario (042 project+create+implement+pr-open, 043 x2, 047, 044, 045, 046)" '[[ "$count" == 10 ]]' "got $count"
+check "exactly 14 asks over the whole scenario (042 project+create+implement+pr-open, 043 x2, 047, 044, 045, 046, deployed: Done, failure, no-pipeline, PR title)" '[[ "$count" == 14 ]]' "got $count"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 (( FAIL == 0 ))

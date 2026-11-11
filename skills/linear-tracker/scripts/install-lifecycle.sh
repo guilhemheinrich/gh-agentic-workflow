@@ -19,24 +19,29 @@
 # exist are kept (the repo owns its templates); pass --force to overwrite them.
 # Re-running is safe: the settings entry is added once.
 #
-# Usage: install-lifecycle.sh <target-repo> [--team NAME] [--force]
+# --team-key KEY writes "teamKey" (the Linear issue prefix, e.g. MVP): the `deployed`
+# phase reads `<KEY>-<n>` in the branch name or PR title when a change has no spec.
+# That phase is off by default; enable it in phases.json with its `targets`.
+#
+# Usage: install-lifecycle.sh <target-repo> [--team NAME] [--team-key KEY] [--force]
 
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TPL="$SKILL_DIR/templates"
 
-target="" force=0 team=""
+target="" force=0 team="" team_key=""
 while (( $# )); do
   case "$1" in
     --force) force=1 ;;
     --team) shift; team="${1:-}"; [[ -n "$team" ]] || { echo "--team needs a name" >&2; exit 2; } ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    --team-key) shift; team_key="${1:-}"; [[ "$team_key" =~ ^[A-Za-z][A-Za-z0-9]*$ ]] || { echo "--team-key needs a Linear key such as MVP" >&2; exit 2; } ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) [[ -z "$target" ]] && target="$1" || { echo "unexpected argument: $1" >&2; exit 2; } ;;
   esac
   shift
 done
-[[ -n "$target" && -d "$target" ]] || { echo "usage: install-lifecycle.sh <target-repo> [--team NAME] [--force]" >&2; exit 2; }
+[[ -n "$target" && -d "$target" ]] || { echo "usage: install-lifecycle.sh <target-repo> [--team NAME] [--team-key KEY] [--force]" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "install-lifecycle: jq is required" >&2; exit 2; }
 target="$(cd "$target" && pwd)"
 
@@ -75,6 +80,11 @@ if [[ -n "$team" ]]; then
   tmp="$phases.$$"
   jq --arg t "$team" '.team = $t' "$phases" >"$tmp" && mv "$tmp" "$phases"
   echo "team       .claude/linear/phases.json -> \"$team\""
+fi
+if [[ -n "$team_key" ]]; then
+  tmp="$phases.$$"
+  jq --arg k "$team_key" '.teamKey = $k' "$phases" >"$tmp" && mv "$tmp" "$phases"
+  echo "teamKey    .claude/linear/phases.json -> \"$team_key\""
 fi
 if [[ -z "$(jq -r '.team // ""' "$phases")" ]]; then
   echo "note: .claude/linear/phases.json names no team — the hook stays silent until it does (re-run with --team NAME)." >&2

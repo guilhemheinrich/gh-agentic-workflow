@@ -1,8 +1,10 @@
 {
   "team": "",
+  "teamKey": "",
   "states": {
     "in_progress": ["In Progress", "En cours"],
-    "in_review": ["In Review", "En revue"]
+    "in_review": ["In Review", "En revue"],
+    "done": ["Done", "Terminé"]
   },
   "duplicateSearch": {
     "by": "title",
@@ -11,6 +13,7 @@
   "phases": {
     "specify": { "enabled": true, "template": "specify.issue.md" },
     "implement": { "enabled": true, "template": "implement.comment.md", "state": "in_progress" },
-    "pr-open": { "enabled": true, "template": "pr-open.comment.md", "state": "in_review" }
+    "pr-open": { "enabled": true, "template": "pr-open.comment.md", "state": "in_review" },
+    "deployed": { "enabled": false, "template": "deployed.comment.md", "state": "done", "targets": ["develop"], "noPipelineDelay": 300 }
   }
 }

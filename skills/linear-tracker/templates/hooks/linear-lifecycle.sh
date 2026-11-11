@@ -36,6 +36,16 @@
 #   LINEAR_LIFECYCLE_GH=0              disable PR lookups
 #   LINEAR_LIFECYCLE_GH_TIMEOUT=3      seconds before a gh call is abandoned
 #   LINEAR_LIFECYCLE_GH_TTL=60         seconds a gh answer is reused
+#
+# The `deployed` phase (off unless phases.json enables it) turns "merged" into
+# "deployed": for a PR MERGED into one of `phases.deployed.targets`, it reads the
+# workflow runs of the merge commit (gh run list --commit). Any run still going:
+# silence, nothing consumed (the next stop, or the next pr-watch wake-up, comes
+# back). All runs green: ask once to move the issue to Done. A run failed or
+# cancelled: ask once to name it and leave the issue open. No run at all after
+# `noPipelineDelay` seconds: ask once, the agent judges. The issue is the spec's,
+# else `<teamKey>-<n>` read from the branch name or the PR title (`teamKey` in
+# phases.json), so the phase needs no specs/ folder.
 
 set -uo pipefail
 
@@ -64,7 +74,7 @@ root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null)" || exit 0
 # The switch: phases.json names the Linear team. Absent or empty -> silent.
 team="$(jq -r '.team // ""' "$PHASES" 2>/dev/null)"
 [[ -n "$team" ]] || exit 0
-[[ -d "$root/specs" ]] || exit 0
+# No specs/ test here: the `deployed` phase also serves repositories without spec-kit.
 
 # ── The turn ended on a question: stay silent, consume nothing ──────────────
 last="$(field '.last_assistant_message')"
@@ -145,14 +155,38 @@ pr_lookup() {
       '.[$b] | select(. != null and ($now - .at) < $ttl) | .pr' "$cache" 2>/dev/null)"
     if [[ -n "$cached" ]]; then [[ "$cached" != "null" ]] && printf '%s' "$cached"; return 0; fi
   fi
-  out="$(cd "$root" && run_bounded "$GH_TIMEOUT" gh pr view "$branch" --json number,state,url)" || out=""
-  out="$(printf '%s' "$out" | jq -c '{number, state, url}' 2>/dev/null)" || out=""
+  out="$(cd "$root" && run_bounded "$GH_TIMEOUT" gh pr view "$branch" --json number,state,url,title,baseRefName,mergeCommit,mergedAt)" || out=""
+  out="$(printf '%s' "$out" | jq -c '{number, state, url, title, base: .baseRefName, commit: (.mergeCommit.oid // null), mergedAt}' 2>/dev/null)" || out=""
   mkdir -p "$STATE_DIR" 2>/dev/null || { printf '%s' "$out"; return 0; }
   local cur='{}' tmp="$cache.$$"
   [[ -s "$cache" ]] && jq -e . "$cache" >/dev/null 2>&1 && cur="$(cat "$cache")"
   printf '%s' "$cur" | jq --arg b "$branch" --argjson now "$now" --arg pr "$out" \
     '.[$b] = {at: $now, pr: ($pr | if . == "" then null else fromjson end)}' >"$tmp" 2>/dev/null && mv "$tmp" "$cache"
   rm -f "$tmp" 2>/dev/null
+  printf '%s' "$out"
+}
+
+# runs_lookup SHA -> JSON array of runs of that commit, or empty when gh failed.
+# Only a settled answer (non-empty, every run completed) is cached: a pending
+# list must be read fresh at the next wake-up.
+runs_lookup() {
+  local sha="$1" cache="$STATE_DIR/runs-cache.json" out
+  [[ "$GH_ENABLED" == "1" ]] && command -v gh >/dev/null 2>&1 || return 0
+  if [[ -s "$cache" ]]; then
+    out="$(jq -c --arg s "$sha" '.[$s] // empty' "$cache" 2>/dev/null)"
+    [[ -n "$out" ]] && { printf '%s' "$out"; return 0; }
+  fi
+  out="$(cd "$root" && run_bounded "$GH_TIMEOUT" gh run list --commit "$sha" --limit 50 \
+    --json databaseId,status,conclusion,workflowName,url)" || return 0
+  out="$(printf '%s' "$out" | jq -c 'if type == "array" then . else empty end' 2>/dev/null)" || return 0
+  [[ -n "$out" ]] || return 0
+  if [[ "$(printf '%s' "$out" | jq 'length > 0 and all(.[]; .status == "completed")')" == "true" ]] \
+    && mkdir -p "$STATE_DIR" 2>/dev/null; then
+    local cur='{}' tmp="$cache.$$"
+    [[ -s "$cache" ]] && jq -e . "$cache" >/dev/null 2>&1 && cur="$(cat "$cache")"
+    printf '%s' "$cur" | jq --arg s "$sha" --argjson r "$out" '.[$s] = $r' >"$tmp" 2>/dev/null && mv "$tmp" "$cache"
+    rm -f "$tmp" 2>/dev/null
+  fi
   printf '%s' "$out"
 }
 
@@ -172,7 +206,6 @@ if (( ${#candidates[@]} == 0 )); then
   done < <(git -C "$root" status --porcelain --untracked-files=all -- specs 2>/dev/null \
     | sed -E 's/^.{3}//; s/.* -> //' | sed -nE 's#^specs/([0-9]{3}-[^/]+)/.*#\1#p' | sort -u)
 fi
-(( ${#candidates[@]} > 0 )) || exit 0
 
 repo_name="$(git -C "$root" remote get-url origin 2>/dev/null | sed -E 's#\.git$##; s#.*[/:]##')"
 [[ -n "$repo_name" ]] || repo_name="$(basename "$root")"
@@ -183,7 +216,66 @@ emit() { # KEY REASON — mark the key, then ask the agent once
   exit 0
 }
 
+DEPLOYED_STORE="$STATE_DIR/deployed.json" # issues already Done: machine-local memory for tickets without a spec
+deployed_known() { # ISSUE [EVENTS_JSON]
+  [[ -s "$DEPLOYED_STORE" ]] && jq -e --arg i "$1" '.[$i] != null' "$DEPLOYED_STORE" >/dev/null 2>&1 && return 0
+  [[ -n "${2:-}" ]] && printf '%s' "$2" | jq -e 'any(.[]; .event == "deployed")' >/dev/null 2>&1 && return 0
+  return 1
+}
+
+# deployed_check ISSUE SLUG(empty without a spec) EVENTS_JSON — the merged-and-deployed fact.
+deployed_check() {
+  local issue="$1" slug="$2" events="${3:-}" pr state base sha short num url runs rec footer tpl age delay
+  phase_enabled deployed || return 0
+  [[ -n "$branch" ]] || return 0
+  deployed_known "$issue" "$events" && return 0
+  pr="$(pr_lookup "$branch")"; [[ -n "$pr" ]] || return 0
+  state="$(printf '%s' "$pr" | jq -r '.state // ""')"; [[ "$state" == "MERGED" ]] || return 0
+  base="$(printf '%s' "$pr" | jq -r '.base // ""')"
+  jq -e --arg b "$base" '(.phases.deployed.targets // []) | index($b) != null' "$PHASES" >/dev/null 2>&1 || return 0
+  sha="$(printf '%s' "$pr" | jq -r '.commit // ""')"; [[ -n "$sha" ]] || return 0
+  short="${sha:0:7}"
+  num="$(printf '%s' "$pr" | jq -r '.number')"; url="$(printf '%s' "$pr" | jq -r '.url')"
+  runs="$(runs_lookup "$sha")"; [[ -n "$runs" ]] || return 0
+  tpl="$(phase_template deployed)"
+  if [[ -n "$slug" ]]; then
+    rec="\"\$CLAUDE_PROJECT_DIR/.claude/hooks/linear-record.sh\" specs/$slug"
+    footer="If no Linear MCP tool is available in this session, run instead: $rec unavailable — and stop. Do not mention this hook to the user unless the Linear call needs their decision."
+  else
+    rec="\"\$CLAUDE_PROJECT_DIR/.claude/hooks/linear-record.sh\" -"
+    footer="If no Linear MCP tool is available in this session, stop. Do not mention this hook to the user unless the Linear call needs their decision."
+  fi
+  local list; list="$(printf '%s' "$runs" | jq -r 'map("\(.workflowName) → \(.conclusion // .status) (\(.url))") | join("; ")')"
+
+  if [[ "$(printf '%s' "$runs" | jq 'any(.[]; .status != "completed")')" == "true" ]]; then
+    return 0 # a pipeline is still running: silence, consume nothing
+  fi
+  if [[ "$(printf '%s' "$runs" | jq 'length')" == "0" ]]; then
+    delay="$(jq -r '.phases.deployed.noPipelineDelay // 300' "$PHASES")"
+    age="$(printf '%s' "$pr" | jq -r --argjson now "$(date +%s)" '(.mergedAt // "" | try fromdateiso8601 catch null) as $m | if $m == null then 999999999 else $now - $m end')"
+    (( age >= delay )) || return 0
+    local key="deploy-nopipe:$issue:$short"; asked_has "$key" && return 0
+    emit "$key" "[linear-lifecycle] Fact: PR #$num ($url) is merged into $base (commit $short) and no pipeline ran for that commit ${delay}s after the merge. Nothing proves a deployment: $issue is not moved to Done by this hook.
+Judge it: if this repository deploys by other means, check that, and only then move $issue to the first existing state among $(state_names done) with save_issue (get_issue first: never move a Done or Canceled issue). Otherwise leave $issue open and say why in a comment.
+$footer"
+  fi
+  local bad; bad="$(printf '%s' "$runs" | jq -r '[.[] | select(.conclusion | IN("success","skipped","neutral") | not)] | map("\(.workflowName) → \(.conclusion) (\(.url))") | join("; ")')"
+  if [[ -n "$bad" ]]; then
+    local key="deploy-failed:$issue:$short"; asked_has "$key" && return 0
+    emit "$key" "[linear-lifecycle] Fact: PR #$num ($url) is merged into $base but a pipeline of commit $short did not succeed: $bad.
+Do NOT move $issue to Done: merged is not deployed. Name the failing run and its link to the user, leave $issue open, and fix or report the failure (a re-run that goes green is reported again by pr-watch)."
+  fi
+  local key="deployed:$issue:$short"; asked_has "$key" && return 0
+  emit "$key" "[linear-lifecycle] Fact: PR #$num ($url) is merged into $base and every pipeline of commit $short is green: $list.
+0. Read the current state of $issue first (get_issue). If it is already Done or Canceled, do not move it: skip step 1 and run step 3.
+1. Move $issue to the first existing state among $(state_names done) (save_issue; list_issue_statuses if the name is unknown; else the team's first state of type completed).
+2. Render .claude/linear/$tpl with: issue=$issue, pr_number=$num, pr_url=$url, base=$base, commit=$short, runs=\"$list\", and post it with save_comment on $issue.
+3. Then run: $rec deployed $issue $url
+$footer"
+}
+
 # ── One fact per turn, earliest in the lifecycle first ──────────────────────
+had_issue=0
 for slug in "${candidates[@]}"; do
   dir="$root/specs/$slug"
   rel="specs/$slug"
@@ -227,6 +319,7 @@ $footer"
 $footer"
   fi
   [[ -n "$issue" ]] || continue
+  had_issue=1
 
   # implement — at least one task ticked, issue not yet In Progress
   if phase_enabled implement && ! has in_progress && [[ -f "$dir/tasks.md" ]]; then
@@ -264,6 +357,25 @@ $footer"
       fi
     fi
   fi
+
+  # deployed — the PR is merged into a target branch and its pipelines settled
+  deployed_check "$issue" "$slug" "$events"
 done
+
+# deployed without a spec: the issue comes from the branch name or the PR title.
+if (( had_issue == 0 )) && phase_enabled deployed && [[ -n "$branch" ]]; then
+  tkey="$(jq -r '.teamKey // ""' "$PHASES" 2>/dev/null)"
+  if [[ "$tkey" =~ ^[A-Za-z][A-Za-z0-9]*$ ]]; then
+    lkey="$(printf '%s' "$tkey" | tr '[:upper:]' '[:lower:]')"
+    found=""
+    lb="$(printf '%s' "$branch" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$lb" =~ (^|[^a-z0-9])$lkey-([0-9]+)([^0-9]|$) ]]; then found="${tkey^^}-${BASH_REMATCH[2]}"; fi
+    if [[ -z "$found" ]]; then
+      lt="$(pr_lookup "$branch" | jq -r '.title // ""' 2>/dev/null | tr '[:upper:]' '[:lower:]')"
+      if [[ "$lt" =~ (^|[^a-z0-9])$lkey-([0-9]+)([^0-9]|$) ]]; then found="${tkey^^}-${BASH_REMATCH[2]}"; fi
+    fi
+    [[ -n "$found" ]] && deployed_check "$found" "" ""
+  fi
+fi
 
 exit 0

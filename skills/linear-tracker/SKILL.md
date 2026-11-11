@@ -10,7 +10,8 @@ description: >-
   read-only triage across a workspace. It also installs, once, a repo-local advisory
   Stop hook and per-phase templates that follow a spec-kit change in Linear —
   issue at specify, In Progress at the first ticked task, In Review when a PR
-  opens — from file, git and PR facts only, asking once per fact and never
+  opens, Done once the merged PR is deployed (every pipeline of the merge commit
+  green; ticket read from the spec or from `<teamKey>-<n>` in the branch name) — from file, git and PR facts only, asking once per fact and never
   blocking. It also draws the dependency graph of a Linear project ("blocks /
   blocked by" between its issues) as a clickable SVG for humans and exports it
   as a JSON graph agents can query, with `scripts/linear_deps.py` and a Linear
@@ -399,11 +400,12 @@ the switch that arms the hook. Installed without a team, the hook stays silent.
 | `.claude/linear/phases.json` | **`team` (arms the hook)**, phase switches, state names (EN + FR), duplicate-search size | yes |
 | `.claude/linear/*.md` | One template per phase | yes |
 | `.claude/settings.json` | One `Stop` entry, merged once | yes |
-| `specs/NNN-slug/linear.json` | The spec's `project` and its event log: `created`, `linked`, `in_progress`, `in_review` | yes |
+| `specs/NNN-slug/linear.json` | The spec's `project` and its event log: `created`, `linked`, `in_progress`, `in_review`, `deployed` | yes |
+| `<git-common-dir>/linear-lifecycle/deployed.json` | Issues without a spec already moved to Done (`linear-record.sh - deployed ID URL`) | no — same place |
 | `<git-common-dir>/linear-lifecycle/asked.json` | Fact keys already asked | no — inside `.git/`, shared by every worktree |
 | `<git-common-dir>/linear-lifecycle/unavailable.json` | Specs marked "no Linear connector here", with a timestamp | no — same place, expires |
 
-Existing files are kept on re-install; `--force` overwrites them. The hook needs
+`install-lifecycle.sh --team-key KEY` also writes `teamKey`. Existing files are kept on re-install; `--force` overwrites them. The hook needs
 bash, jq and git; `gh` is optional and only feeds the PR phase.
 
 ### Phase → fact → template
@@ -418,7 +420,35 @@ folder with uncommitted files.
 | specify (project unknown) | same, but the log has no `project` | `specify-project:<slug>` | create nothing. Search the team for an issue to link; else take the project from the session brief or charter; else ask the human | `linked ID URL`, or `project NAME` |
 | implement | ≥ 1 `- [x]` in `tasks.md`; no `in_progress` | `implement:<slug>` | move the issue to In Progress / En cours, comment `implement.comment.md` | `in_progress ID` |
 | pr-open | `gh pr view <branch>` says `OPEN`; no `in_review` | `pr-open:<slug>:<pr>` | move the issue to In Review / En revue, comment `pr-open.comment.md` with the link | `in_review ID PR-URL` |
+| deployed (opt-in) | `gh pr view <branch>`: `MERGED`, `baseRefName` in `phases.deployed.targets`, a merge commit; then `gh run list --commit <sha>` | `deployed:<issue>:<sha7>` (green), `deploy-failed:<issue>:<sha7>`, `deploy-nopipe:<issue>:<sha7>` | all runs `success`/`skipped`/`neutral`: move the issue to Done / Terminé, comment `deployed.comment.md` (PR, commit, run links). A failed or cancelled run: do **not** move it, name the run and link. No run after `noPipelineDelay` s: judge | `deployed ID PR-URL` (or `- deployed ID PR-URL` without a spec) |
 | — | the agent has no Linear MCP tool | — | run `linear-record.sh <spec> unavailable` | local mark, 4 h TTL: the hook stays silent for that spec on this machine |
+
+**The `deployed` phase: Done means deployed, not merged.** A merge starts
+pipelines, usually the deployment, and their result is what counts. While any
+run of the merge commit is not `completed`, the hook says nothing and consumes
+no key, so the next stop asks. It is off by default; enable it in `phases.json`:
+
+```json
+"teamKey": "MVP",
+"states": { "done": ["Done", "Terminé"] },
+"phases": { "deployed": { "enabled": true, "template": "deployed.comment.md",
+  "state": "done", "targets": ["develop"], "noPipelineDelay": 300 } }
+```
+
+`targets` lists the branches whose merge means "deployed" (empty or absent:
+silent; nothing repository-specific lives in the script). The issue is the
+spec's when there is one; otherwise it is `<teamKey>-<n>` read, case
+insensitively, in the branch name (`alice/mvp-373-title`) then the PR title.
+`teamKey` is read from `phases.json` (`install-lifecycle.sh --team-key MVP`),
+never derived from the team name; without it the fallback is off. The phase
+needs no `specs/` folder, and a ticket without a spec is remembered as Done in
+the local state directory.
+
+**Link with pr-watch.** The hook only runs at the end of a turn and only
+looks at facts. The `pr-watch` daemon (separate skill, untouched) is what
+gives the session turns: one at the merge, one when the post-merge build ends.
+The first finds runs pending (silence); the second finds them settled and the
+hook asks for Done or reports the failure. Without a watcher, the next turn does it.
 
 **Why two keys for specify.** A fact key is consumed when the hook asks. If the
 create reminder were consumed while the project is still unknown, the agent
@@ -882,7 +912,10 @@ against a live project** (2026-11-09; JSON export, `check`, legend and richer ca
   projects, a local expiring `unavailable` that never touches the committed
   log, a hand-linked takeover catching up on In Progress, the
   no-regression guard and the sub-issue step in every state-move ask, silence on a question, on `stop_hook_active`, keys shared across worktrees,
-  idempotent install that keeps edited templates. The PR-phase run is budgeted at 200 ms (a slow machine may exceed it; the check fails identically on the previous version). A mutation that makes the hook emit a deny turns the
+  idempotent install that keeps edited templates. The `deployed` phase adds
+  14 checks (in progress → silence, all green → one Done ask, a failure → no
+  Done, outside `targets` → silence, ticket by branch name or PR title, no
+  pipeline after the delay, once per fact; 14 asks in all). The PR-phase run is budgeted at 200 ms (a slow machine may exceed it; the check fails identically on the previous version). A mutation that makes the hook emit a deny turns the
   suite red.
 - Not verified: the Linear MCP calls the hook asks for, and state names in a
   live workspace.
