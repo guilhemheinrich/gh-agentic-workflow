@@ -661,7 +661,7 @@ convention as §2 — `OPENAI_API_KEY` / `LLM_OPENAI_API_KEY`, `ANTHROPIC_API_KE
 - [cursor-adversarial-review](../cursor-adversarial-review/SKILL.md) — the same discipline through the Cursor CLI, where the reviewer reads a staged workspace itself and answers in `path:line`.
 - [static-validation-hooks](../static-validation-hooks/SKILL.md) — deterministic checks belong in a hook, not in an LLM call. Run those first; a model is for judgement, not for lint.
 - [grievances](../grievances/SKILL.md) — where a confirmed finding goes when it is out of scope for the current spec.
-- [spaghetti-compass](../spaghetti-compass/SKILL.md) — reverse impact analysis, to widen review context by callers rather than by volume.
+- [spaghetti-compass](https://github.com/Septeo-Immobilier/spaghetti-compass/tree/main/skills/spaghetti-compass) — reverse impact analysis, to widen review context by callers rather than by volume.
 
 ---
 
