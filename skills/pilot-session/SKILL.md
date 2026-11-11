@@ -172,6 +172,19 @@ and send it as the session's first prompt. It always carries:
   charter says otherwise;
 - what to report back, and when to stop and ask instead of guessing.
 
+**Start every child on the model that fits its task**, whatever the tool or
+IDE. The pilot's own model is chosen for planning and arbitration; a child
+does not inherit it by default — the pilot sets it explicitly when it starts
+the child, using whatever the harness offers (a model parameter on the start
+call, a model picker, a CLI flag, an agent profile). Rule of thumb: execution
+work (coding, debugging, fixing a review remark) goes to a strong, fast coding
+model; mechanical or read-only work (collecting logs, checking a deployment,
+re-running a flaky job) can go to a lighter one; only a child that must itself
+design or arbitrate gets the pilot's tier. In Claude, for example: the pilot
+runs on Opus, and it starts its coding and debugging children on **Sonnet**.
+If the harness cannot choose a child's model, say so at startup (§2, tooling
+inventory) rather than silently running everything on the pilot's model.
+
 One child per independent piece; two children never edit the same files at the
 same time. A verification child is **read-only** on shared infrastructure —
 anything beyond reading goes to a report for whoever operates it — and reports
@@ -204,6 +217,9 @@ An item is not Done without that proof when the charter asks for one.
   while it debugs.
 - **A brief that points at the pilot's conversation** ("as discussed above").
   The child cannot read it.
+- **Every child on the pilot's model.** Coding and debugging children run on a
+  coding model (Sonnet, in Claude), not on the pilot's planning model by
+  inheritance.
 - **Status from memory.** Calling something deployed because it was merged;
   the build after the merge can still fail.
 - **Deciding someone else's question silently.** A product or scope decision

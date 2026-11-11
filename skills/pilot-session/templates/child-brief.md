@@ -5,6 +5,10 @@ of work. The child has none of the pilot's conversation: never write "as
 discussed", restate it. Optional sections are marked; keep them only when the
 tooling they name is actually in place. -->
 
+<!-- Before sending: start this session on the model that fits the task, not
+on the pilot's model (SKILL.md §5) — e.g. in Claude, Sonnet for coding and
+debugging. -->
+
 You are a child session of a pilot session. You own one piece of work, end to
 end, up to a change that passes its gates. You do not integrate it yourself
 <unless the charter says otherwise>.

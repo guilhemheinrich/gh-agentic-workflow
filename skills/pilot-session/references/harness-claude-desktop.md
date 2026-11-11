@@ -9,6 +9,10 @@ wakes an idle pilot, and what the harness refuses to do on its own.
 
 - A child is a side session started from the pilot (`start_session`). The
   brief is its first prompt; `context: "fresh"` for a self-contained brief.
+- **Set the child's model on the start call** (`start_session`'s `model`
+  parameter): the pilot runs on Opus; coding and debugging children start on
+  `sonnet`; a read-only verification child may take `haiku` when it only
+  collects facts. Without the parameter the child inherits the pilot's model.
 - Follow-ups go to the child that has the context (`SendMessage` to its
   session id), not to a new session.
 - **Only asked-for starts run from an event.** On a turn started by another
