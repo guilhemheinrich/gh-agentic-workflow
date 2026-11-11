@@ -291,11 +291,12 @@ local_id() {
   echo "$id"
 }
 
-# children SESSION — {total, running} over the non-archived sessions started
+# children SESSION [WATCHER_ID] — {total, running} over the non-archived sessions started
 # from this one (their file names it in spawnedFrom.sessionId). The files
 # carry no isRunning flag and the app does not rewrite them during a turn, so
 # a child counts as running while its title wears the working dot, for up to
 # SESSION_TITLE_CHILD_STALE seconds (default 2 h) so a crashed turn ends.
+# Detached lineages and the watcher (see kids_activity) are not children.
 children() {
   local parent wdot
   parent="$(local_id "$1")"
@@ -305,8 +306,10 @@ children() {
     | xargs -0 grep -lF "\"spawnedFrom\":{\"sessionId\":\"$parent\"" 2>/dev/null \
     | tr '\n' '\0' \
     | xargs -0 jq -c --arg w "$wdot " --arg p "$parent" --argjson now "$(date +%s)" \
-        --argjson stale "$STALE" '
-      select(.spawnedFrom.sessionId == $p and (.isArchived // false) == false)
+        --argjson stale "$STALE" --arg wi "$(watcher_icon)" --arg x "${2:-}" '
+      select(.spawnedFrom.sessionId == $p and (.isArchived // false) == false
+             and (.lineageDetached // false) == false and (.sessionId != $x)
+             and ((.title // "") | startswith($wi + " ") | not) and ((.title // "") != $wi))
       | {running: ((.title // "" | startswith($w)) and ($now - ((.lastActivityAt // 0) / 1000)) < $stale)}' 2>/dev/null \
     | jq -sc '{total: length, running: (map(select(.running)) | length)}'
   return 0
@@ -517,9 +520,15 @@ merged_overrides() {
   printf '%s' "$ov"
 }
 
-# kids_activity — {parentLocalId: epoch} over the non-archived session files
+# watcher_icon — icon that marks the freshness watcher's title (templates/titles.json).
+watcher_icon() { jq -r '.freshness.watcherIcon' "$TEMPLATES"; }
+
+# kids_activity [WATCHER_ID] — {parentLocalId: epoch} over the non-archived session files
 # that name a parent in spawnedFrom.sessionId: the latest news from that
-# parent's side sessions. A child still wearing the working dot within
+# parent's side sessions. Never counted as side sessions: detached lineages
+# (lineageDetached: true), the watcher's title (watcher_icon) and WATCHER_ID —
+# the watcher keeps its spawnedFrom, and each of its wakes would look like
+# news and bounce the pilot's dot forever. A child still wearing the working dot within
 # $STALE seconds is busy, so it counts as news right now.
 kids_activity() {
   local wdot; wdot="$(jq -r '.freshness.workingDot' "$TEMPLATES")"
@@ -527,8 +536,11 @@ kids_activity() {
   find "$APP_DIR" -type f -name 'local_*.json' -mtime -6 -print0 2>/dev/null \
     | xargs -0 grep -lF '"spawnedFrom":{"sessionId":"' 2>/dev/null \
     | tr '\n' '\0' \
-    | xargs -0 jq -c --arg w "$wdot " --argjson now "$(date +%s)" --argjson stale "$STALE" '
-      select((.isArchived // false) == false and (.spawnedFrom.sessionId | type) == "string")
+    | xargs -0 jq -c --arg w "$wdot " --argjson now "$(date +%s)" --argjson stale "$STALE" \
+        --arg wi "$(watcher_icon)" --arg x "${1:-}" '
+      select((.isArchived // false) == false and (.spawnedFrom.sessionId | type) == "string"
+             and (.lineageDetached // false) == false and (.sessionId != $x)
+             and ((.title // "") | startswith($wi + " ") | not) and ((.title // "") != $wi))
       | ((.lastActivityAt // 0) / 1000 | floor) as $at
       | {p: .spawnedFrom.sessionId,
          at: (if ((.title // "") | startswith($w)) and ($now - $at) < $stale then $now else $at end)}' 2>/dev/null \
@@ -549,10 +561,10 @@ kids_activity() {
 # - a pilot's age is the youngest of its own and its side sessions' activity,
 #   so "🧭 Piloting 0/2" stays 🟢 while a child works. Such a rename may make
 #   the dot younger, and carries news: true so older_only keeps it.
-sweep() {
+sweep() {  # sweep FILE [WATCHER_ID]
   local fresh=false; freshness_on && fresh=true
   local ov; ov="$(merged_overrides "$1")"; [[ -n "$ov" ]] || ov='{}'
-  local kids; kids="$(kids_activity)"; [[ -n "$kids" ]] || kids='{}'
+  local kids; kids="$(kids_activity "${2:-}")"; [[ -n "$kids" ]] || kids='{}'
   jq -c --argjson now "$(date +%s)" --argjson fresh "$fresh" --argjson ov "$ov" --argjson kids "$kids" \
     --argjson stale "$STALE" --slurpfile tpl "$TEMPLATES" '
     ($tpl[0].freshness.levels) as $levels
@@ -771,7 +783,7 @@ case "$cmd" in
       scope=6
       # The watcher's own session never counts: each wake re-titles it, so it
       # would turn 🟡 five minutes later and wake itself forever.
-      sweep "$snap" 2>/dev/null | grep -v '^$' | { if [[ -n "$session" ]]; then grep -vF "\"$session\"" || true; else cat; fi; } \
+      sweep "$snap" "$session" 2>/dev/null | grep -v '^$' | { if [[ -n "$session" ]]; then grep -vF "\"$session\"" || true; else cat; fi; } \
         | older_only "$snap" >"$seen_file.$$"
       fresh_lines="$(grep -vxF -f "$seen_file" "$seen_file.$$")"
       [[ -s "$seen_file" ]] || fresh_lines="$(cat "$seen_file.$$")"
