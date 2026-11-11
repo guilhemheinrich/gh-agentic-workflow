@@ -1,4 +1,5 @@
 {
+  "team": "",
   "states": {
     "in_progress": ["In Progress", "En cours"],
     "in_review": ["In Review", "En revue"]

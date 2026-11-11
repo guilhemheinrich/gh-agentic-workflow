@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR/.agents/hooks/linear-lifecycle.sh\"",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/linear-lifecycle.sh\"",
             "timeout": 10
           }
         ]

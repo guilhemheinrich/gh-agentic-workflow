@@ -2,32 +2,41 @@
 # install-lifecycle.sh — install the Linear lifecycle hook into a consumer repo, once.
 #
 # Copies, into <target>:
-#   .agents/hooks/linear-lifecycle.sh   the Stop hook
-#   .agents/hooks/linear-record.sh      the per-spec event log writer
-#   .agents/linear/phases.json          phase switches and state names
-#   .agents/linear/*.md                 per-phase templates
-# and merges the Stop hook registration into .claude/settings.json.
+#   .claude/hooks/linear-lifecycle.sh   the Stop hook
+#   .claude/hooks/linear-record.sh      the per-spec event log writer
+#   .claude/linear/phases.json          the switch (`team`), phase switches, state names
+#   .claude/linear/*.md                 per-phase templates
+# and merges the Stop hook registration into .claude/settings.json
+# (command: "$CLAUDE_PROJECT_DIR/.claude/hooks/linear-lifecycle.sh").
+# Consumers are Claude Code only.
+#
+# phases.json carries "team": "<name>". Its non-empty `team` is what arms the
+# hook; without one the hook stays silent. --team writes (or updates) it, in a
+# phases.json that already exists too. There is no repository-level project:
+# the project is recorded per spec (linear-record.sh <spec-dir> project NAME).
 #
 # After this the target depends on nothing in this skill. Files that already
 # exist are kept (the repo owns its templates); pass --force to overwrite them.
 # Re-running is safe: the settings entry is added once.
 #
-# Usage: install-lifecycle.sh <target-repo> [--force]
+# Usage: install-lifecycle.sh <target-repo> [--team NAME] [--force]
 
 set -euo pipefail
 
 SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TPL="$SKILL_DIR/templates"
 
-target="" force=0
-for arg in "$@"; do
-  case "$arg" in
+target="" force=0 team=""
+while (( $# )); do
+  case "$1" in
     --force) force=1 ;;
-    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
-    *) [[ -z "$target" ]] && target="$arg" || { echo "unexpected argument: $arg" >&2; exit 2; } ;;
+    --team) shift; team="${1:-}"; [[ -n "$team" ]] || { echo "--team needs a name" >&2; exit 2; } ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) [[ -z "$target" ]] && target="$1" || { echo "unexpected argument: $1" >&2; exit 2; } ;;
   esac
+  shift
 done
-[[ -n "$target" && -d "$target" ]] || { echo "usage: install-lifecycle.sh <target-repo> [--force]" >&2; exit 2; }
+[[ -n "$target" && -d "$target" ]] || { echo "usage: install-lifecycle.sh <target-repo> [--team NAME] [--force]" >&2; exit 2; }
 command -v jq >/dev/null 2>&1 || { echo "install-lifecycle: jq is required" >&2; exit 2; }
 target="$(cd "$target" && pwd)"
 
@@ -41,10 +50,10 @@ copy() { # SRC DEST MODE
   echo "installed  ${2#"$target"/}"
 }
 
-copy "$TPL/hooks/linear-lifecycle.sh" "$target/.agents/hooks/linear-lifecycle.sh" 755
-copy "$TPL/hooks/linear-record.sh"    "$target/.agents/hooks/linear-record.sh"    755
+copy "$TPL/hooks/linear-lifecycle.sh" "$target/.claude/hooks/linear-lifecycle.sh" 755
+copy "$TPL/hooks/linear-record.sh"    "$target/.claude/hooks/linear-record.sh"    755
 for f in "$TPL"/linear/*; do
-  copy "$f" "$target/.agents/linear/$(basename "$f")" 644
+  copy "$f" "$target/.claude/linear/$(basename "$f")" 644
 done
 
 settings="$target/.claude/settings.json"
@@ -61,6 +70,12 @@ else
   echo "registered .claude/settings.json (Stop hook)"
 fi
 
-if [[ ! -f "$target/.linear.json" ]]; then
-  echo "note: no .linear.json in $target — the hook stays silent until one names a team and a project." >&2
+phases="$target/.claude/linear/phases.json"
+if [[ -n "$team" ]]; then
+  tmp="$phases.$$"
+  jq --arg t "$team" '.team = $t' "$phases" >"$tmp" && mv "$tmp" "$phases"
+  echo "team       .claude/linear/phases.json -> \"$team\""
+fi
+if [[ -z "$(jq -r '.team // ""' "$phases")" ]]; then
+  echo "note: .claude/linear/phases.json names no team — the hook stays silent until it does (re-run with --team NAME)." >&2
 fi

@@ -690,9 +690,9 @@ class TestAuditAndMigrate(unittest.TestCase):
 
 
 class PublishCase(unittest.TestCase):
-    """Base for the publish verb: a real ledger, a real .linear.json beside it."""
+    """Base for the publish verb: a real ledger, a real phases.json for the team fallback."""
 
-    CONFIG = {"team": "Tiger Team", "project": "Broker PA · Run", "labels": ["modelo-broker-pa"]}
+    PROJECT = "Broker PA · Run"
 
     def setUp(self):
         self.root = Path(tempfile.mkdtemp())
@@ -704,18 +704,20 @@ class PublishCase(unittest.TestCase):
                               source="spec 156 implementation", tags=["scaling"])),
             encoding="utf-8",
         )
-        self.config = self.root / ".linear.json"
-        self.write_config(self.CONFIG)
+        self.phases = self.root / ".claude" / "linear" / "phases.json"
+        self.phases.parent.mkdir(parents=True)
+        self.write_phases({"team": "Tiger Team", "phases": {}})
 
-    def write_config(self, payload: object) -> None:
-        self.config.write_text(json.dumps(payload), encoding="utf-8")
+    def write_phases(self, payload: object) -> None:
+        self.phases.write_text(json.dumps(payload), encoding="utf-8")
 
     def publish(self, **overrides: object):
         """Run cmd_publish and return (exit code, stdout)."""
         import argparse
         fields = dict(
             file=str(self.path), repo=None, id=SLUG_ID, prepare=False, record=None,
-            url=None, backend="linear", config=str(self.config), date=None, note=None,
+            url=None, backend="linear", phases=str(self.phases), project=self.PROJECT,
+            team=None, label=None, date=None, note=None,
             force=False, dry_run=False, json=True,
         )
         fields.update(overrides)
@@ -731,23 +733,39 @@ class PublishCase(unittest.TestCase):
 class TestPublishRefusesAndReports(PublishCase):
     """Every stop has a distinct meaning, and two of them are not failures."""
 
-    def test_no_config_is_not_an_error(self):
-        self.config.unlink()
-        code, out = self.publish(prepare=True)
-        self.assertEqual(code, 0, "a repository that keeps its findings locally is normal")
-        self.assertEqual(json.loads(out)["status"], "not-configured")
+    def test_no_project_refuses_rather_than_guesses(self):
+        with self.assertRaises(g.UserError) as ctx:
+            self.publish(prepare=True, project=None)
+        self.assertIn("--project", str(ctx.exception))
+        with self.assertRaises(g.UserError):
+            self.publish(prepare=True, project="  ")
 
-    def test_a_missing_project_refuses_rather_than_guesses(self):
-        self.write_config({"team": "Tiger Team"})
+    def test_no_team_anywhere_refuses(self):
+        self.phases.unlink()
         with self.assertRaises(g.UserError) as ctx:
             self.publish(prepare=True)
-        self.assertIn("project", str(ctx.exception))
+        self.assertIn("--team", str(ctx.exception))
 
-    def test_a_committed_credential_refuses(self):
-        self.write_config({"team": "T", "project": "P", "apiKey": "lin_api_xxx"})
-        with self.assertRaises(g.UserError) as ctx:
+    def test_team_flag_wins_and_needs_no_phases_file(self):
+        self.phases.unlink()
+        code, out = self.publish(prepare=True, team="Other Team")
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["issue"]["team"], "Other Team")
+
+    def test_team_falls_back_to_phases_json(self):
+        payload = json.loads(self.publish(prepare=True)[1])
+        self.assertEqual(payload["issue"]["team"], "Tiger Team")
+        self.assertEqual(payload["issue"]["project"], self.PROJECT)
+
+    def test_two_projects_two_payloads(self):
+        a = json.loads(self.publish(prepare=True, project="Alpha")[1])["issue"]["project"]
+        b = json.loads(self.publish(prepare=True, project="Beta")[1])["issue"]["project"]
+        self.assertEqual((a, b), ("Alpha", "Beta"))
+
+    def test_a_phases_file_without_team_refuses(self):
+        self.write_phases({"phases": {}})
+        with self.assertRaises(g.UserError):
             self.publish(prepare=True)
-        self.assertIn("committed", str(ctx.exception))
 
     def test_exactly_one_of_prepare_or_record(self):
         for combination in ({}, {"prepare": True, "record": "TT-412"}):
@@ -795,12 +813,12 @@ class TestPublishPrepare(PublishCase):
             with self.subTest(field=forbidden):
                 self.assertNotIn(forbidden, issue)
 
-    def test_labels_merge_the_config_and_never_carry_the_binding(self):
+    def test_labels_merge_the_flags_and_never_carry_the_binding(self):
         self.publish(record="TT-412")
-        issue = self.publish(prepare=True, force=True)[1]
+        issue = self.publish(prepare=True, force=True, label=["modelo-broker-pa"])[1]
         labels = json.loads(issue)["issue"]["labels"]
         self.assertIn("scaling", labels)
-        self.assertIn("modelo-broker-pa", labels, "config labels are added")
+        self.assertIn("modelo-broker-pa", labels, "--label values are added")
         self.assertNotIn("linear:TT-412", labels, "the binding is never a tracker label")
 
     def test_a_boundary_tag_warns_and_does_not_block(self):

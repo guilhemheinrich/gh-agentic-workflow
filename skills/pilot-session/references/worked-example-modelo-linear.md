@@ -16,7 +16,7 @@ the roadmap is that Linear project.
 
 | Generic rule | This setup |
 |---|---|
-| Tracker | Linear project; `.linear.json` + `linear-tracker` skill. Split into issues/sub-issues, PR link on the issue, status moved to In Review when the PR opens. Decisions that are not the pilot's: comment on the issue, people mentioned. |
+| Tracker | Linear project named in the charter (carried by each child brief into its spec's `linear.json`); Linear MCP connector + `linear-tracker` skill. Split into issues/sub-issues, PR link on the issue, status moved to In Review when the PR opens. Decisions that are not the pilot's: comment on the issue, people mentioned. |
 | Branch naming | Linear `gitBranchName`, or `tt-NNNN-<slug>` |
 | Target branch | `staging`, PR opened with `ws pr open` |
 | References | `Linear: TT-NNNN` in the PR description, `Refs: TT-NNNN` in every commit |

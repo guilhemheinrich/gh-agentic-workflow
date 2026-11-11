@@ -134,10 +134,18 @@ not worth it for this body of work, say so and go on.
    subscribes **itself** to each child's change as well, so it does not depend
    on the child reporting to learn that something went green.
 2. **Is there a tracker, and can the pilot write to it?** Look, do not assume:
-   a tracker config at the repository root (`.linear.json` → the
-   `linear-tracker` skill), an issue-tracker MCP or CLI, a roadmap file. If
-   there is one, the pilot keeps it current at every transition. If there is
-   none, the startup summary is the tracker, kept in the conversation.
+   an issue-tracker MCP connector or CLI (Linear: the Linear MCP connector or
+   `LINEAR_API_KEY` → the `linear-tracker` skill), the lifecycle switch
+   `.claude/linear/phases.json` (its `team` says Linear is on in this
+   repository), a roadmap file. **The project is not read from the repository:**
+   the charter names it, and the pilot carries it into every child brief, which
+   writes it into the spec's `linear.json`. If there is a tracker, the pilot
+   keeps it current at every transition. If there is none, the startup summary
+   is the tracker, kept in the conversation. **If the lifecycle hook is armed
+   (`phases.json` has a `team`) but this session has neither the MCP connector
+   nor `LINEAR_API_KEY`, that is a gap: report it in the tooling inventory with
+   its remedy. Do not fall back to tracking in the conversation as if no
+   tracker existed.**
 3. **Can the pilot integrate what it is allowed to integrate?** A merge CLI or
    API with a write-scoped credential. Check it **before** the first change is
    ready, not when it is.

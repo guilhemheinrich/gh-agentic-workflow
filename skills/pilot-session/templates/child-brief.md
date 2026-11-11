@@ -16,6 +16,11 @@ end, up to a change that passes its gates. You do not integrate it yourself
 ## The work
 
 - **Item**: <REF> — <link, if any>
+- **Linear** (keep only if the tracker is Linear): project `<PROJECT NAME>`,
+  issue `<TT-NNN>` (or "none yet"). Write the project into the spec's
+  `linear.json` before the spec exists
+  (`.claude/hooks/linear-record.sh specs/<NNN-slug> project "<PROJECT NAME>"`),
+  and the issue with `linked <ID> <URL>` if it already exists.
 - **Goal**: <two sentences: what changes, for whom>
 - **Context you need**: <the facts the pilot already established: files, prior
   changes, decisions taken, links>
