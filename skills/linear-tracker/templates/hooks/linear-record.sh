@@ -11,6 +11,10 @@
 #   linked      <ID> <URL>   the agent linked an existing issue
 #   in_progress <ID>         the issue moved to In Progress
 #   in_review   <ID> <URL>   the issue moved to In Review; URL is the PR
+#   deployed    <ID> <URL>   the issue moved to Done: PR merged and its pipelines green; URL is the PR.
+#                            With `-` as <spec-dir> (a ticket without a spec, found by the hook in the
+#                            branch name or PR title) it is kept machine-local, in
+#                            <git-common-dir>/linear-lifecycle/deployed.json, never committed.
 #   project     <NAME>       the Linear project of this spec (top-level "project"; replaces any earlier one)
 #   unavailable              no Linear connector in this session. Machine-local: written to
 #                            <git-common-dir>/linear-lifecycle/unavailable.json (never to the committed
@@ -25,11 +29,11 @@ usage() { echo "usage: linear-record.sh <spec-dir> <event> [id|project-name] [ur
 command -v jq >/dev/null 2>&1 || { echo "linear-record: jq is required" >&2; exit 2; }
 
 dir="$1" event="$2" id="${3:-}" url="${4:-}"
-[[ -d "$dir" ]] || { echo "linear-record: no such spec directory: $dir" >&2; exit 2; }
+[[ "$dir" == "-" && "$event" == deployed ]] || [[ -d "$dir" ]] || { echo "linear-record: no such spec directory: $dir" >&2; exit 2; }
 
 case "$event" in
   created|linked) [[ -n "$id" && -n "$url" ]] || usage ;;
-  in_review)      [[ -n "$id" && -n "$url" ]] || usage ;;
+  in_review|deployed) [[ -n "$id" && -n "$url" ]] || usage ;;
   in_progress)    [[ -n "$id" ]] || usage ;;
   project)        [[ -n "$id" && -z "$url" ]] || usage ;;
   unavailable)    [[ -z "$id" ]] || usage ;;
@@ -37,6 +41,19 @@ case "$event" in
 esac
 if [[ "$event" != project && -n "$id" ]] && ! [[ "$id" =~ ^[A-Z][A-Z0-9]*-[0-9]+$ ]]; then
   echo "linear-record: not a Linear identifier: $id" >&2; exit 2
+fi
+
+if [[ "$dir" == "-" ]]; then
+  common="$(git rev-parse --git-common-dir 2>/dev/null)" || { echo "linear-record: not in a git repository" >&2; exit 2; }
+  [[ "$common" = /* ]] || common="$(cd "$common" && pwd)"
+  state="${LINEAR_LIFECYCLE_STATE:-$common/linear-lifecycle}"
+  mkdir -p "$state"
+  store="$state/deployed.json"
+  curd='{}'
+  [[ -s "$store" ]] && jq -e . "$store" >/dev/null 2>&1 && curd="$(cat "$store")"
+  if printf '%s' "$curd" | jq -e --arg i "$id" '.[$i] != null' >/dev/null; then echo "already-recorded"; exit 0; fi
+  printf '%s' "$curd" | jq --arg i "$id" --arg u "$url" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '.[$i] = {at: $at, url: $u}' >"$store.$$" && mv "$store.$$" "$store"
+  echo "recorded"; exit 0
 fi
 
 if [[ "$event" == unavailable ]]; then
