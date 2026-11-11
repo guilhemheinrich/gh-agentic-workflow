@@ -36,6 +36,9 @@ check "plan succeeds" '[ "$rc" = 0 ]' "$out"
 check "plan counts the hosts, ignoring worktrees" 'printf "%s" "$out" | grep -q "^hosts     bitbucket 2 · github 1 · other 1$"' "$out"
 check "plan reports tokens by presence only" 'printf "%s" "$out" | grep -q "^tokens    bitbucket ok · github missing$" && ! printf "%s" "$out" | grep -q "tok-SECRET"' "$out"
 check "plan proposes the GitHub token because GitHub repos exist" 'printf "%s" "$out" | grep -q "prw setup --github  (GitHub: 1 repositories)"' "$out"
+check "plan tells native monitor fixes and pr-watch informs" 'printf "%s" "$out" | grep -q "^github    1 repositories: the native monitor fixes" && printf "%s" "$out" | grep -q "auto_fix" && printf "%s" "$out" | grep -q "pr-watch informs"' "$out"
+out_gh="$("$PRW" plan --github 2>&1)"
+check "plan --github is accepted and changes nothing" '[ "$out_gh" = "$out" ]' "$out_gh"
 check "plan reports the launchd branch" 'printf "%s" "$out" | grep -q "^daemon    launchd$"' "$out"
 check "plan creates nothing, launchd branch included: no state dir" '[ ! -e "$PRW_STATE_DIR" ]'
 

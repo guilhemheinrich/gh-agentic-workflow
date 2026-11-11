@@ -31,7 +31,10 @@ wakes an idle pilot, and what the harness refuses to do on its own.
   still working.** With three children in parallel, a green change from the
   first would wait for the other two to go idle. Do not rely on reports to
   learn that a change is green: subscribe the pilot itself to each child's
-  change through the Git-host watcher, when there is one.
+  change through the Git-host watcher, when there is one. On GitHub the app's
+  native monitor only wakes a session for CI failures, conflicts and review
+  comments, and only with Auto-fix on for that PR (`ccd_pr` `set_monitor`):
+  each child enables it, and `pr-watch` covers the rest for the pilot.
 - **Event chains run out.** After many side-session events in a row with no
   user message, further reports wait for the next user turn. When the pilot
   notices a long chain, it posts a short status and its next planned step so

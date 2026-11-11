@@ -56,7 +56,10 @@ with `send_message`. The model only copies text: the script does the work.
 ## How a PR finds its session
 
 Claude Desktop keeps one file per session under
-`~/Library/Application Support/Claude/claude-code-sessions/*/*/local_*.json`:
+`<app dir>/claude-code-sessions/*/*/local_*.json`, where `<app dir>` is
+`~/Library/Application Support/Claude` (macOS),
+`${XDG_CONFIG_HOME:-~/.config}/Claude` (Linux) or `%APPDATA%\Claude` (Windows,
+Git Bash); `PR_RELAY_SESSIONS_DIR` overrides the sessions folder:
 
 - `cliSessionId` and `priorCliSessionIds` map the watcher's session id (the
   Claude Code one, e.g. `59dcdcf5-…`) to the desktop id `local_…` that

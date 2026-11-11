@@ -11,7 +11,7 @@ prw plan — what this machine needs (read-only, nothing is changed)
 hosts     bitbucket 48 · github 10 · other 2
 tokens    bitbucket ok · github missing
 daemon    launchd
-comments  Bitbucket MCP declared in ~/Library/Application Support/Claude/claude_desktop_config.json; GitHub through Bash (gh)
+comments  Bitbucket MCP declared in claude_desktop_config.json (Claude Desktop config dir); GitHub through Bash (gh)
 instance  legacy bitbucket-pr-watch found:
             - skill copy ~/.agents/skills/bitbucket-pr-watch
             - launchd agent com.bitbucket-pr-watch.daemon

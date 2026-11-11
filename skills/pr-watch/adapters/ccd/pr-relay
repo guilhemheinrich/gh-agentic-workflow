@@ -28,7 +28,17 @@ EOF
 }
 
 API="${PR_RELAY_API_BASE:-https://api.bitbucket.org/2.0}"
-SESSIONS_DIR="${PR_RELAY_SESSIONS_DIR:-$HOME/Library/Application Support/Claude/claude-code-sessions}"
+# Same OS rule as the watcher's other scripts: see scripts/lib/desktop.sh.
+# Follow symlinks (bash 3.2 has no `readlink -f`): lib/ lives next to the real file.
+_self="$0"
+while [ -L "$_self" ]; do
+  _link="$(readlink "$_self")"
+  case "$_link" in /*) _self="$_link" ;; *) _self="$(dirname "$_self")/$_link" ;; esac
+done
+# shellcheck disable=SC1091
+. "$(cd "$(dirname "$_self")/../../scripts/lib" && pwd)/desktop.sh"
+_default_sessions_dir="$(claude_desktop_dir)/claude-code-sessions"
+SESSIONS_DIR="${PR_RELAY_SESSIONS_DIR:-$_default_sessions_dir}"
 RELAY_STATE="${PR_RELAY_STATE_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/pr-relay}"
 ORPHAN_TTL="${PR_RELAY_ORPHAN_TTL:-3600}"
 RELAY_INBOX="${PR_RELAY_INBOX:-pr-relay-inbox}"

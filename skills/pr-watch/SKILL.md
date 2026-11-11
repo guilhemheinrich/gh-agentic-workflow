@@ -1,6 +1,12 @@
 ---
 name: pr-watch
 description: >-
+  Division of labour on GitHub: in Claude Desktop the native PR monitor (with
+  Auto-fix on, `ccd_pr` set_monitor) wakes a session to fix CI failures, merge
+  conflicts and review comments; pr-watch tells it everything else (green CI,
+  approvals, change requests, merges, the post-merge build), which a pilot needs
+  to move on alone. Bitbucket has no native monitor: pr-watch alone. On a
+  harness with no native monitor, pr-watch covers everything.
   Give the sessions of Claude Desktop (and any harness that re-invokes an idle
   session when a background command exits) near-live news from the Git host
   that owns their pull request — Bitbucket Cloud and GitHub today, one provider
@@ -35,6 +41,24 @@ A session that opened a PR usually ends its turn on "PR #229 awaits your
 review" and then knows nothing. The pipeline fails, a reviewer comments, and
 the human has to go look at the Git host. This skill makes the PR ring the
 session's own doorbell, whichever host it lives on.
+
+**Who wakes the session.** On GitHub, split the work: the host's native
+monitor **fixes**, pr-watch **informs**. Bitbucket has no native monitor:
+pr-watch alone. On a harness with no native monitor, pr-watch covers
+everything.
+
+| Event | GitHub in Claude Desktop | Bitbucket |
+|---|---|---|
+| CI failure | native monitor, **only with Auto-fix on** (`ccd_pr set_monitor auto_fix`, approved per PR) · also pr-watch | pr-watch |
+| Merge conflict | native monitor with Auto-fix · also pr-watch | pr-watch |
+| Review comment | native monitor with Auto-fix · also pr-watch | pr-watch |
+| CI green | pr-watch | pr-watch |
+| Approval / change request | pr-watch | pr-watch |
+| Merged by someone else | pr-watch | pr-watch |
+| Build after the merge | pr-watch | pr-watch |
+
+`bind_pr` alone wakes nothing: Auto-fix must be on for that PR. The GitHub
+connector or `gh` cover reads.
 
 ```text
 Git host ◀── poll (read-only, 60 s / 20 s) ── prw daemon (launchd) ── diff ──▶ events file of ONE session
@@ -80,6 +104,8 @@ a hidden prompt.
    tokens    bitbucket ok · github missing
    daemon    launchd
    comments  Bitbucket MCP declared in …/claude_desktop_config.json; GitHub through Bash (gh)
+   github    10 repositories: the native monitor fixes (Desktop: ccd_pr set_monitor auto_fix on each PR: CI failures,
+             conflicts, review comments); pr-watch informs (green CI, approvals, change requests, merges, post-merge build)
    instance  legacy bitbucket-pr-watch found:
                - skill copy ~/.agents/skills/bitbucket-pr-watch
                - launchd agent com.bitbucket-pr-watch.daemon
@@ -94,6 +120,9 @@ a hidden prompt.
    ```
 
    (From `references/example-bitbucket.md`: the machine this was written on.)
+   For GitHub repositories `plan` prints a `github` line (the native monitor
+   fixes, so turn Auto-fix on for each PR; pr-watch informs) and lists
+   `setup --github` like any host (`--github` is accepted and has no effect).
    The `next` list is the procedure: do what it says, in its order, and re-run
    `plan` to see it shrink. A host with no repository on the machine gets no
    step. `--roots DIR[:DIR]` (or `PRW_CODE_ROOTS`) sets the code roots; the
@@ -120,6 +149,9 @@ a hidden prompt.
    with a PR and `prw list --session <id>` must show it.
 
 ## 2. Hosts
+
+Bitbucket Cloud has no native monitor: pr-watch alone. On GitHub the native
+monitor fixes (Auto-fix) and pr-watch informs; see the table in the lead.
 
 | | Bitbucket Cloud | GitHub |
 |---|---|---|

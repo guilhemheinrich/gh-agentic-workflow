@@ -26,6 +26,7 @@ plan_hosts() {
   while IFS= read -r root; do
     [ -n "$root" ] || continue
     while IFS= read -r git; do
+      [ -n "$git" ] || continue # an empty scan must not read the repository of the cwd
       dir="$(dirname "$git")"
       key="$(repo_from_remote "$dir" 2>/dev/null)"
       if [ -n "$key" ]; then
@@ -58,7 +59,7 @@ plan_token_state() {
 # server, or nothing.
 plan_bitbucket_mcp() {
   local f
-  for f in "$HOME/.claude.json" "$(claude_settings)" "$HOME/Library/Application Support/Claude/claude_desktop_config.json"; do
+  for f in "$HOME/.claude.json" "$(claude_settings)" "$(claude_desktop_dir)/claude_desktop_config.json"; do
     [ -f "$f" ] || continue
     if jq -e '[(.mcpServers // {}) | keys[] | test("bitbucket"; "i")] | any' "$f" >/dev/null 2>&1; then
       printf '%s\n' "$f"
@@ -104,6 +105,7 @@ cmd_plan() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --roots) PRW_CODE_ROOTS="$2"; shift ;;
+      --github) ;; # kept for old callers: the GitHub step is listed by default now
       *) echo "prw plan: unknown option $1" >&2; return 64 ;;
     esac
     shift
@@ -137,6 +139,10 @@ cmd_plan() {
   elif [ -d "$state" ]; then echo "instance  current ($state)"
   else echo "instance  none yet"; fi
 
+  if [ "$gh" -gt 0 ]; then
+    echo "github    $gh repositories: the native monitor fixes (Desktop: ccd_pr set_monitor auto_fix on each PR: CI failures,"
+    echo "          conflicts, review comments); pr-watch informs (green CI, approvals, change requests, merges, post-merge build)"
+  fi
   echo "next"
   if prw_in_checkout; then next=$((next + 1)); echo "  $next. bash install.sh   (from the repository), then re-run ~/.agents/skills/pr-watch/scripts/prw plan"; fi
   [ -n "$legacy" ] && { next=$((next + 1)); echo "  $next. prw migrate"; }

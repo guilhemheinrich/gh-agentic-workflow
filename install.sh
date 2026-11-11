@@ -51,13 +51,14 @@ CLAUDE_CODE_TARGET="$HOME/.claude"
 
 # Claude configs
 CLAUDE_CODE_CONFIG="$HOME/.claude.json"
-if [[ "$OSTYPE" == "darwin"* ]]; then
+# Claude Desktop config dir — Windows $APPDATA (Git Bash exports a Windows
+# path, so cygpath converts it), Linux XDG config dir, macOS Application Support.
+if [[ -n "${APPDATA:-}" ]]; then
+	CLAUDE_DESKTOP_CONFIG="$(cygpath -u "$APPDATA" 2>/dev/null || printf '%s' "$APPDATA")/Claude/claude_desktop_config.json"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
 	CLAUDE_DESKTOP_CONFIG="$HOME/Library/Application Support/Claude/claude_desktop_config.json"
-elif [[ -n "${APPDATA:-}" ]]; then
-	CLAUDE_DESKTOP_CONFIG="$APPDATA/Claude/claude_desktop_config.json"
 else
-	echo "Warning: Cannot determine Claude Desktop config location, skipping"
-	CLAUDE_DESKTOP_CONFIG=""
+	CLAUDE_DESKTOP_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/Claude/claude_desktop_config.json"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
