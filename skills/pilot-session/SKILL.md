@@ -128,13 +128,15 @@ not worth it for this body of work, say so and go on.
 1. **Can the sessions hear from the Git host without polling?** Pipeline
    results, review comments, merges, post-merge builds. Without a watcher, the
    pilot asks the human or checks by hand — a pseudo-block on every change.
-   Order of preference. **GitHub**: the harness's native PR monitor first —
-   in Claude Desktop, `ccd_pr` `get_status` then `bind_pr` on each child's PR,
-   and the app wakes the session on a CI failure, a conflict or a review
-   comment and offers Auto-fix; the GitHub connector or `gh` for reads. Use
-   `pr-watch` for GitHub only on a harness with no native PR monitor.
-   **Bitbucket** has no such integration: `pr-watch` (wakes an idle session
-   when its PR moves) is the way. If a watcher exists, the pilot subscribes
+   Division of labour. **GitHub in Claude Desktop**: each child turns on
+   Auto-fix on the PR it opens (`ccd_pr` `set_monitor` `auto_fix`, one user
+   approval per PR) so the native monitor wakes it for CI failures, conflicts
+   and review comments; `bind_pr` alone wakes nothing. The native monitor says
+   nothing of green CI, approvals, change requests, merges by someone else or
+   the post-merge build, which the pilot needs to advance alone: `pr-watch`
+   follows the PR for the pilot. **Bitbucket** has no native monitor:
+   `pr-watch` alone. On a harness with no native monitor, `pr-watch` covers
+   everything. If a watcher exists, the pilot subscribes
    **itself** to each child's change as well, so it does not depend
    on the child reporting to learn that something went green.
 2. **Is there a tracker, and can the pilot write to it?** Look, do not assume:

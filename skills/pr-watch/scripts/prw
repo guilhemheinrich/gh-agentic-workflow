@@ -25,7 +25,7 @@ usage() {
   cat <<'EOF'
 prw — wake the session that owns a PR (Bitbucket or GitHub), once per real change.
 
-  prw plan [--roots DIR[:DIR...]] [--github]
+  prw plan [--roots DIR[:DIR...]]
   prw migrate [--yes]
   prw setup [--non-interactive] [--rotate] [--github] [--claude]
   prw doctor [--quiet]

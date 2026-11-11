@@ -26,6 +26,7 @@ plan_hosts() {
   while IFS= read -r root; do
     [ -n "$root" ] || continue
     while IFS= read -r git; do
+      [ -n "$git" ] || continue # an empty scan must not read the repository of the cwd
       dir="$(dirname "$git")"
       key="$(repo_from_remote "$dir" 2>/dev/null)"
       if [ -n "$key" ]; then
@@ -104,7 +105,7 @@ cmd_plan() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --roots) PRW_CODE_ROOTS="$2"; shift ;;
-      --github) PRW_PLAN_GITHUB=1 ;;
+      --github) ;; # kept for old callers: the GitHub step is listed by default now
       *) echo "prw plan: unknown option $1" >&2; return 64 ;;
     esac
     shift
@@ -138,18 +139,15 @@ cmd_plan() {
   elif [ -d "$state" ]; then echo "instance  current ($state)"
   else echo "instance  none yet"; fi
 
-  if [ "$gh" -gt 0 ] && [ "${PRW_PLAN_GITHUB:-0}" != 1 ]; then
-    echo "github    $gh repositories: use the host's official integration first (Claude Desktop: bind the PR with"
-    echo "          ccd_pr bind_pr, the app's PR monitor and Auto-fix wake the session; GitHub connector or gh for reads);"
-    echo "          pr-watch for GitHub only on a harness with no native PR monitor: prw plan --github"
+  if [ "$gh" -gt 0 ]; then
+    echo "github    $gh repositories: the native monitor fixes (Desktop: ccd_pr set_monitor auto_fix on each PR: CI failures,"
+    echo "          conflicts, review comments); pr-watch informs (green CI, approvals, change requests, merges, post-merge build)"
   fi
   echo "next"
   if prw_in_checkout; then next=$((next + 1)); echo "  $next. bash install.sh   (from the repository), then re-run ~/.agents/skills/pr-watch/scripts/prw plan"; fi
   [ -n "$legacy" ] && { next=$((next + 1)); echo "  $next. prw migrate"; }
   if [ "$bb" -gt 0 ] && [ "$bbn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup           (Bitbucket: $bb repositories)"; fi
-  # GitHub is covered by the host's official integration (Claude Desktop: the
-  # app's PR monitor once the PR is bound); the step is proposed on request only.
-  if [ "$gh" -gt 0 ] && [ "$ghn" = missing ] && [ "${PRW_PLAN_GITHUB:-0}" = 1 ]; then next=$((next + 1)); echo "  $next. prw setup --github  (GitHub: $gh repositories)"; fi
+  if [ "$gh" -gt 0 ] && [ "$ghn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup --github  (GitHub: $gh repositories)"; fi
   if [ -z "$legacy" ] && ! claude_hooks_wired; then next=$((next + 1)); echo "  $next. prw setup --claude"; fi
   if [ -z "$legacy" ] && [ "$daemon" = launchd ] && ! daemon_alive; then next=$((next + 1)); echo "  $next. prw daemon start"; fi
   next=$((next + 1)); echo "  $next. prw doctor"

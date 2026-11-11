@@ -49,6 +49,14 @@ it.> Before asking for integration, have the diff attacked by <2–3 models from
 other vendors> through <tool>. Fix blocking findings; list the others in the
 change description.
 
+## Optional — Pull request monitoring
+
+<Keep only in Claude Desktop with a GitHub repository.> Once you have opened
+the PR, turn on Auto-fix for it (`ccd_pr` `set_monitor` `auto_fix`; the user
+approves once per PR) — the app then wakes you on CI failures, conflicts and
+review comments, and `bind_pr` alone does not. The pilot follows the PR with
+`pr-watch` (green CI, approvals, merges): you do not need to report those.
+
 ## Optional — Git-host watcher
 
 <Keep only if a watcher is installed.> After pushing, make sure the change is
