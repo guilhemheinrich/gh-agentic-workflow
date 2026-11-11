@@ -104,6 +104,7 @@ cmd_plan() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --roots) PRW_CODE_ROOTS="$2"; shift ;;
+      --github) PRW_PLAN_GITHUB=1 ;;
       *) echo "prw plan: unknown option $1" >&2; return 64 ;;
     esac
     shift
@@ -137,11 +138,18 @@ cmd_plan() {
   elif [ -d "$state" ]; then echo "instance  current ($state)"
   else echo "instance  none yet"; fi
 
+  if [ "$gh" -gt 0 ] && [ "${PRW_PLAN_GITHUB:-0}" != 1 ]; then
+    echo "github    $gh repositories: use the host's official integration first (Claude Desktop: bind the PR with"
+    echo "          ccd_pr bind_pr, the app's PR monitor and Auto-fix wake the session; GitHub connector or gh for reads);"
+    echo "          pr-watch for GitHub only on a harness with no native PR monitor: prw plan --github"
+  fi
   echo "next"
   if prw_in_checkout; then next=$((next + 1)); echo "  $next. bash install.sh   (from the repository), then re-run ~/.agents/skills/pr-watch/scripts/prw plan"; fi
   [ -n "$legacy" ] && { next=$((next + 1)); echo "  $next. prw migrate"; }
   if [ "$bb" -gt 0 ] && [ "$bbn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup           (Bitbucket: $bb repositories)"; fi
-  if [ "$gh" -gt 0 ] && [ "$ghn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup --github  (GitHub: $gh repositories)"; fi
+  # GitHub is covered by the host's official integration (Claude Desktop: the
+  # app's PR monitor once the PR is bound); the step is proposed on request only.
+  if [ "$gh" -gt 0 ] && [ "$ghn" = missing ] && [ "${PRW_PLAN_GITHUB:-0}" = 1 ]; then next=$((next + 1)); echo "  $next. prw setup --github  (GitHub: $gh repositories)"; fi
   if [ -z "$legacy" ] && ! claude_hooks_wired; then next=$((next + 1)); echo "  $next. prw setup --claude"; fi
   if [ -z "$legacy" ] && [ "$daemon" = launchd ] && ! daemon_alive; then next=$((next + 1)); echo "  $next. prw daemon start"; fi
   next=$((next + 1)); echo "  $next. prw doctor"

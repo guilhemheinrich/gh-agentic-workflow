@@ -1,7 +1,12 @@
 ---
 name: pr-watch
 description: >-
-  Give the sessions of Claude Desktop (and any harness that re-invokes an idle
+  Bitbucket first: Bitbucket has no native PR monitor, so this skill is the way
+  to hear from it. GitHub: use the host's official integration first — in
+  Claude Desktop, bind the PR to the session (`ccd_pr` bind_pr) and let the
+  app's PR monitor and Auto-fix wake it, with the GitHub connector or `gh` for
+  reads; install pr-watch for GitHub only on a harness that has no native PR
+  monitor. Give the sessions of Claude Desktop (and any harness that re-invokes an idle
   session when a background command exits) near-live news from the Git host
   that owns their pull request — Bitbucket Cloud and GitHub today, one provider
   file per host. A session that pushed a branch hears, at zero token cost
@@ -35,6 +40,13 @@ A session that opened a PR usually ends its turn on "PR #229 awaits your
 review" and then knows nothing. The pipeline fails, a reviewer comments, and
 the human has to go look at the Git host. This skill makes the PR ring the
 session's own doorbell, whichever host it lives on.
+
+> **GitHub: use the host's official integration first** — in Claude Desktop,
+> bind the PR to the session (`ccd_pr` `get_status`, then `bind_pr`) and let
+> the app's PR monitor and Auto-fix wake it; the GitHub connector or `gh` for
+> reads (in cloud sessions, the platform's GitHub integration does the same).
+> Install pr-watch for GitHub only on a harness that has no native PR monitor.
+> **Bitbucket has no such integration: pr-watch is the way.**
 
 ```text
 Git host ◀── poll (read-only, 60 s / 20 s) ── prw daemon (launchd) ── diff ──▶ events file of ONE session
@@ -80,6 +92,9 @@ a hidden prompt.
    tokens    bitbucket ok · github missing
    daemon    launchd
    comments  Bitbucket MCP declared in …/claude_desktop_config.json; GitHub through Bash (gh)
+   github    10 repositories: use the host's official integration first (Claude Desktop: bind the PR with
+             ccd_pr bind_pr, the app's PR monitor and Auto-fix wake the session; GitHub connector or gh for reads);
+             pr-watch for GitHub only on a harness with no native PR monitor: prw plan --github
    instance  legacy bitbucket-pr-watch found:
                - skill copy ~/.agents/skills/bitbucket-pr-watch
                - launchd agent com.bitbucket-pr-watch.daemon
@@ -89,12 +104,14 @@ a hidden prompt.
                - hook entries in ~/.claude/settings.json
    next
      1. prw migrate
-     2. prw setup --github  (GitHub: 10 repositories)
-     3. prw doctor
+     2. prw doctor
    ```
 
    (From `references/example-bitbucket.md`: the machine this was written on.)
-   The `next` list is the procedure: do what it says, in its order, and re-run
+   `plan` does not propose `setup --github` by default: for GitHub
+   repositories it prints a `github` line pointing at the official
+   integration, and lists the step only with `prw plan --github` (a harness
+   with no native PR monitor). The `next` list is the procedure: do what it says, in its order, and re-run
    `plan` to see it shrink. A host with no repository on the machine gets no
    step. `--roots DIR[:DIR]` (or `PRW_CODE_ROOTS`) sets the code roots; the
    default is `~/code` and `~/lab`.
@@ -105,7 +122,8 @@ a hidden prompt.
    stale installed copy (two skills for one watcher would both trigger) and
    starts the new daemon. A running `wait` ends with exit 3 and the session
    re-arms it at its next start.
-3. **Store the tokens.** `prw setup` (Bitbucket) and `prw setup --github`. See
+3. **Store the tokens.** `prw setup` (Bitbucket) and, only where the host has
+   no native GitHub PR monitor, `prw setup --github`. See
    §3 for the tokens to create; the env file is `~/.config/pr-watch/env` (0600),
    sourced from `.bashrc`, `.bash_profile`, `.profile`, `.zshenv` (created for
    zsh users: the Claude desktop app runs its shell as `zsh -c`, which reads
@@ -120,6 +138,11 @@ a hidden prompt.
    with a PR and `prw list --session <id>` must show it.
 
 ## 2. Hosts
+
+Bitbucket Cloud is pr-watch's home: no official integration wakes a session
+on it. For GitHub, the host's own integration comes first (Claude Desktop:
+`bind_pr` + the app's PR monitor and Auto-fix; GitHub connector or `gh` for
+reads); the GitHub provider below is for a harness with no native PR monitor.
 
 | | Bitbucket Cloud | GitHub |
 |---|---|---|
