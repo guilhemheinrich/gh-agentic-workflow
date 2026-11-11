@@ -6,14 +6,14 @@
 # The -K config arrives on stdin; it is read and discarded, never logged, so a
 # test can grep the log for the token and prove it never left the process.
 set -u
-out="" hdr="" write="" url="" follow=0
+out="" hdr="" write="" url="" follow=0 cfg=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -L) follow=1 ;;
     -o) out="$2"; shift ;;
     -D) hdr="$2"; shift ;;
     -w) write="$2"; shift ;;
-    -K) [ "$2" = "-" ] && cat >/dev/null; shift ;;
+    -K) [ "$2" = "-" ] && cfg="$(cat)"; shift ;;
     --max-time|-H|-u) shift ;;
     -*) ;;
     *) url="$1" ;;
@@ -38,6 +38,37 @@ if [ -f "$FAKE_CURL_DIR/$key.location" ]; then
     exit 0
   fi
 fi
+# Per-token behaviour, from $FAKE_CURL_DIR/tokens/<token>.<rule> (the token is
+# read from the config on stdin and goes only to the separate auth log):
+#   .invalid      every request answers 401
+#   .ratelimited  every request answers 403 with x-ratelimit-remaining: 0
+#   .repos        one OWNER/REPO per line: the only repositories it reads (404
+#                 elsewhere); without the file, a token reads everything (a
+#                 classic `repo` token)
+#   .classic      answers carry an X-OAuth-Scopes header
+token="$(printf '%s\n' "$cfg" | sed -n 's/^header = "Authorization: Bearer \(.*\)"$/\1/p' | head -1)"
+tdir="$FAKE_CURL_DIR/tokens"
+[ -n "${FAKE_CURL_AUTHLOG:-}" ] && printf '%s %s\n' "$token" "$tail" >>"$FAKE_CURL_AUTHLOG"
+extra=""
+if [ -n "$token" ] && [ -d "$tdir" ]; then
+  [ -f "$tdir/$token.classic" ] && extra="X-OAuth-Scopes: repo"
+  tcode=""
+  if [ -f "$tdir/$token.invalid" ]; then tcode=401
+  elif [ -f "$tdir/$token.ratelimited" ]; then tcode=403; extra="x-ratelimit-remaining: 0"
+  elif [ -f "$tdir/$token.repos" ]; then
+    case "$tail" in
+      repos/*/*)
+        r="${tail#repos/}"; r="${r%%/*}/$(printf '%s' "${tail#repos/*/}" | sed 's#[/?].*##')"
+        grep -qxF "$r" "$tdir/$token.repos" || tcode=404 ;;
+    esac
+  fi
+  if [ -n "$tcode" ]; then
+    [ -n "$out" ] && printf '{}' >"$out"
+    [ -n "$hdr" ] && printf '%s\n' "$extra" >"$hdr"
+    [ "$write" = '%{http_code}' ] && printf '%s' "$tcode"
+    exit 0
+  fi
+fi
 body="$FAKE_CURL_DIR/$key.json"
 code=200
 if [ -f "$FAKE_CURL_DIR/$key.code" ]; then code="$(cat "$FAKE_CURL_DIR/$key.code")"
@@ -47,6 +78,7 @@ if [ -n "$out" ]; then
 fi
 if [ -n "$hdr" ]; then
   if [ -f "$FAKE_CURL_DIR/$key.headers" ]; then cat "$FAKE_CURL_DIR/$key.headers" >"$hdr"; else : >"$hdr"; fi
+  [ -n "$extra" ] && printf '%s\n' "$extra" >>"$hdr"
 fi
 [ "$write" = '%{http_code}' ] && printf '%s' "$code"
 exit 0

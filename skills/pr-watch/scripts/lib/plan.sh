@@ -48,7 +48,7 @@ EOF
 plan_token_state() {
   case "$1" in
     github)
-      [ -n "${GITHUB_WATCH_TOKEN:-}" ] && [ "$GITHUB_WATCH_TOKEN" != "PASTE_YOUR_TOKEN_HERE" ] && echo ok || echo missing ;;
+      [ -n "$(github_tokens)" ] && echo ok || echo missing ;;
     *)
       [ -n "${BITBUCKET_WATCH_USER:-}" ] && [ -n "${BITBUCKET_WATCH_TOKEN:-}" ] \
         && [ "$BITBUCKET_WATCH_TOKEN" != "PASTE_YOUR_TOKEN_HERE" ] && echo ok || echo missing ;;
@@ -100,8 +100,36 @@ plan_legacy() {
   return 0
 }
 
+# plan_owners TOKEN_STATE — the GitHub owners found under the code roots, and
+# whether some token reads their repositories. Sets ownerless (owners with no
+# readable repo). With tokens, one read-only request per repo and token tried,
+# and no cache written: plan creates nothing.
+plan_owners() {
+  local repos owner count good rc repo
+  repos="$(plan_github_repos)"
+  [ -n "$repos" ] || return 0
+  echo "owners    GitHub owners under the code roots:"
+  while IFS= read -r owner; do
+    [ -n "$owner" ] || continue
+    count=0 good=0
+    while IFS= read -r repo; do
+      case "$repo" in "$owner"/*) ;; *) continue ;; esac
+      count=$((count + 1))
+      if [ "$1" = ok ]; then gh_repo_readable "$repo" >/dev/null 2>&1 && good=$((good + 1)); fi
+    done <<REPOS
+$repos
+REPOS
+    if [ "$1" != ok ]; then echo "            $owner  $count repos · no token"; ownerless="$ownerless${ownerless:+, }$owner"
+    elif [ "$good" = 0 ]; then echo "            $owner  $count repos · NO WORKING TOKEN"; ownerless="$ownerless${ownerless:+, }$owner"
+    elif [ "$good" -lt "$count" ]; then echo "            $owner  $count repos · $good readable (prw doctor names the others)"
+    else echo "            $owner  $count repos · all readable"; fi
+  done <<OWNERS
+$(printf '%s\n' "$repos" | sed 's#/.*##' | sort -u)
+OWNERS
+}
+
 cmd_plan() {
-  local hosts bb gh bbn ghn mcp legacy state next=0 daemon
+  local hosts bb gh bbn ghn mcp legacy state next=0 daemon ownerless=""
   while [ $# -gt 0 ]; do
     case "$1" in
       --roots) PRW_CODE_ROOTS="$2"; shift ;;
@@ -121,6 +149,8 @@ cmd_plan() {
   else echo "runs from ${PRW_SELF:-?}"; fi
   echo "hosts     bitbucket $bb · github $gh · other $6"
   echo "tokens    bitbucket $bbn · github $ghn"
+  ownerless=""
+  if [ "$gh" -gt 0 ]; then plan_owners "$ghn"; fi
   if [ "$(uname -s)" = Darwin ] && command -v launchctl >/dev/null 2>&1; then
     daemon="launchd"
   else
@@ -147,7 +177,8 @@ cmd_plan() {
   if prw_in_checkout; then next=$((next + 1)); echo "  $next. bash install.sh   (from the repository), then re-run ~/.agents/skills/pr-watch/scripts/prw plan"; fi
   [ -n "$legacy" ] && { next=$((next + 1)); echo "  $next. prw migrate"; }
   if [ "$bb" -gt 0 ] && [ "$bbn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup           (Bitbucket: $bb repositories)"; fi
-  if [ "$gh" -gt 0 ] && [ "$ghn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup --github  (GitHub: $gh repositories)"; fi
+  if [ "$gh" -gt 0 ] && [ "$ghn" = missing ]; then next=$((next + 1)); echo "  $next. prw setup --github  (GitHub: $gh repositories)"
+  elif [ -n "$ownerless" ]; then next=$((next + 1)); echo "  $next. prw setup --github  (add a token for: $ownerless)"; fi
   if [ -z "$legacy" ] && ! claude_hooks_wired; then next=$((next + 1)); echo "  $next. prw setup --claude"; fi
   if [ -z "$legacy" ] && [ "$daemon" = launchd ] && ! daemon_alive; then next=$((next + 1)); echo "  $next. prw daemon start"; fi
   next=$((next + 1)); echo "  $next. prw doctor"
