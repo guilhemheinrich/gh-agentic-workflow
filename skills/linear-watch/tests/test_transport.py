@@ -197,6 +197,17 @@ class OtherFailureTest(TransportCase):
                 self.assertEqual(exc.code, 13)
                 self.assertTrue(exc.message)
 
+    def test_rate_limit_words_outside_messages_do_not_count(self):
+        # a validation error at column 429, on a field named like a rate limit
+        body = json.loads((FIXTURES / "errors-unknown-field.json").read_text())
+        body["errors"][0]["locations"][0]["column"] = 429
+        body["errors"][0]["extensions"]["hint"] = "rateLimitStatus"
+        code, _ = lw._classify(1, "", json.dumps(body))
+        self.assertEqual(code, 13)
+
+    def test_exit_0_with_null_data_is_13(self):
+        self.assertEqual(lw._classify(0, '{"data": null}', "")[0], 13)
+
     def test_body_message_is_kept(self):
         exc = self.fail_with("not-found")
         self.assertEqual(exc.message, "Entity not found: Issue")

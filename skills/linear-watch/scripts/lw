@@ -313,12 +313,15 @@ def _error_list(body) -> list:
 def _classify(rc: int, stdout: str, stderr: str) -> tuple[int, str]:
     """(code, message) of a finished `linear api` run."""
     out_body, err_body = _parse_json(stdout), _parse_json(stderr)
-    if rc == 0 and isinstance(out_body, dict) and "data" in out_body and not _error_list(out_body):
+    if (rc == 0 and isinstance(out_body, dict) and isinstance(out_body.get("data"), dict)
+            and not _error_list(out_body)):
         return T_OK, ""
     errors = _error_list(out_body) or _error_list(err_body)
     codes = {str((e.get("extensions") or {}).get("code", "")) for e in errors}
     if errors:
         message = str(errors[0].get("message") or "GraphQL error")
+        # words are matched in the messages only, never in raw JSON ("column": 429)
+        wording = " ".join(str(e.get("message", "")) for e in errors)
     else:
         text = (stderr.strip() or stdout.strip()).splitlines()
         message = text[0] if text else ""
@@ -326,9 +329,10 @@ def _classify(rc: int, stdout: str, stderr: str) -> tuple[int, str]:
         if rc == 0:
             message = "unexpected output: " + (message[:80] or "empty")
         message = message or f"exit {rc}"
+        wording = stderr if err_body is None else message
     if rc == 4 or "AUTHENTICATION_ERROR" in codes:
         return T_CREDENTIAL, message
-    if "RATELIMITED" in codes or RATE_LIMIT_RE.search(stderr) or RATE_LIMIT_RE.search(message):
+    if "RATELIMITED" in codes or RATE_LIMIT_RE.search(wording):
         return T_RATE_LIMITED, message
     return T_OTHER, message
 
