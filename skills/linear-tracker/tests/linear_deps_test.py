@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.dirname(SCRIPT))
 import linear_deps as ld  # noqa: E402
 
 DEMO = os.path.join(HERE, "fixtures", "linear-deps-demo.json")
+MILESTONES = os.path.join(HERE, "fixtures", "linear-deps-milestones.json")
 CYCLE = os.path.join(HERE, "fixtures", "linear-deps-cycle.json")
 URL = "https://linear.app/acme/project/checkout-redesign-0123456789ab"
 
@@ -38,6 +39,27 @@ def run_cli(*args, env=None):
 def hrefs(svg_text):
     doc = minidom.parseString(svg_text)
     return [a.getAttribute("href") for a in doc.getElementsByTagName("a")]
+
+
+def card_xs(svg_text):
+    """{identifier: x of its box} for every card and chip."""
+    doc = minidom.parseString(svg_text)
+    out = {}
+    for a in doc.getElementsByTagName("a"):
+        rect = [r for r in a.getElementsByTagName("rect") if "box" in r.getAttribute("class").split()][0]
+        out[a.getAttribute("data-id")] = float(rect.getAttribute("x"))
+    return out
+
+
+def classed(svg_text, cls):
+    doc = minidom.parseString(svg_text)
+    return [e for tag in ("line", "path", "text") for e in doc.getElementsByTagName(tag)
+            if cls in e.getAttribute("class").split()]
+
+
+def banded_svg(data=None, external="drop", hide_isolated=False, bands=True):
+    data = data or load(MILESTONES)
+    return ld.render_svg(data, ld.build_graph(data, False, external, bands=bands), "acme", hide_isolated)
 
 
 class UrlTests(unittest.TestCase):
@@ -408,7 +430,8 @@ class ExportTests(unittest.TestCase):
 
     def test_shape(self):
         self.assertEqual(self.g["format"], "linear-deps/1")
-        self.assertEqual(self.g["project"], {"name": "Invitations lot (made up)", "url": URL})
+        self.assertEqual(self.g["project"], {"name": "Invitations lot (made up)", "url": URL,
+                                             "milestones": ["Staging: invitations"]})
         n = self.by_id["INV-3"]
         self.assertEqual(n["url"], "https://linear.app/acme/issue/INV-3")
         self.assertEqual(n["type"], "Proof")
@@ -496,6 +519,164 @@ class CheckTests(unittest.TestCase):
             res = run_cli("check", self.export(PASS, d), "--type", "Bug", "--blocked-by", "Feature")
         self.assertEqual(res.returncode, 0)
         self.assertIn("no issue of type 'Bug'; types present: Feature, Proof, Question, Technical task", res.stderr)
+
+
+
+
+class MilestoneBandTests(unittest.TestCase):
+    def test_bands_follow_the_milestone_order_left_to_right(self):
+        xs = card_xs(banded_svg())
+        staging = [xs[i] for i in ("MS-1", "MS-2", "MS-6", "MS-7")]
+        production = [xs[i] for i in ("MS-3", "MS-4", "MS-8")]
+        nomile = [xs[i] for i in ("MS-5", "MS-9")]
+        self.assertLess(max(staging), min(production))
+        self.assertLess(max(production), min(nomile))
+
+    def test_milestone_order_comes_from_the_data_not_from_the_names(self):
+        data = load(MILESTONES)
+        data["project"]["milestones"] = ["Production", "Staging"]
+        xs = card_xs(banded_svg(data))
+        self.assertLess(xs["MS-3"], xs["MS-1"])
+
+    def test_one_dashed_separator_per_band_boundary(self):
+        svg = banded_svg()
+        seps = classed(svg, "ms-sep")
+        self.assertEqual(len(seps), 2)  # Staging | Production | No milestone
+        self.assertIn("stroke-dasharray", svg[svg.index(".ms-sep"):svg.index(".ms-sep") + 120])
+        self.assertEqual(len(set(e.getAttribute("d") for e in seps)), 2)
+
+    def test_headers_name_every_drawn_band_and_skip_empty_milestones(self):
+        svg = banded_svg()
+        heads = [h.firstChild.data for h in classed(svg, "ms-h")]
+        self.assertEqual(heads, ["Staging", "Production", "No milestone"])
+
+    def test_every_card_keeps_its_link(self):
+        data = load(MILESTONES)
+        g = ld.build_graph(data, False, "show", bands=True)
+        links = hrefs(ld.render_svg(data, g, "acme", False))
+        expected = {"https://linear.app/acme/issue/" + n for n in list(g["nodes"]) + g["isolated"]}
+        self.assertEqual(set(links), expected)
+
+    def test_isolated_chips_sit_in_the_band_of_their_milestone(self):
+        data = load(MILESTONES)
+        g = ld.build_graph(data, False, "drop", bands=True)
+        xs = card_xs(ld.render_svg(data, g, "acme", False))
+        self.assertLess(xs["MS-7"], xs["MS-3"])      # Staging chip left of Production's first column
+        self.assertGreaterEqual(xs["MS-8"], xs["MS-3"] - 1)
+        self.assertGreater(xs["MS-9"], xs["MS-4"])
+
+    def test_chips_wrap_inside_their_band_and_the_svg_grows(self):
+        data = load(MILESTONES)
+        for k in range(30):
+            data["issues"].append({"identifier": "ISO-%d" % k, "title": "t", "state": "unstarted", "parent": None,
+                                   "milestone": "Staging", "labels": []})
+        svg = banded_svg(data)
+        xs = card_xs(svg)
+        doc = minidom.parseString(svg)
+        height = float(doc.documentElement.getAttribute("height"))
+        base = float(minidom.parseString(banded_svg()).documentElement.getAttribute("height"))
+        self.assertGreater(height, base)
+        self.assertLess(max(xs["ISO-%d" % k] for k in range(30)) + ld.CHIP_W, xs["MS-3"])
+
+    def test_external_issue_goes_to_the_no_milestone_band(self):
+        xs = card_xs(banded_svg(external="show"))
+        self.assertGreater(xs["OTHER-1"], xs["MS-4"])
+
+    def test_backward_cross_band_edge_is_a_plain_blocking_edge(self):
+        svg = banded_svg()
+        paths = [p for p in classed(svg, "edge") if p.getAttribute("data-from") == "MS-3" and p.getAttribute("data-to") == "MS-6"]
+        self.assertEqual(len(paths), 1)
+        self.assertEqual(classed(svg, "cyc"), [])
+        xs = card_xs(svg)
+        self.assertGreater(xs["MS-3"], xs["MS-6"])  # drawn right to left
+
+    def test_layers_are_computed_inside_each_band(self):
+        g = ld.build_graph(load(MILESTONES), False, "drop", bands=True)
+        self.assertEqual(g["layer"]["MS-1"], 0)
+        self.assertEqual(g["layer"]["MS-2"], 1)
+        self.assertEqual(g["layer"]["MS-6"], 0)   # blocked from another band only: first column of Staging band
+        first_production = g["layer"]["MS-3"]
+        self.assertEqual(g["layer"]["MS-4"], first_production + 1)
+        self.assertGreater(first_production, g["layer"]["MS-2"])
+
+    def test_no_milestone_data_renders_like_the_flat_layout(self):
+        data = load(CYCLE)
+        flat = ld.render_svg(data, ld.build_graph(data, False, "drop", bands=False), "acme", False)
+        banded = ld.render_svg(data, ld.build_graph(data, False, "drop", bands=True), "acme", False)
+        self.assertEqual(flat, banded)
+        self.assertEqual(classed(banded, "ms-sep"), [])
+        self.assertEqual(classed(banded, "ms-h"), [])
+
+    def test_no_milestones_flag_gives_the_flat_layout(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b = os.path.join(d, "a.svg"), os.path.join(d, "b.svg")
+            self.assertEqual(run_cli(URL, "--from-json", MILESTONES, "-o", a).returncode, 0)
+            self.assertEqual(run_cli(URL, "--from-json", MILESTONES, "--no-milestones", "-o", b).returncode, 0)
+            with open(a, encoding="utf-8") as fa, open(b, encoding="utf-8") as fb:
+                sa, sb = fa.read(), fb.read()
+            self.assertEqual(len(classed(sa, "ms-sep")), 2)
+            self.assertEqual(classed(sb, "ms-sep"), [])
+            self.assertEqual(classed(sb, "ms-h"), [])
+
+    def test_from_json_without_project_milestones_derives_the_order(self):
+        data = load(MILESTONES)
+        del data["project"]["milestones"]
+        self.assertEqual(ld.milestone_order(data), ["Production", "Staging"])  # sorted by name
+        svg = banded_svg(data)
+        self.assertEqual(len(classed(svg, "ms-sep")), 2)
+
+    def test_hidden_isolated_drops_bands_that_only_had_chips(self):
+        data = load(MILESTONES)
+        data["issues"].append({"identifier": "MS-10", "title": "x", "state": "unstarted", "parent": None,
+                               "milestone": "Empty milestone", "labels": []})
+        self.assertEqual(len(classed(banded_svg(data), "ms-h")), 4)
+        self.assertEqual(len(classed(banded_svg(data, hide_isolated=True), "ms-h")), 3)
+
+    def test_export_lists_the_milestone_order(self):
+        g = ld.build_export(load(MILESTONES), URL, "acme")
+        self.assertEqual(g["project"]["milestones"], ["Staging", "Production", "Empty milestone"])
+        data = load(MILESTONES)
+        del data["project"]["milestones"]
+        self.assertEqual(ld.build_export(data, URL, "acme")["project"]["milestones"], ["Production", "Staging"])
+
+    def test_live_fetch_orders_milestones_by_sort_order(self):
+        MilestoneStub.milestones = [{"name": "B", "sortOrder": 2, "targetDate": None},
+                                    {"name": "A", "sortOrder": 1, "targetDate": None},
+                                    {"name": "C", "sortOrder": 2, "targetDate": "2026-01-01"}]
+        server = http.server.HTTPServer(("127.0.0.1", 0), MilestoneStub)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        os.environ["LINEAR_API_KEY"] = "k"
+        try:
+            data = ld.fetch_live("0123456789ab", "http://127.0.0.1:%d/graphql" % server.server_port)
+        finally:
+            del os.environ["LINEAR_API_KEY"]
+            server.shutdown()
+        self.assertEqual(data["project"]["milestones"], ["A", "C", "B"])
+
+    def test_project_queries_ask_for_milestones(self):
+        for q in (ld.QUERY_PROJECT_BY_FILTER, ld.QUERY_PROJECT_BY_ID):
+            self.assertIn("projectMilestones", q)
+            self.assertIn("sortOrder", q)
+
+
+class MilestoneStub(http.server.BaseHTTPRequestHandler):
+    milestones = []
+
+    def log_message(self, *args):
+        pass
+
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if "projects(filter" in body["query"]:
+            data = {"projects": {"nodes": [{"id": "u", "name": "P", "projectMilestones": {"nodes": self.milestones}}]}}
+        else:
+            data = {"project": {"issues": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}}}
+        payload = json.dumps({"data": data}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
 
 if __name__ == "__main__":

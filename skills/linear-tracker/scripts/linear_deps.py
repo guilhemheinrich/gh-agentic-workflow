@@ -34,10 +34,14 @@ PROJECT_URL_RE = re.compile(r"^https?://linear\.app/([^/]+)/project/([^/?#]+)")
 
 QUERY_PROJECT_BY_FILTER = """
 query($slug: String!) {
-  projects(filter: {slugId: {eq: $slug}}, first: 1) { nodes { id name } }
+  projects(filter: {slugId: {eq: $slug}}, first: 1) {
+    nodes { id name projectMilestones(first: 50) { nodes { name sortOrder targetDate } } }
+  }
 }"""
 QUERY_PROJECT_BY_ID = """
-query($id: String!) { project(id: $id) { id name } }"""
+query($id: String!) {
+  project(id: $id) { id name projectMilestones(first: 50) { nodes { name sortOrder targetDate } } }
+}"""
 QUERY_ISSUES = """
 query($id: String!, $after: String) {
   project(id: $id) {
@@ -166,7 +170,8 @@ def fetch_live(slug, api_url, descriptions=True):
         for n in found:
             external_labels[n["identifier"]] = gql_labels(n)
     return {
-        "project": {"name": project["name"]},
+        "project": {"name": project["name"], "milestones": sort_milestones(
+            ((project.get("projectMilestones") or {}).get("nodes")) or [])},
         "issues": issues,
         "relations": [{"type": t, "from": a, "to": b} for t, a, b in sorted(relations)],
         "external": external,
@@ -216,13 +221,28 @@ def gql_labels(node):
             for l in (node.get("labels") or {}).get("nodes", [])]
 
 
+def sort_milestones(nodes):
+    """Milestone names in the project's own order: sortOrder, then targetDate, then name."""
+    ordered = sorted(nodes, key=lambda m: (m.get("sortOrder") if m.get("sortOrder") is not None else float("inf"),
+                                           m.get("targetDate") or "9999-12-31", m["name"]))
+    return [m["name"] for m in ordered]
+
+
+def milestone_order(data):
+    """Milestone names in order: project.milestones when present, then any milestone only the
+    issues mention (older --from-json files have none: those come out sorted by name)."""
+    names = list(data["project"].get("milestones") or [])
+    extra = {i.get("milestone") for i in data["issues"]} - set(names) - {None, ""}
+    return names + sorted(extra)
+
+
 def load_json(path):
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
-def build_graph(data, include_related, external_mode):
-    """Return a dict describing nodes, layers, edges and counters."""
+def build_graph(data, include_related, external_mode, bands=False):
+    """Return a dict describing nodes, layers, edges and counters; bands=True groups by milestone."""
     internal = {i["identifier"]: i for i in data["issues"]}
     ext_titles = data.get("external", {})
     block, related, dropped = set(), set(), 0
@@ -257,10 +277,43 @@ def build_graph(data, include_related, external_mode):
 
     back = find_back_edges(nodes, block)
     dag = block - back
-    layer = longest_path_layers(nodes, dag)
-    order = order_layers(nodes, dag, layer)
-    return {"nodes": nodes, "block": block, "related": related, "back": back,
+    band_list = band_layout(data, nodes, isolated, dag) if bands else None
+    if band_list:
+        layer, order, offset = {}, [], 0
+        for b in band_list:
+            for li, col in enumerate(b["cols"]):
+                for ident in col:
+                    layer[ident] = offset + li
+            order += b["cols"]
+            offset += len(b["cols"])
+    else:
+        layer = longest_path_layers(nodes, dag)
+        order = order_layers(nodes, dag, layer)
+    return {"nodes": nodes, "block": block, "related": related, "back": back, "bands": band_list,
             "layer": layer, "order": order, "isolated": isolated, "dropped": dropped}
+
+
+def band_layout(data, nodes, isolated, dag):
+    """One band per milestone that has an issue drawn, in milestone order, "No milestone" (None) last.
+
+    Layers and the barycenter order are computed on the links inside the band only; a link between
+    two bands never moves a card, it just spans them. Outside issues have no milestone.
+    Returns None when no issue has a milestone (the flat layout then applies)."""
+    ms = {i["identifier"]: (i.get("milestone") or None) for i in data["issues"]}
+    of = lambda ident: ms.get(ident)  # noqa: E731
+    names = milestone_order(data) + [None]
+    used = {of(i) for i in list(nodes) + isolated}
+    if used <= {None}:
+        return None
+    out = []
+    for name in names:
+        if name not in used:
+            continue
+        members = {i: nodes[i] for i in nodes if of(i) == name}
+        sub = {(a, b) for a, b in dag if of(a) == name and of(b) == name}
+        cols = order_layers(members, sub, longest_path_layers(members, sub)) if members else []
+        out.append({"name": name, "cols": cols, "isolated": [i for i in isolated if of(i) == name]})
+    return out
 
 
 def sort_key(ident):
@@ -462,7 +515,7 @@ def build_export(data, project_url, workspace):
     block_edges = [(a, b) for t, a, b in edges if t == "blocks"]
     return {
         "format": "linear-deps/1",
-        "project": {"name": data["project"]["name"], "url": project_url},
+        "project": {"name": data["project"]["name"], "url": project_url, "milestones": milestone_order(data)},
         "nodes": nodes,
         "edges": [{"from": a, "to": b, "type": t} for t, a, b in edges],
         "cycles": find_cycles(idents, block_edges),
@@ -560,6 +613,8 @@ text { font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-
 .tchip rect { fill: var(--chip); stroke: var(--fg); stroke-width: 1.1; } .tchip text { font-size: 10px; font-weight: 700; }
 .xchip rect { fill: var(--bg); stroke: var(--muted); stroke-width: .8; stroke-dasharray: 1 1.5; }
 .xchip text { font-size: 10px; font-style: italic; fill: var(--muted); }
+.ms-sep { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 6 5; fill: none; opacity: .7; }
+.ms-h { font-size: 11px; font-weight: 600; fill: var(--muted); letter-spacing: .02em; }
 a:hover .box { stroke-width: 2.6; }
 .edge { stroke: var(--edge); stroke-width: 1.4; fill: none; opacity: .8; }
 .rel { stroke: var(--muted); stroke-width: 1.1; stroke-dasharray: 2 3; fill: none; }
@@ -691,7 +746,7 @@ def legend_items(graph, isolated, cards):
     return items
 
 
-PEEK_DELAY_MS = 900
+PEEK_DELAY_MS = 200
 
 # The hover preview: a panel drawn by a small inline script from data embedded at generation
 # time (the SVG cannot call Linear when viewed). Viewers that block scripts keep <title>.
@@ -826,8 +881,18 @@ def render_svg(data, graph, workspace, hide_isolated):
     isolated = [internal[i] for i in isolated_ids]
     cards = [card_labels(n) for n in nodes.values()]
 
-    n_layers = len(layers)
-    graph_w = n_layers * BOX_W + max(0, n_layers - 1) * GAP_X if n_layers else 0
+    banded = bool(graph.get("bands"))
+    if banded:
+        shown = [dict(b, iso=[internal[i] for i in b["isolated"]] if not hide_isolated else []) for b in graph["bands"]]
+        shown = [b for b in shown if b["cols"] or b["iso"]]
+    else:
+        shown = [{"name": None, "cols": layers, "iso": isolated}]
+    bx = MARGIN
+    for b in shown:                       # a band is as wide as its columns (one column at least when banded)
+        n = max(len(b["cols"]), 1) if banded else len(b["cols"])
+        b["x"], b["w"] = bx, n * BOX_W + max(0, n - 1) * GAP_X
+        bx += b["w"] + GAP_X
+    graph_w = (bx - GAP_X - MARGIN) if shown and shown[0]["w"] else 0
     width = max(MARGIN * 2 + graph_w, 640)
 
     legend = legend_items(graph, isolated, cards)
@@ -839,20 +904,26 @@ def render_svg(data, graph, workspace, hide_isolated):
         lg_pos.append((item, lx, ly))
         lx += w_item
     top = (ly + 26) if legend else 62
+    head_y = top
+    if banded:
+        top += 24                         # room for the milestone headers
 
     tallest = max((len(l) for l in layers), default=0)
     graph_h = tallest * BOX_H + max(0, tallest - 1) * GAP_Y
     pos = {}
-    for li, col in enumerate(layers):
-        col_h = len(col) * BOX_H + max(0, len(col) - 1) * GAP_Y
-        y0 = (graph_h - col_h) / 2
-        for ri, ident in enumerate(col):
-            pos[ident] = (MARGIN + li * (BOX_W + GAP_X), top + y0 + ri * (BOX_H + GAP_Y))
+    for b in shown:
+        for li, col in enumerate(b["cols"]):
+            col_h = len(col) * BOX_H + max(0, len(col) - 1) * GAP_Y
+            y0 = (graph_h - col_h) / 2
+            for ri, ident in enumerate(col):
+                pos[ident] = (b["x"] + li * (BOX_W + GAP_X), top + y0 + ri * (BOX_H + GAP_Y))
 
     strip_top = top + graph_h + 40
-    per_row = max(1, int((width - 2 * MARGIN) // (CHIP_W + 8)))
-    strip_rows = (len(isolated) + per_row - 1) // per_row
-    strip_h = (30 + strip_rows * (CHIP_H + 8)) if isolated else 0
+    for b in shown:                       # chips wrap inside their band (the whole width when flat)
+        b["per_row"] = max(1, int((b["w"] if banded else width - 2 * MARGIN) // (CHIP_W + 8)))
+        b["rows"] = (len(b["iso"]) + b["per_row"] - 1) // b["per_row"]
+    strip_rows = max((b["rows"] for b in shown), default=0)
+    strip_h = (30 + strip_rows * (CHIP_H + 8)) if strip_rows else 0
     height = strip_top + strip_h + 60
 
     out = []
@@ -888,6 +959,15 @@ def render_svg(data, graph, workspace, hide_isolated):
             w('<g class="%s"><rect x="%d" y="%d" width="26" height="14" rx="7"/></g>' % (cls, x, y - 11))
         w('<text class="lg" x="%d" y="%d">%s</text>' % (x + 34, y, escape(text)))
     w("</g>")
+
+    if banded:
+        for i, b in enumerate(shown):
+            w('<text class="ms-h" x="%.1f" y="%.1f">%s</text>'
+              % (b["x"], head_y + 10, escape(clip(b["name"] or "No milestone", int(b["w"] / CHAR_W)))))
+            if i:
+                sx = b["x"] - GAP_X / 2
+                w('<path class="ms-sep" d="M%.1f %.1f L%.1f %.1f"/>'
+                  % (sx, head_y - 6, sx, (strip_top + strip_h - 8) if strip_h else (top + graph_h + 12)))
 
     def edge_path(a, b):
         (x1, y1), (x2, y2) = pos[a], pos[b]
@@ -960,12 +1040,14 @@ def render_svg(data, graph, workspace, hide_isolated):
         w('<text class="warn" x="%d" y="%d">Cycle detected: %d blocking link(s) drawn dashed in red close a loop.</text>'
           % (MARGIN, int(strip_top - 14), len(graph["back"])))
 
-    if isolated:
-        w('<text class="sub" x="%d" y="%d">No dependency (%d issues)</text>' % (MARGIN, strip_top + 4, len(isolated)))
-        for i, issue in enumerate(isolated):
+    for band in shown:
+        if not band["iso"]:
+            continue
+        w('<text class="sub" x="%d" y="%d">No dependency (%d issues)</text>' % (band["x"], strip_top + 4, len(band["iso"])))
+        for i, issue in enumerate(band["iso"]):
             ident = issue["identifier"]
-            r, c = divmod(i, per_row)
-            x = MARGIN + c * (CHIP_W + 8)
+            r, c = divmod(i, band["per_row"])
+            x = band["x"] + c * (CHIP_W + 8)
             y = strip_top + 16 + r * (CHIP_H + 8)
             url = issue_url(workspace, ident)
             n = dict(issue, external=False)
@@ -1007,6 +1089,8 @@ def main(argv=None):
     ap.add_argument("--external", choices=("drop", "show"), default="drop",
                     help="links to issues outside the project: drop (default, counted) or show as dashed boxes")
     ap.add_argument("--hide-isolated", action="store_true", help="hide issues that have no dependency")
+    ap.add_argument("--no-milestones", action="store_true",
+                    help="flat layout: do not group issues in one band per project milestone")
     ap.add_argument("--no-descriptions", action="store_true",
                     help="do not fetch or embed description excerpts (hover preview, JSON); for SVGs that get shared")
     ap.add_argument("--api-url", default=API_URL, help=argparse.SUPPRESS)
@@ -1017,7 +1101,7 @@ def main(argv=None):
             else fetch_live(slug, args.api_url, descriptions=not args.no_descriptions))
     if args.no_descriptions:
         drop_descriptions(data)
-    graph = build_graph(data, args.include_related, args.external)
+    graph = build_graph(data, args.include_related, args.external, bands=not args.no_milestones)
     svg = render_svg(data, graph, workspace, args.hide_isolated)
     with open(args.output, "w", encoding="utf-8") as fh:
         fh.write(svg)
