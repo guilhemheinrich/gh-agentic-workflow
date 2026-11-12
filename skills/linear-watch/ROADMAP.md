@@ -179,7 +179,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   subscription delivers the older comments once; a transport error keeps the
   cursor.
 
-### [ ] LW-4 — Delivery (`lw wait`)
+### [x] LW-4 — Delivery (`lw wait`)
 
 - **Goal:** a session armed with `lw wait` wakes on its lines.
 - **Do:** `lw wait --session ID [--timeout S]` polls the `events` table every
