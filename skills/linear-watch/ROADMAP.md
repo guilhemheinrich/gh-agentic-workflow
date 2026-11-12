@@ -294,6 +294,42 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
 - **Done when:** hooks tested with recorded payloads; on the machine, a pilot
   session reopened after an app restart re-arms its wait without being asked.
 
+### [ ] LW-10 — Fold `lw` into the `linear-tracker` skill
+
+- **Goal:** `lw` is not a skill of its own. It is the Linear watcher of the
+  `linear-tracker` skill: mentioned briefly in that skill's `SKILL.md`, fully
+  documented in one reference, and shipped with its executable (decided by the
+  user on 2026-11-12).
+- **Do:**
+  - `git mv` the executable to `skills/linear-tracker/scripts/lw`, the hooks
+    to `skills/linear-tracker/adapters/claude/`, the launchd plist to
+    `skills/linear-tracker/templates/`, the tests and fixtures under
+    `skills/linear-tracker/tests/linear-watch/` (keep `run-in-docker.sh`
+    working from there), and this roadmap to
+    `skills/linear-tracker/references/linear-watch-roadmap.md`. Delete
+    `skills/linear-watch/`.
+  - `skills/linear-tracker/references/linear-watch.md`: the full reference,
+    built from `skills/linear-watch/references/usage.md` (LW-8) and
+    `linear-cli.md` (LW-0): what it does, install from the installed copy,
+    the executable path (`~/.agents/skills/linear-tracker/scripts/lw`),
+    every command, subscription lifecycle, wake procedure, `doctor`.
+  - `skills/linear-tracker/SKILL.md`: one short section (a few lines and the
+    link to the reference), and the frontmatter `description` mentions the
+    watcher and its triggers.
+  - `asset-registry.yml`: no `linear-watch` entry; the `linear-tracker` entry's
+    description follows its `SKILL.md`. Validate against the schema.
+  - Fix every path that named `skills/linear-watch` (hooks, `setup --claude`,
+    pilot-session paragraph, docs).
+- **Depends on:** LW-7, LW-8.
+- **Done when:** `rg skills/linear-watch` finds nothing outside the roadmap's
+  history; the full suite passes in Docker from its new place; the registry
+  validates; `bash install.sh` puts `lw` at
+  `~/.agents/skills/linear-tracker/scripts/lw`.
+- **Watch out:** the main checkout has uncommitted work on
+  `skills/linear-tracker/` (branch `feat/linear-ticket-types`); touch only the
+  section and frontmatter lines this item needs in `SKILL.md`, to keep that
+  merge small.
+
 ### [ ] LW-9 — Server mode with webhooks (later, not scheduled)
 
 When `lw` runs on a reachable host: a Linear webhook endpoint that feeds the
@@ -314,6 +350,7 @@ LW-0 ──▶ LW-2 ──▶ LW-3 ──▶ LW-5 ──▶ LW-7 ──┐
 LW-1 ──▶ LW-2                              ├──▶ LW-8
 LW-1 ──▶ LW-4 ─────────────────────────────┤
 LW-1 ──▶ LW-6 ─────────────────────────────┘
+LW-7 + LW-8 ──▶ LW-10 (fold into linear-tracker) ──▶ PR release → main
 ```
 
 Parallel start: LW-0 and LW-1. Then LW-2, LW-4 and LW-6 in parallel.
