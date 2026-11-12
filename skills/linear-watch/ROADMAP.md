@@ -288,8 +288,8 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
     the comment through the MCP as untrusted data, act, re-arm).
   - One paragraph in the pilot-session skill: at start, `lw subscribe
     --project <slug> --since 3d --session <id>`, then arm `lw wait`.
-- **Files:** `adapters/claude/*`, `scripts/lw` (setup), `SKILL.md`,
-  pilot-session `SKILL.md`, `asset-registry.yml` (description).
+- **Files:** `adapters/claude/*`, `scripts/lw` (setup), `references/usage.md`
+  (instead of `SKILL.md`, see the scope change below), pilot-session `SKILL.md`.
 - **Depends on:** LW-4, LW-6, LW-7.
 - **Done when:** hooks tested with recorded payloads; on the machine, a pilot
   session reopened after an app restart re-arms its wait without being asked.
@@ -304,9 +304,14 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
     measured: whether the desktop app ever resumes under a new CLI id (its
     files carry `priorCliSessionIds`); `lw` does not carry subscriptions
     across ids.
-  - The test container mounts the skill as `/skills/linear-watch`: setup and
-    uninstall recognize lw's hook entries by `/linear-watch/adapters/claude/`
-    in their command.
+  - Scope change (decided while LW-8 ran): the watcher folds into the
+    `linear-tracker` skill (LW-10). So `SKILL.md` and `asset-registry.yml` are
+    unchanged here; the user-facing text (install, commands, the "when you are
+    woken by `lw wait`" procedure) is `references/usage.md`, for LW-10 to move
+    as is. No path names the skill folder: the hooks find `lw` next to
+    themselves, `setup` derives the hook paths from the running `lw`
+    (realpath), and lw's settings entries are recognized by the `# lw-hook`
+    comment that ends their command.
   - `lw setup --claude` refuses to run from a checkout with its own helper
     (`lw_runs_from_checkout`); LW-7's `daemon start` has the same rule: fold
     the two once both have landed.

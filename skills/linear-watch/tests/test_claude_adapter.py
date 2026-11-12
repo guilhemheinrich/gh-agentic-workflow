@@ -136,6 +136,7 @@ class SessionStartHookTest(AdapterCase):
         self.assertIn(f"project {PROJECT}", context)
         self.assertIn("issue TT-2287", context)
         self.assertIn("untrusted", context)
+        self.assertIn(str(SKILL / "references" / "usage.md"), context)
         self.assertNotIn("python3", context)  # the script is run by its path
         self.assertEqual(self.daemon_calls(), ["alive"])
 
@@ -221,6 +222,9 @@ EXISTING = {
         "SessionStart": [
             {"matcher": "startup|resume",
              "hooks": [{"type": "command", "command": "bash ~/.agents/hooks/pr-watch-session-start.sh"}]},
+            # same script name as lw's, another skill's adapter: never lw's to touch
+            {"matcher": "startup|resume",
+             "hooks": [{"type": "command", "command": "bash /x/pr-watch/adapters/claude/session-start-hook.sh"}]},
         ],
         "PostToolUse": [
             {"matcher": "Bash", "hooks": [{"type": "command", "command": "bash ~/.agents/hooks/pr-watch-push.sh"}]},
@@ -257,7 +261,7 @@ class SetupTest(AdapterCase):
             for event, entries in settings.get("hooks", {}).items()
             for entry in entries
             for hook in entry["hooks"]
-            if "/linear-watch/adapters/claude/" in hook["command"]
+            if hook["command"].endswith(" # lw-hook")
         )
 
     def test_yes_on_a_fresh_home_registers_both_hooks(self):
@@ -267,11 +271,11 @@ class SetupTest(AdapterCase):
         self.assertIn(OWN_WRITES_MATCHER, done.stdout)
         data = json.loads(self.settings.read_text())
         self.assertEqual(self.lw_entries(data), [
-            ("PostToolUse", OWN_WRITES_MATCHER, f"bash {ADAPTER / 'own-writes-hook.sh'}"),
-            ("SessionStart", "startup|resume", f"bash {ADAPTER / 'session-start-hook.sh'}"),
+            ("PostToolUse", OWN_WRITES_MATCHER, f"bash {ADAPTER / 'own-writes-hook.sh'} # lw-hook"),
+            ("SessionStart", "startup|resume", f"bash {ADAPTER / 'session-start-hook.sh'} # lw-hook"),
         ])
         for _, _, command in self.lw_entries(data):
-            self.assertTrue(Path(command.split(" ", 1)[1]).is_file(), command)
+            self.assertTrue(Path(command.split(" ")[1]).is_file(), command)
 
     def test_existing_settings_are_kept(self):
         self.write_settings(EXISTING)
@@ -308,7 +312,7 @@ class SetupTest(AdapterCase):
     def test_an_entry_from_another_installed_copy_is_replaced(self):
         stale = json.loads(json.dumps(EXISTING))
         stale["hooks"]["SessionStart"].append({"matcher": "startup|resume", "hooks": [
-            {"type": "command", "command": "bash /old/.claude/skills/linear-watch/adapters/claude/session-start-hook.sh"}]})
+            {"type": "command", "command": "bash /old/.claude/skills/old-name/adapters/claude/session-start-hook.sh # lw-hook"}]})
         self.write_settings(stale)
         self.setup_claude("y\n")
         data = json.loads(self.settings.read_text())
@@ -341,7 +345,7 @@ class SetupTest(AdapterCase):
                 shutil.rmtree(root)
 
     def test_an_installed_copy_is_accepted(self):
-        copy = self.home / ".agents" / "skills" / "linear-watch"
+        copy = self.home / ".agents" / "skills" / "any-name"
         shutil.copytree(SKILL / "scripts", copy / "scripts")
         shutil.copytree(ADAPTER, copy / "adapters" / "claude")
         done = self.setup_claude("y\n", copy / "scripts" / "lw", LW_ALLOW_CHECKOUT=None)
@@ -398,7 +402,7 @@ class SetupTest(AdapterCase):
 
     def test_uninstall_keeps_foreign_hooks_sharing_an_entry(self):
         mixed = {"hooks": {"PostToolUse": [{"matcher": OWN_WRITES_MATCHER, "hooks": [
-            {"type": "command", "command": "bash /x/linear-watch/adapters/claude/own-writes-hook.sh"},
+            {"type": "command", "command": "bash /x/adapters/claude/own-writes-hook.sh # lw-hook"},
             {"type": "command", "command": "bash ~/mine.sh"},
         ]}]}}
         self.write_settings(mixed)

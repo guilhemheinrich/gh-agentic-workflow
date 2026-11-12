@@ -1580,15 +1580,13 @@ assets:
     description: >-
       Wake agent sessions when something changes in Linear. `lw`, a daemon next to pr-watch, polls Linear every 5
       minutes and delivers new comments and state transitions to the sessions that subscribed to a Linear project or
-      issue, so a pilot waiting on a decision on a Blocked ticket hears about it without the human relaying it.
-      Comments and state moves the agent made itself through the Linear MCP never wake anyone. Subscriptions end on
-      their own: on unsubscribe, when the session is archived or stops renewing, or when the watched issue or project
-      is finished. Ships `scripts/lw` (Python 3 standard library, one SQLite store, the Linear CLI as transport) and
-      the Claude Code adapter: a SessionStart hook that re-arms `lw wait` after an app restart and an own-writes hook,
-      registered by `lw setup --claude`. Use when a session must be woken by a Linear comment or state change, when
-      subscribing a session to a Linear project or issue, when installing or repairing the watcher on a machine, or
-      when a session is woken by a `lw wait` exit. Triggers on "linear watch", "lw subscribe", "lw wait", "réveiller
-      la session sur Linear", "watch this ticket", "surveiller le projet Linear".
+      issue, so a pilot waiting on a decision hears about it without the human relaying it. Subscriptions end on their
+      own: on unsubscribe, when the session is archived or stops renewing, or when the watched issue or project is
+      finished. Ships `scripts/lw` (Python 3 standard library, one SQLite store). Work in progress: only the store and
+      the subscribe / unsubscribe / list commands exist today; see ROADMAP.md. Use when a session must be woken by a
+      Linear comment or state change, when subscribing a session to a Linear project or issue, or when listing what a
+      session watches. Triggers on "linear watch", "lw subscribe", "réveiller la session sur Linear", "watch this
+      ticket", "surveiller le projet Linear".
     category: devx-and-agentic
   - path: skills/lit-web-components/
     type: skill
