@@ -157,7 +157,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   synthesized, never observed from Linear. LW-5's `doctor` reports the last
   real error verbatim, which is where a wrong shape would first show.
 
-### [ ] LW-3 — Poll cycle (`lw daemon once`)
+### [x] LW-3 — Poll cycle (`lw daemon once`)
 
 - **Goal:** one cycle turns Linear changes into event rows.
 - **Do:**
@@ -181,6 +181,20 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   state change `Blocked → Todo` → one line; `--since 3d` on a fresh
   subscription delivers the older comments once; a transport error keeps the
   cursor.
+- **Delivered with caveats:**
+  - `--since` backfills **comments** only. A state move made before the
+    subscription is not reconstructed: the first sight of an issue records its
+    state silently (no issue history is queried). An issue `lw` has never seen
+    (created later, or completed at baseline time and reopened) is also
+    recorded silently.
+  - The `HH:MM` of a comment line is the machine's local time (UTC in Docker).
+  - `WatchedIssues` reads at most 100 comments per issue per cycle.
+  - The four GraphQL documents were run once, read-only, against real Linear
+    (`references/linear-cli.md` §5); the fake's answers to `ProjectIssueStates`
+    and `WatchedIssues` are synthesized from the LW-0 nodes.
+  - Seams: `run_cycle(conn, state_dir)` is what LW-5 runs expiry in front of
+    and LW-7 loops on; `register_poll()` returns the `daemon` actions so LW-7
+    adds `run`/`start`/`stop` beside `once`.
 
 ### [x] LW-4 — Delivery (`lw wait`)
 

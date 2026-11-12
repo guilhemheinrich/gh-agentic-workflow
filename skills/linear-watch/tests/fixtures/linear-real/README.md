@@ -66,3 +66,12 @@ Observed in this sample, worth a test: `botActor` is `null` on every comment,
 and one comment has `updatedAt` 45 ms **before** its `createdAt`
 (`c9dceae3…`: created `15:46:49.980Z`, updated `15:46:49.935Z`) — never order
 comments by `updatedAt`.
+
+## How the poll tests replay this day (LW-3)
+
+`tests/bin/linear` serves these files to `test_cycle.py` as Linear would answer
+the poll queries: it applies the `since` variable, hides what is newer than
+`FAKE_LINEAR_NOW` (Linear's present), and answers a call with `after` with the
+terminal page. Its answers to `ProjectIssueStates` and `WatchedIssues` are
+**synthesized** from the captured issue and comment nodes (those two queries
+were validated against Linear but their payloads were not captured).
