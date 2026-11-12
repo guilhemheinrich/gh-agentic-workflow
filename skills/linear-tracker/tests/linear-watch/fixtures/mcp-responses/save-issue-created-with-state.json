@@ -1,0 +1,22 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/agent/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/work",
+  "permission_mode": "auto",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__0b0fa505-9003-4e08-9570-9316f3527103__save_issue",
+  "tool_input": {
+    "team": "Tiger Team",
+    "title": "Fixture issue title",
+    "description": "Fixture description.",
+    "state": "started",
+    "assignee": "me"
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "{\"id\":\"TT-2250\",\"uuid\":\"35ac7a02-0000-4a17-a0b1-cce3c841542a\",\"title\":\"Fixture issue title\",\"description\":\"Fixture description.\",\"priority\":{\"value\":3,\"name\":\"Medium\"},\"estimate\":{\"value\":3,\"name\":\"3 Points\"},\"url\":\"https://linear.app/septeo-proptech/issue/TT-2250/fixture-issue-title\",\"gitBranchName\":\"jdoe/tt-2250-fixture-issue-title\",\"createdAt\":\"2026-11-09T13:04:33.512Z\",\"updatedAt\":\"2026-11-09T13:43:37.705Z\",\"archivedAt\":null,\"completedAt\":null,\"startedAt\":\"2026-11-10T11:10:08.225Z\",\"canceledAt\":null,\"dueDate\":null,\"slaStartedAt\":null,\"slaMediumRiskAt\":null,\"slaHighRiskAt\":null,\"slaBreachesAt\":null,\"status\":\"In Progress\",\"statusType\":\"started\",\"labels\":[\"web\"],\"attachments\":[],\"documents\":[],\"createdBy\":\"Jane Doe\",\"createdById\":\"00000000-0000-4000-8000-000000000001\",\"project\":\"Fixture project\",\"projectId\":\"00000000-0000-4000-8000-0000000000aa\",\"team\":\"Tiger Team\",\"teamId\":\"00000000-0000-4000-8000-0000000000bb\",\"assignee\":\"Jane Doe\",\"assigneeId\":\"00000000-0000-4000-8000-000000000001\"}"
+    }
+  ],
+  "tool_use_id": "toolu_fixture05"
+}

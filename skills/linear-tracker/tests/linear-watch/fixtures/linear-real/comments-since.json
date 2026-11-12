@@ -1,0 +1,663 @@
+{
+  "data": {
+    "comments": {
+      "nodes": [
+        {
+          "id": "c9dceae3-9888-4aa9-a5b2-2e812e96c9c3",
+          "createdAt": "2026-11-12T15:46:49.980Z",
+          "updatedAt": "2026-11-12T15:46:49.935Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2537/redacted-title#comment-c9dceae3",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "275d6b25-e1d4-48e2-ae43-671c9c0e3ec9",
+            "identifier": "TT-2537",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2537/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "3b4f7283-307c-4416-87a2-8c2193d07f37",
+          "createdAt": "2026-11-12T15:26:11.892Z",
+          "updatedAt": "2026-11-12T15:26:11.873Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2537/redacted-title#comment-3b4f7283",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "275d6b25-e1d4-48e2-ae43-671c9c0e3ec9",
+            "identifier": "TT-2537",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2537/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "c92924f3-073f-4c3b-abe2-fe9f2257752c",
+          "createdAt": "2026-11-12T15:11:09.206Z",
+          "updatedAt": "2026-11-12T15:11:09.053Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2528/redacted-title#comment-c92924f3",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "49878aa9-9ccf-4a9d-b8ac-207d310f003d",
+            "identifier": "TT-2528",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2528/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "efc33c88-ae96-4499-baa5-fdbf2fe23ec1",
+          "createdAt": "2026-11-12T14:44:13.186Z",
+          "updatedAt": "2026-11-12T14:44:13.163Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2531/redacted-title#comment-efc33c88",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "40e87737-54ad-4e26-bf79-86700281ccd8",
+            "identifier": "TT-2531",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2531/redacted-title",
+            "state": {
+              "name": "In Review",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "ce95beb5-76df-450e-b1a3-824c706525f9",
+          "createdAt": "2026-11-12T14:42:59.611Z",
+          "updatedAt": "2026-11-12T14:42:59.478Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2531/redacted-title#comment-ce95beb5",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "40e87737-54ad-4e26-bf79-86700281ccd8",
+            "identifier": "TT-2531",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2531/redacted-title",
+            "state": {
+              "name": "In Review",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "e3766a6d-6429-452c-bf88-4bedffe0e58f",
+          "createdAt": "2026-11-12T14:31:47.718Z",
+          "updatedAt": "2026-11-12T14:31:47.669Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2439/redacted-title#comment-e3766a6d",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "1b7c749c-41e0-45a5-8d10-b8a3ce2b35eb",
+            "identifier": "TT-2439",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2439/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "928a1db8-c443-40d8-b4df-519c1a1c832e",
+          "createdAt": "2026-11-12T14:25:53.409Z",
+          "updatedAt": "2026-11-12T14:25:53.389Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2519/redacted-title#comment-928a1db8",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "5b01bfc4-6cf3-46e3-8884-b5ea9088434b",
+            "identifier": "TT-2519",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2519/redacted-title",
+            "state": {
+              "name": "In Review",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "097c69f7-f156-4d60-80f9-babca1211269",
+          "createdAt": "2026-11-12T13:24:51.829Z",
+          "updatedAt": "2026-11-12T13:24:51.810Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2294/redacted-title#comment-097c69f7",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "8521bc21-3a86-4167-8b23-fd2930a98695",
+            "identifier": "TT-2294",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2294/redacted-title",
+            "state": {
+              "name": "In Progress",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "f1c756ae-9d25-497c-b89f-609b7c186aa3",
+          "createdAt": "2026-11-12T13:19:12.541Z",
+          "updatedAt": "2026-11-12T13:19:12.479Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2519/redacted-title#comment-f1c756ae",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "5b01bfc4-6cf3-46e3-8884-b5ea9088434b",
+            "identifier": "TT-2519",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2519/redacted-title",
+            "state": {
+              "name": "In Review",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "0d433f1d-32d0-4ce8-a02b-f33da54a80d5",
+          "createdAt": "2026-11-12T13:09:37.140Z",
+          "updatedAt": "2026-11-12T13:09:37.090Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2519/redacted-title#comment-0d433f1d",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "5b01bfc4-6cf3-46e3-8884-b5ea9088434b",
+            "identifier": "TT-2519",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2519/redacted-title",
+            "state": {
+              "name": "In Review",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "df0c5bf3-770d-4fa3-b0a9-8234375d8b0c",
+          "createdAt": "2026-11-12T13:05:01.971Z",
+          "updatedAt": "2026-11-12T13:05:01.898Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2259/redacted-title#comment-df0c5bf3",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "367fbccd-217c-49a5-a8e4-b38219885eb5",
+            "identifier": "TT-2259",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2259/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "329a4ee8-80c2-443c-802d-bcd9473dc73e",
+          "createdAt": "2026-11-12T12:33:39.500Z",
+          "updatedAt": "2026-11-12T12:33:39.465Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-314/redacted-title#comment-329a4ee8",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "7cdbb180-a2c7-4d22-9d91-f30a43f4bec3",
+            "identifier": "TT-314",
+            "url": "https://linear.app/septeo-proptech/issue/TT-314/redacted-title",
+            "state": {
+              "name": "In Progress",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "16ae6f49-5207-4208-8b7b-81ee559ec4b4",
+          "createdAt": "2026-11-12T11:58:01.441Z",
+          "updatedAt": "2026-11-12T11:58:01.417Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-314/redacted-title#comment-16ae6f49",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "7cdbb180-a2c7-4d22-9d91-f30a43f4bec3",
+            "identifier": "TT-314",
+            "url": "https://linear.app/septeo-proptech/issue/TT-314/redacted-title",
+            "state": {
+              "name": "In Progress",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "0d9fde99-a711-46fc-a66d-e77eb4d97c04",
+          "createdAt": "2026-11-12T11:16:51.128Z",
+          "updatedAt": "2026-11-12T11:16:51.090Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2292/redacted-title#comment-0d9fde99",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "796ef323-d968-4b56-b726-a675e3f6da44",
+            "identifier": "TT-2292",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2292/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "cdb90afa-1e0d-4d45-8940-d3be5957f1eb",
+          "createdAt": "2026-11-12T11:07:59.139Z",
+          "updatedAt": "2026-11-12T11:07:58.984Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2292/redacted-title#comment-cdb90afa",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "796ef323-d968-4b56-b726-a675e3f6da44",
+            "identifier": "TT-2292",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2292/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "9af9b182-e55f-42a6-9b99-479b2ce875be",
+          "createdAt": "2026-11-12T10:52:59.038Z",
+          "updatedAt": "2026-11-12T10:52:58.926Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2287/redacted-title#comment-9af9b182",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "90611f4c-6f25-47f8-a59f-a9bf38932a21",
+            "identifier": "TT-2287",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2287/redacted-title",
+            "state": {
+              "name": "In Progress",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "49686aa5-c736-4f15-b563-237ac7350e5c",
+          "createdAt": "2026-11-12T10:39:38.217Z",
+          "updatedAt": "2026-11-12T10:39:38.165Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2292/redacted-title#comment-49686aa5",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "796ef323-d968-4b56-b726-a675e3f6da44",
+            "identifier": "TT-2292",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2292/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "149d3295-e764-46de-9fb1-504b7ce7d130",
+          "createdAt": "2026-11-12T10:38:48.790Z",
+          "updatedAt": "2026-11-12T10:38:48.747Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2293/redacted-title#comment-149d3295",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "90025a15-38e1-4637-a10e-b890292aaf22",
+            "identifier": "TT-2293",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2293/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "55e76e74-2010-402a-8f46-bbd85213240e",
+          "createdAt": "2026-11-12T10:24:37.716Z",
+          "updatedAt": "2026-11-12T10:24:37.700Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2293/redacted-title#comment-55e76e74",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "90025a15-38e1-4637-a10e-b890292aaf22",
+            "identifier": "TT-2293",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2293/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "a40d4765-7cc9-49e0-a81f-df276090fbda",
+          "createdAt": "2026-11-12T09:52:08.566Z",
+          "updatedAt": "2026-11-12T09:52:08.298Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2259/redacted-title#comment-a40d4765",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "367fbccd-217c-49a5-a8e4-b38219885eb5",
+            "identifier": "TT-2259",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2259/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "c9968cd2-0ba5-43f2-8cdd-7a74363a6a7e",
+          "createdAt": "2026-11-12T09:28:52.163Z",
+          "updatedAt": "2026-11-12T09:28:52.101Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2291/redacted-title#comment-c9968cd2",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "039e3f0a-fe3f-4665-b8f2-1cbf5c7407fa",
+            "identifier": "TT-2291",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2291/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "17fb30f2-f3c8-4f55-9bff-3a6155bf91ef",
+          "createdAt": "2026-11-12T08:46:18.890Z",
+          "updatedAt": "2026-11-12T08:46:18.859Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2291/redacted-title#comment-17fb30f2",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000001",
+            "name": "Person A",
+            "displayName": "person-a"
+          },
+          "issue": {
+            "id": "039e3f0a-fe3f-4665-b8f2-1cbf5c7407fa",
+            "identifier": "TT-2291",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2291/redacted-title",
+            "state": {
+              "name": "Done",
+              "type": "completed"
+            }
+          }
+        },
+        {
+          "id": "7916739f-103e-4f27-bf10-fb0b39fd6b63",
+          "createdAt": "2026-11-12T08:44:37.712Z",
+          "updatedAt": "2026-11-12T08:44:37.687Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-895/redacted-title#comment-7916739f",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "5b5ec7ae-9311-49f8-8cbd-640134b3a777",
+            "identifier": "TT-895",
+            "url": "https://linear.app/septeo-proptech/issue/TT-895/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "95ece447-e66c-459e-95ce-486102ed6527",
+          "createdAt": "2026-11-12T08:44:37.456Z",
+          "updatedAt": "2026-11-12T08:44:37.434Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-506/redacted-title#comment-95ece447",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "54e6596b-2d73-4f18-a9ba-e6821f5cc210",
+            "identifier": "TT-506",
+            "url": "https://linear.app/septeo-proptech/issue/TT-506/redacted-title",
+            "state": {
+              "name": "In Progress",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "9d2ba7b0-fe0e-47f3-9a19-0e8d11f2108d",
+          "createdAt": "2026-11-12T08:44:37.210Z",
+          "updatedAt": "2026-11-12T08:44:37.191Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2287/redacted-title#comment-9d2ba7b0",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "90611f4c-6f25-47f8-a59f-a9bf38932a21",
+            "identifier": "TT-2287",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2287/redacted-title",
+            "state": {
+              "name": "In Progress",
+              "type": "started"
+            }
+          }
+        },
+        {
+          "id": "9e3d0597-2a42-4799-88cd-c08468dea66c",
+          "createdAt": "2026-11-12T08:44:36.969Z",
+          "updatedAt": "2026-11-12T08:44:36.953Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2172/redacted-title#comment-9e3d0597",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "fc59dc84-bd22-436f-9280-2e69071a6ff2",
+            "identifier": "TT-2172",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2172/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "d20034e6-be3f-44b5-b7e0-323f6262e17c",
+          "createdAt": "2026-11-12T08:44:36.424Z",
+          "updatedAt": "2026-11-12T08:44:36.260Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-2027/redacted-title#comment-d20034e6",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "ddcaa1da-d03a-460f-b9d7-f8b0d0dc6aae",
+            "identifier": "TT-2027",
+            "url": "https://linear.app/septeo-proptech/issue/TT-2027/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "07de844f-da08-45dd-96f9-92516bb405a6",
+          "createdAt": "2026-11-12T08:44:34.236Z",
+          "updatedAt": "2026-11-12T08:44:34.222Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-1950/redacted-title#comment-07de844f",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "dec8a25c-9f9b-4a2e-9375-fe1150969e3b",
+            "identifier": "TT-1950",
+            "url": "https://linear.app/septeo-proptech/issue/TT-1950/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "7e0dfbec-dfb9-4469-a5b4-4728873383fc",
+          "createdAt": "2026-11-12T08:44:33.953Z",
+          "updatedAt": "2026-11-12T08:44:33.933Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-1873/redacted-title#comment-7e0dfbec",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "057e2e9e-3115-4f72-b182-8e599b2d0ee3",
+            "identifier": "TT-1873",
+            "url": "https://linear.app/septeo-proptech/issue/TT-1873/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "0cfc8005-650a-4388-82b7-bd4685d77d09",
+          "createdAt": "2026-11-12T08:44:33.375Z",
+          "updatedAt": "2026-11-12T08:44:33.264Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-1461/redacted-title#comment-0cfc8005",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "450f038e-c748-4494-9c09-7de95ec5f87b",
+            "identifier": "TT-1461",
+            "url": "https://linear.app/septeo-proptech/issue/TT-1461/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        },
+        {
+          "id": "92fc0025-00f3-40e2-87b3-3718cbfe22c3",
+          "createdAt": "2026-11-12T08:44:31.713Z",
+          "updatedAt": "2026-11-12T08:44:31.698Z",
+          "url": "https://linear.app/septeo-proptech/issue/TT-1068/redacted-title#comment-92fc0025",
+          "botActor": null,
+          "user": {
+            "id": "00000000-0000-4000-8000-000000000002",
+            "name": "Person B",
+            "displayName": "person-b"
+          },
+          "issue": {
+            "id": "d0a6e526-5313-4743-87c5-d5930d88b570",
+            "identifier": "TT-1068",
+            "url": "https://linear.app/septeo-proptech/issue/TT-1068/redacted-title",
+            "state": {
+              "name": "Backlog",
+              "type": "backlog"
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "92fc0025-00f3-40e2-87b3-3718cbfe22c3"
+      }
+    }
+  }
+}

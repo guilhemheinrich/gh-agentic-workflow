@@ -1,0 +1,14 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/agent/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/work",
+  "permission_mode": "auto",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__0b0fa505-9003-4e08-9570-9316f3527103__save_comment",
+  "tool_input": {
+    "issueId": "TT-2287",
+    "body": "Fixture comment body."
+  },
+  "tool_response": "Error: Tool permission request failed: AbortError: Tool permission stream closed before response received",
+  "tool_use_id": "toolu_fixture07"
+}

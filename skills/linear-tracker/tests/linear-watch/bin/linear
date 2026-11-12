@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Fake `linear` (schpet/linear-cli 3.1.0) for the lw tests.
+
+Implements only `linear api [--variables-json JSON]` with the GraphQL document
+on stdin, and reproduces the exit codes and streams measured in LW-0
+(references/linear-watch-cli.md, section 2). It serves the real payloads of
+tests/fixtures/linear-real/.
+
+Controlled by the environment:
+
+  FAKE_LINEAR_MODE     what to answer (default: ok)
+      ok                  the fixture of the operation (see ROUTES), stdout, exit 0
+      not-found           errors-not-found.json, stdout, exit 3 (HTTP 200 + errors)
+      unknown-field       errors-unknown-field.json, stderr, exit 1 (HTTP 400)
+      bad-variable        errors-wrong-variable-type.json, stderr, exit 1 (HTTP 400)
+      unauthenticated     errors-unauthenticated.json, stderr, exit 4 (HTTP 401)
+      unreachable         CLI text, stderr, exit 5
+      rate-limited        SYNTHESIZED, NOT MEASURED: a RATELIMITED JSON body on
+                          stderr, exit 1 (how the CLI reports other HTTP 400s)
+      rate-limited-text   SYNTHESIZED, NOT MEASURED: CLI text on stderr, exit 5
+                          (`linear --help` lists rate limiting under exit 5)
+      garbage             non-JSON on stdout, exit 0
+      paginated-array     comments-since-paginated.json (a bare array), exit 0
+      hang                sleep 30 s, then answer like ok
+  FAKE_LINEAR_FIXTURE  fixture file name served by `ok`, overriding ROUTES
+  FAKE_LINEAR_FIXTURE_DIR  directory to read the fixtures from (default:
+                       tests/fixtures/linear-real); the poll tests point it at
+                       an edited copy to simulate a state that moved
+  FAKE_LINEAR_NOW      ISO timestamp: Linear's "present". Nodes created or
+                       updated after it are hidden, so a test can replay the
+                       real day of LW-0 cycle by cycle (poll operations only)
+  FAKE_LINEAR_FAIL_OPS comma-separated operation names that fail like
+                       `unreachable` (exit 5) while the others answer
+  FAKE_LINEAR_KEY      the only key this fake accepts; another non-empty key
+                       gets the measured 401 (exit 4). Unset: any key is fine.
+  FAKE_LINEAR_LOG      file to append one JSON line per call to: argv, stdin,
+                       cwd, whether a key was received and LINEAR_IGNORE_ENV_FILE.
+                       The key value itself is never written.
+
+Like the real CLI, a missing or empty LINEAR_API_KEY exits 4 with
+"No API key configured", and --workspace is refused while it is set (exit 2).
+"""
+
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "linear-real"
+ROUTES = {
+    "CommentsSince": "comments-since.json",
+    "IssuesUpdatedSince": "issues-updated-since.json",
+    "ProjectState": "project-completed.json",
+}
+FAILURE_PREFIX = "✗ API request failed: "
+
+RATE_LIMITED_BODY = {
+    "errors": [
+        {
+            "message": "Rate limit exceeded",
+            "extensions": {
+                "type": "ratelimited",
+                "code": "RATELIMITED",
+                "statusCode": 400,
+                "userError": True,
+                "userPresentableMessage": "Too many requests. Please try again later.",
+            },
+        }
+    ]
+}
+
+
+def fixture(name: str) -> str:
+    return (Path(os.environ.get("FAKE_LINEAR_FIXTURE_DIR") or FIXTURES) / name).read_text()
+
+
+# ── poll operations (LW-3) ────────────────────────────────────────────────────
+# The real payloads are one snapshot; these operations replay it as Linear
+# would answer a query with these variables: the `since` filter and Linear's
+# present (FAKE_LINEAR_NOW) are applied, and a call with `after` gets the
+# terminal page. ProjectIssueStates and WatchedIssues were not captured in LW-0:
+# their answers are SYNTHESIZED from the captured issue and comment nodes.
+FAKE_PROJECT = "5842ed0c2bcd"  # the project the LW-0 payloads come from
+TERMINAL_PAGE = {"hasNextPage": False, "endCursor": None}
+
+
+def _ts(value: str) -> str:
+    """ISO timestamps compare as strings once normalized to …HH:MM:SS.mmmZ."""
+    value = value.replace("+00:00", "Z")
+    if "." not in value:
+        value = value.replace("Z", ".000Z")
+    return value
+
+
+def _visible(nodes: list, field: str, since: str | None) -> list:
+    present = os.environ.get("FAKE_LINEAR_NOW")
+    kept = []
+    for node in nodes:
+        at = _ts(node[field])
+        if since and at <= _ts(since):
+            continue
+        if present and at > _ts(present):
+            continue
+        kept.append(node)
+    return kept
+
+
+def _connection(nodes: list, page_info: dict) -> dict:
+    return {"nodes": nodes, "pageInfo": page_info}
+
+
+def poll_answer(operation: str, variables: dict) -> str | None:
+    """The answer to a poll operation, or None for any other operation."""
+    if operation not in ("CommentsSince", "IssuesUpdatedSince", "ProjectIssueStates", "WatchedIssues"):
+        return None
+    after = variables.get("after")
+    if operation == "CommentsSince":
+        conn = json.loads(fixture("comments-since.json"))["data"]["comments"]
+        nodes = [] if after else _visible(conn["nodes"], "createdAt", variables.get("since"))
+        return json.dumps({"data": {"comments": _connection(nodes, TERMINAL_PAGE if after else conn["pageInfo"])}})
+    issues = json.loads(fixture("issues-updated-since.json"))["data"]["issues"]
+    if operation == "IssuesUpdatedSince":
+        nodes = [] if after else _visible(issues["nodes"], "updatedAt", variables.get("since"))
+        return json.dumps({"data": {"issues": _connection(nodes, TERMINAL_PAGE if after else issues["pageInfo"])}})
+    if operation == "ProjectIssueStates":
+        nodes = [] if after else [
+            n for n in _visible(issues["nodes"], "updatedAt", None)
+            if n["state"]["type"] not in ("completed", "canceled")
+        ]
+        return json.dumps({"data": {"issues": _connection(nodes, TERMINAL_PAGE)}})
+    # WatchedIssues: issues by identifier, each with its comments since $since
+    wanted = set(variables.get("ids") or [])
+    comments = json.loads(fixture("comments-since.json"))["data"]["comments"]["nodes"]
+    nodes = []
+    # issues are never hidden here: a watched issue exists before its last
+    # update, Linear would return it (with an older state the snapshot lacks)
+    for node in issues["nodes"]:
+        if node["identifier"] not in wanted:
+            continue
+        mine = [c for c in comments if c["issue"]["identifier"] == node["identifier"]]
+        mine = _visible(mine, "createdAt", variables.get("since"))
+        for c in mine:
+            del c["issue"]
+        node["comments"] = _connection(mine, TERMINAL_PAGE)
+        node["project"] = {"slugId": FAKE_PROJECT}
+        nodes.append(node)
+    return json.dumps({"data": {"issues": _connection(nodes, TERMINAL_PAGE)}})
+
+
+def operation_name(document: str) -> str:
+    words = document.replace("(", " ").replace("{", " ").split()
+    if len(words) >= 2 and words[0] in ("query", "mutation"):
+        return words[1]
+    return ""
+
+
+def out(text: str, code: int) -> None:
+    sys.stdout.write(text)
+    sys.exit(code)
+
+
+def err(text: str, code: int) -> None:
+    sys.stderr.write(text if text.endswith("\n") else text + "\n")
+    sys.exit(code)
+
+
+def main() -> None:
+    argv = sys.argv[1:]
+    document = sys.stdin.read() if not sys.stdin.isatty() else ""
+    key = os.environ.get("LINEAR_API_KEY", "")
+
+    log = os.environ.get("FAKE_LINEAR_LOG")
+    if log:
+        with open(log, "a") as fh:
+            fh.write(json.dumps({
+                "argv": argv,
+                "stdin": document,
+                "cwd": os.getcwd(),
+                "key_received": bool(key),
+                "ignore_env_file": os.environ.get("LINEAR_IGNORE_ENV_FILE"),
+            }) + "\n")
+
+    if not argv or argv[0] != "api":
+        err("error: this fake only implements `linear api`", 2)
+    args = argv[1:]
+    variables = None
+    while args and args[0].startswith("--"):
+        flag = args.pop(0)
+        if flag == "--variables-json" and args:
+            try:
+                variables = json.loads(args.pop(0))
+            except ValueError:
+                err("error: --variables-json is not valid JSON", 2)
+        elif flag == "--workspace" and key:
+            err(FAILURE_PREFIX + "Cannot use --workspace while LINEAR_API_KEY is set\n"
+                "Unset LINEAR_API_KEY or remove the --workspace flag.", 2)
+        else:
+            err(f"error: unknown option {flag}", 2)
+    if args:
+        document = args.pop(0)
+    if not document.strip():
+        err("error: missing GraphQL query", 2)
+    if variables is not None and not isinstance(variables, dict):
+        err("error: --variables-json must be a JSON object", 2)
+
+    if not key:
+        err(FAILURE_PREFIX + "No API key configured\n"
+            "  Set LINEAR_API_KEY, add api_key to .linear.toml, or run `linear auth login`.", 4)
+    expected = os.environ.get("FAKE_LINEAR_KEY")
+    mode = os.environ.get("FAKE_LINEAR_MODE", "ok")
+    if (expected and key != expected) or mode == "unauthenticated":
+        err(fixture("errors-unauthenticated.json"), 4)
+
+    if mode == "hang":
+        time.sleep(30)
+        mode = "ok"
+    failing = {op for op in os.environ.get("FAKE_LINEAR_FAIL_OPS", "").split(",") if op}
+    if mode == "ok" and operation_name(document) in failing:
+        mode = "unreachable"
+    if mode == "ok" and not os.environ.get("FAKE_LINEAR_FIXTURE"):
+        answer = poll_answer(operation_name(document), variables or {})
+        if answer is not None:
+            out(answer, 0)
+    if mode == "ok":
+        name = os.environ.get("FAKE_LINEAR_FIXTURE") or ROUTES.get(operation_name(document))
+        if not name:
+            err(f"error: the fake has no fixture for operation {operation_name(document)!r}", 1)
+        out(fixture(name), 0)
+    if mode == "not-found":
+        out(fixture("errors-not-found.json"), 3)
+    if mode == "unknown-field":
+        err(fixture("errors-unknown-field.json"), 1)
+    if mode == "bad-variable":
+        err(fixture("errors-wrong-variable-type.json"), 1)
+    if mode == "unreachable":
+        err(FAILURE_PREFIX + "Request to https://api.linear.app failed: "
+            "Connection refused (os error 61)", 5)
+    if mode == "rate-limited":
+        err(json.dumps(RATE_LIMITED_BODY), 1)
+    if mode == "rate-limited-text":
+        err(FAILURE_PREFIX + "Linear rate limited the request (HTTP 429). Retry later.", 5)
+    if mode == "garbage":
+        out("<html>502 Bad Gateway</html>\n", 0)
+    if mode == "paginated-array":
+        out(fixture("comments-since-paginated.json"), 0)
+    err(f"error: unknown FAKE_LINEAR_MODE {mode!r}", 2)
+
+
+if __name__ == "__main__":
+    main()

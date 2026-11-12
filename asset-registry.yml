@@ -1561,27 +1561,34 @@ assets:
       - spec-kit
       - workflow
     description: >-
-      Use Linear as the tracker a repository publishes findings to, through the Linear MCP. Covers the per-repository
-      how a repository knows its Linear team (`team` in the lifecycle `phases.json`) and why the project is never a repository property
-      (given per call, or recorded per spec), the mapping from a grievance record to a Linear
-      issue and the two mappings that silently corrupt data if taken literally, the publish contract this skill answers
-      on behalf of the `grievances` skill, and read-only triage across a workspace. It also installs, once, a repo-local
-      advisory Stop hook and per-phase templates that follow a spec-kit change in Linear — issue at specify, In Progress
-      at the first ticked task, In Review when a PR opens, Done once the merged PR is deployed (all pipelines of the merge commit green) — from file, git and PR facts only, asking once per fact and
-      never blocking. It also draws the dependency graph of a Linear project ("blocks / blocked by" between its issues)
-      as a clickable SVG for humans and exports it as a JSON graph agents can query, with `scripts/linear_deps.py` and a
-      Linear API key read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline whether every issue of one type
-      (every Proof) is blocked by an issue of other types (a development task). `publish` is a verb of the `grievances`
-      skill; this skill is one backend that answers it, and it never writes a ledger. Use when wiring a repository to a
-      Linear project, when a finding must leave a repository and become an issue someone can own, when auditing which
-      findings are already tracked, or when deciding what a tracker can and cannot hold. It also proposes eight issue
-      types (Bug, Blocker, Question, Research, Feature, Improvement, Proof, Technical task), the order of questions that
-      picks one, and a workspace template body for each. Use it too when choosing which ticket type to open, telling a
-      Question from a Blocker, proving a merged lot on an environment, or drafting Linear templates. Triggers on
-      "Linear", "phases.json", "publish a grievance", "tracker", "issue from a finding", "which project does this spec
-      belong to", "follow a spec in Linear", "spec-kit lifecycle", "ticket type", "Linear template", "proof ticket",
-      "dependency tree", "dependency graph", "draw Linear tickets", "what blocks this issue", "is every proof blocked",
-      "LINEAR_API_KEY".
+      Use Linear as the tracker a repository publishes findings to, through the Linear MCP, and wake agent sessions on
+      Linear changes with `lw`, its watcher. Covers how a repository knows its Linear team (`team` in the lifecycle
+      `phases.json`) and why the project is never a repository property (it is given per call, or recorded per spec),
+      the mapping from a grievance record to a Linear issue and the two mappings that silently corrupt data if taken
+      literally, the publish contract this skill answers on behalf of the `grievances` skill, and read-only triage
+      across a workspace. It also installs, once, a repo-local advisory Stop hook and per-phase templates that follow a
+      spec-kit change in Linear — issue at specify, In Progress at the first ticked task, In Review when a PR opens,
+      Done once the merged PR is deployed (every pipeline of the merge commit green; ticket read from the spec or from
+      `<teamKey>-<n>` in the branch name) — from file, git and PR facts only, asking once per fact and never blocking.
+      It also draws the dependency graph of a Linear project ("blocks / blocked by" between its issues) as a clickable
+      SVG for humans and exports it as a JSON graph agents can query, with `scripts/linear_deps.py` and a Linear API key
+      read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline whether every issue of one type (every Proof)
+      is blocked by an issue of other types (a development task). `publish` is a verb of the `grievances` skill; this
+      skill is one backend that answers it, and it never writes a ledger. Use when wiring a repository to a Linear
+      project, when a finding must leave a repository and become an issue someone can own, when auditing which findings
+      are already tracked, or when deciding what a tracker can and cannot hold. It also proposes eight issue types (Bug,
+      Blocker, Question, Research, Feature, Improvement, Proof, Technical task), the order of questions that picks one,
+      and a workspace template body for each. Use it too when choosing which ticket type to open, telling a Question
+      from a Blocker, proving a merged lot on an environment, or drafting Linear templates. It also ships `lw`, the
+      Linear watcher: a launchd daemon that polls Linear every 5 minutes and wakes the agent sessions subscribed to a
+      Linear project or issue with each new comment or state transition (`lw subscribe`, then `lw wait` in the
+      background), subscriptions ending on their own when the session is archived or the watched issue is finished. Use
+      it when a session must be woken by a Linear comment or state change, or when installing or checking the watcher
+      (`lw setup --claude`, `lw daemon start`, `lw doctor`). Triggers on "Linear", "phases.json", "publish a grievance",
+      "tracker", "issue from a finding", "which project does this spec belong to", "follow a spec in Linear", "spec-kit
+      lifecycle", "ticket type", "Linear template", "proof ticket", "dependency tree", "dependency graph", "draw Linear
+      tickets", "what blocks this issue", "is every proof blocked", "LINEAR_API_KEY", "linear watch", "lw subscribe",
+      "lw wait", "watch this ticket", "réveiller la session sur Linear", "surveiller le projet Linear".
     category: workflows-and-processes
   - path: skills/lit-web-components/
     type: skill
