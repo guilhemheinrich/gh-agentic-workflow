@@ -257,7 +257,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   `save-*` fixtures are hand-written from the observed response shapes. See
   `tests/fixtures/mcp-responses/README.md`. LW-8 re-checks on the machine.
 
-### [ ] LW-7 — Daemon under launchd
+### [x] LW-7 — Daemon under launchd
 
 - **Goal:** `lw` polls on its own, survives reboots, and reloads its code.
 - **Do:** `lw daemon run` (loop, `LW_POLL_SECONDS` = 300), `start` (installs
@@ -271,6 +271,25 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
 - **Depends on:** LW-5.
 - **Done when:** tests for heartbeat, re-exec trigger and checkout refusal;
   on the machine, `lw doctor` is all `ok` after `lw daemon start`.
+- **Delivered with caveats:**
+  - The machine check is still the human's: `lw daemon start` was never run
+    here (it must run from the installed copy,
+    `~/.agents/skills/linear-watch/scripts/lw`), so "`lw doctor` all `ok`" is
+    not verified yet. Under launchd, stderr goes to `daemon.out`; the per-cycle
+    log is `daemon.log` in the state dir.
+  - Re-exec fires when the script's mtime **differs** from the one recorded in
+    `daemon.started` at start (not only when newer), so a `cp -p` of an older
+    copy also reloads. The check runs after the sleep, so the new code runs
+    the next cycle on schedule.
+  - Wiring expiry into the cycle makes three LW-5 gaps live: nothing calls
+    `record_project_state()`, so `project-done` never fires; a fresh `--since`
+    subscription on an issue already `completed` in the shared `issue_states`
+    is closed before its first poll delivers the backlog; a Claude Code session
+    started from a terminal has no desktop file and is closed as
+    `session-gone` on the first cycle (LW-8 must address this one before
+    pilots rely on it).
+  - A failing expiry fails the whole cycle (no poll that cycle); it is logged
+    as `cycle failed: …` and the loop goes on.
 
 ### [ ] LW-8 — Claude adapter and pilot integration
 
