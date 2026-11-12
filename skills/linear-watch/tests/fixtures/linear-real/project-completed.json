@@ -1,0 +1,18 @@
+{
+  "data": {
+    "project": {
+      "id": "27710fde-ee74-4c30-9b97-084d3c52e34f",
+      "slugId": "c70b17017c41",
+      "name": "Completed project (name redacted)",
+      "url": "https://linear.app/septeo-proptech/project/redacted-name-c70b17017c41",
+      "state": "completed",
+      "status": {
+        "name": "Completed",
+        "type": "completed"
+      },
+      "completedAt": "2026-09-16T17:10:21.532Z",
+      "canceledAt": null,
+      "updatedAt": "2026-09-16T17:10:21.536Z"
+    }
+  }
+}
