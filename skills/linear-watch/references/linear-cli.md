@@ -203,3 +203,27 @@ rc abs api without key=4
 `/opt/homebrew/bin/linear` is the Homebrew symlink to
 `/opt/homebrew/Cellar/linear/3.1.0/…`; `lw` must store the symlink path, which
 survives `brew upgrade`, never the resolved one.
+
+## 5. The LW-3 poll documents, run once against real Linear
+
+The four documents of `scripts/lw` (`CommentsSince`, `IssuesUpdatedSince`,
+`ProjectIssueStates`, `WatchedIssues`) were run on **2026-11-12** through
+`linear_api()` with `/opt/homebrew/bin/linear`, read-only, project
+`5842ed0c2bcd`, `since 2026-11-12T08:00:00Z`; the probe printed counts only:
+
+```text
+CommentsSince ok nodes=39 hasNext=False
+IssuesUpdatedSince ok nodes=100 hasNext=True
+ProjectIssueStates ok nodes=100 hasNext=True  types=['backlog', 'duplicate', 'started', 'unstarted']
+  ProjectIssueStates paged total=125
+WatchedIssues ok nodes=2 hasNext=None  idents=['TT-2287', 'TT-2519'] comments=[3, 2] project=['5842ed0c2bcd']
+```
+
+- Every document is valid: no `GRAPHQL_VALIDATION_FAILED`, `$after: null` on
+  the first page is accepted, `_paged()` followed `endCursor` to 125 open
+  issues.
+- `issues(filter: {id: {in: $ids}})` takes identifiers, and the nested
+  `comments(filter: {createdAt: {gt: $since}})` works: `TT-999999` is simply
+  absent, the two others come back with their comments.
+- The workspace has a state type `duplicate` besides `completed` and
+  `canceled`; the baseline keeps it (it only excludes the two finished types).

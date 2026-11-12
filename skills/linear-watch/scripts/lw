@@ -794,6 +794,370 @@ def add_own_write_parser(sub, common) -> None:
     p.set_defaults(func=cmd_own_write)
 
 
+# ── poll cycle (LW-3) ─────────────────────────────────────────────────────────
+#   lw daemon once     one cycle: Linear changes -> events rows; exit 1 when a
+#                      query failed (its targets are retried next cycle)
+#
+# Per watched project: the comments created after the bound (CommentsSince)
+# and the issues updated after it (IssuesUpdatedSince), whose state is compared
+# with issue_states. On first sight of a project, its open issues are read
+# instead (ProjectIssueStates): a silent state baseline. Every watched issue
+# goes into one grouped query (WatchedIssues: state + comments since the bound).
+#
+# Bounds. A target's cursor is the clock at the start of its last good cycle.
+# The bound is cursor - CURSOR_OVERLAP (Linear's clock and ours drift; the
+# overlap is deduped by events' primary key), extended for a subscription that
+# is new to the target (created at or after the cursor, or no cursor yet) down
+# to its `since`, else to its created_at. Each subscription only gets what
+# happened after its own floor (`since`, else created_at): a later subscriber
+# without --since never hears the past, one with --since hears it once.
+#
+# One cycle reads everything first, then writes in one transaction: a target
+# whose query failed writes nothing (no event, no state, no cursor), so its
+# changes come late, never lost. A comment or a state move is fanned out to
+# every open subscription on its issue or on its issue's project, whichever
+# query saw it. issue_states is global: the transition of an issue is computed
+# once per cycle, from its newest observation.
+#
+# Dropped: comments listed in own_writes, and a move to the state an own_writes
+# row names when that row was recorded after the previous observation of the
+# issue (minus the overlap), so a stale own move never hides a human one.
+# An issue never observed before is recorded silently (new issues are out of
+# scope). Comment bodies are never queried, stored nor printed.
+CURSOR_OVERLAP = timedelta(seconds=120)
+POLL_PAGE_SIZE = 100
+POLL_MAX_PAGES = 50
+ISSUE_GROUP_SIZE = 50
+LINE_TEXT_MAX = 80
+CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
+ISSUE_LINK_RE = re.compile(r"^(https://linear\.app/[A-Za-z0-9_-]+/issue/([A-Za-z][A-Za-z0-9]*-[0-9]+))(?:[/?#].*)?$")
+DONE_STATE_TYPES = '["completed", "canceled"]'
+
+_ISSUE_FIELDS = "identifier url updatedAt state { name type } project { slugId }"
+_COMMENT_FIELDS = "id createdAt user { name } botActor { name }"
+
+PROJECT_COMMENTS_QUERY = f"""query CommentsSince($since: DateTimeOrDuration!, $p: String!, $after: String) {{
+  comments(first: {POLL_PAGE_SIZE}, after: $after, orderBy: createdAt,
+           filter: {{createdAt: {{gt: $since}}, issue: {{project: {{slugId: {{eq: $p}}}}}}}}) {{
+    nodes {{ {_COMMENT_FIELDS} issue {{ identifier url }} }}
+    pageInfo {{ hasNextPage endCursor }}
+  }}
+}}"""
+
+PROJECT_ISSUES_QUERY = f"""query IssuesUpdatedSince($since: DateTimeOrDuration!, $p: String!, $after: String) {{
+  issues(first: {POLL_PAGE_SIZE}, after: $after, orderBy: updatedAt,
+         filter: {{updatedAt: {{gt: $since}}, project: {{slugId: {{eq: $p}}}}}}) {{
+    nodes {{ {_ISSUE_FIELDS} }}
+    pageInfo {{ hasNextPage endCursor }}
+  }}
+}}"""
+
+PROJECT_BASELINE_QUERY = f"""query ProjectIssueStates($p: String!, $after: String) {{
+  issues(first: {POLL_PAGE_SIZE}, after: $after,
+         filter: {{project: {{slugId: {{eq: $p}}}}, state: {{type: {{nin: {DONE_STATE_TYPES}}}}}}}) {{
+    nodes {{ {_ISSUE_FIELDS} }}
+    pageInfo {{ hasNextPage endCursor }}
+  }}
+}}"""
+
+# missing identifiers are simply absent from a connection filter, where one
+# missing alias would null the whole `data` (references/linear-cli.md §2)
+WATCHED_ISSUES_QUERY = f"""query WatchedIssues($ids: [ID!], $since: DateTimeOrDuration!) {{
+  issues(first: {ISSUE_GROUP_SIZE}, filter: {{id: {{in: $ids}}}}) {{
+    nodes {{
+      {_ISSUE_FIELDS}
+      comments(first: {POLL_PAGE_SIZE}, orderBy: createdAt, filter: {{createdAt: {{gt: $since}}}}) {{
+        nodes {{ {_COMMENT_FIELDS} }}
+      }}
+    }}
+  }}
+}}"""
+
+
+def parse_ts(value) -> datetime | None:
+    """A Linear or lw timestamp ('…T08:44:31.713Z', '…T08:44:31Z') -> aware datetime."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        ts = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
+
+
+def linear_ts(ts: datetime) -> str:
+    """Millisecond ISO form, as Linear writes it (kept in issue_states.updated_at)."""
+    return ts.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + f"{ts.microsecond // 1000:03d}Z"
+
+
+def clean_text(value) -> str:
+    """Third-party text (a name, a state) made safe for one wake line."""
+    text = CONTROL_RE.sub(" ", str(value or ""))
+    return " ".join(text.split())[:LINE_TEXT_MAX]
+
+
+def issue_link(identifier: str, url) -> str:
+    """The bare issue URL (no title slug, no anchor); '' when url is not Linear's."""
+    match = ISSUE_LINK_RE.match(url or "") if isinstance(url, str) else None
+    if match and match.group(2).upper() == identifier:
+        return match.group(1)
+    return ""
+
+
+def _line(identifier: str, what: str, url) -> str:
+    link = issue_link(identifier, url)
+    return f"Linear · {identifier} {what}" + (f" · {link}" if link else "")
+
+
+def _paged(query: str, variables: dict, field: str, state_dir: Path) -> list[dict]:
+    """Every node of a connection, following pageInfo.endCursor."""
+    nodes: list[dict] = []
+    after = None
+    for _ in range(POLL_MAX_PAGES):
+        body = linear_api(query, {**variables, "after": after}, state_dir=state_dir)
+        conn = (body.get("data") or {}).get(field) or {}
+        nodes += [n for n in conn.get("nodes") or [] if isinstance(n, dict)]
+        page = conn.get("pageInfo") or {}
+        if not page.get("hasNextPage") or not page.get("endCursor") or page["endCursor"] == after:
+            return nodes
+        after = page["endCursor"]
+    raise TransportError(T_OTHER, f"more than {POLL_MAX_PAGES} pages", _operation_name(query))
+
+
+class CycleResult:
+    def __init__(self):
+        self.lines = 0
+        self.sessions: set[str] = set()
+        self.errors: list[TransportError] = []
+        self.watched = 0
+
+
+def _observation(node: dict, project: str | None = None) -> dict | None:
+    ident = str(node.get("identifier") or "").upper()
+    state = node.get("state") or {}
+    updated = parse_ts(node.get("updatedAt"))
+    if not ISSUE_RE.match(ident) or not state.get("name") or updated is None:
+        return None
+    project = project or ((node.get("project") or {}).get("slugId"))
+    return {"identifier": ident, "url": node.get("url"), "updated": updated,
+            "state": clean_text(state["name"]), "state_type": str(state.get("type") or ""),
+            "project": project}
+
+
+def _comment(node: dict, ident: str, url, project: str | None) -> dict | None:
+    created = parse_ts(node.get("createdAt"))
+    cid = str(node.get("id") or "").lower()
+    if not UUID_RE.match(cid) or created is None or not ISSUE_RE.match(ident):
+        return None
+    author = (node.get("user") or {}).get("name") or (node.get("botActor") or {}).get("name")
+    return {"id": cid, "identifier": ident.upper(), "url": url, "created": created,
+            "author": clean_text(author) or "someone", "project": project}
+
+
+def _bound(subs: list, cursor: datetime | None) -> datetime | None:
+    """Lower bound of a target's queries; None when nothing needs fetching."""
+    candidates = [cursor - CURSOR_OVERLAP] if cursor else []
+    for sub in subs:
+        if cursor is None or parse_ts(sub["created_at"]) >= cursor:
+            candidates.append(_floor(sub))
+    return min(candidates) if candidates else None
+
+
+def _floor(sub) -> datetime:
+    return parse_ts(sub["since"]) or parse_ts(sub["created_at"])
+
+
+def _fetch_project(slug: str, subs: list, cursor: datetime | None, state_dir: Path):
+    bound = _bound(subs, cursor)
+    comments = []
+    for node in _paged(PROJECT_COMMENTS_QUERY, {"since": fmt(bound), "p": slug}, "comments", state_dir):
+        issue = node.get("issue") or {}
+        item = _comment(node, str(issue.get("identifier") or "").upper(), issue.get("url"), slug)
+        if item:
+            comments.append(item)
+    if cursor is None:
+        nodes = _paged(PROJECT_BASELINE_QUERY, {"p": slug}, "issues", state_dir)
+    else:
+        nodes = _paged(PROJECT_ISSUES_QUERY, {"since": fmt(cursor - CURSOR_OVERLAP), "p": slug},
+                       "issues", state_dir)
+    observations = [o for o in (_observation(n, slug) for n in nodes) if o]
+    return comments, observations
+
+
+def _fetch_issues(targets: dict, state_dir: Path):
+    """targets: identifier -> bound. Yields (identifiers, comments, observations)
+    per group of ISSUE_GROUP_SIZE, or (identifiers, error) for a failed group."""
+    idents = sorted(targets)
+    for start in range(0, len(idents), ISSUE_GROUP_SIZE):
+        group = idents[start:start + ISSUE_GROUP_SIZE]
+        since = min(targets[i] for i in group)
+        try:
+            body = linear_api(WATCHED_ISSUES_QUERY, {"ids": group, "since": fmt(since)},
+                              state_dir=state_dir)
+        except TransportError as exc:
+            yield group, exc
+            continue
+        comments, observations = [], []
+        for node in ((body.get("data") or {}).get("issues") or {}).get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            obs = _observation(node)
+            if not obs or obs["identifier"] not in targets:
+                continue
+            observations.append(obs)
+            for c in ((node.get("comments") or {}).get("nodes")) or []:
+                item = _comment(c, obs["identifier"], obs["url"], obs["project"]) if isinstance(c, dict) else None
+                if item and item["created"] > targets[obs["identifier"]]:
+                    comments.append(item)
+        yield group, comments, observations
+
+
+def run_cycle(conn: sqlite3.Connection, state_dir: Path) -> CycleResult:
+    """One poll cycle. LW-5 runs expiry before it; LW-7 calls it in a loop."""
+    result = CycleResult()
+    t = now()  # the new cursor: taken before the queries, so nothing slips between
+    subs = conn.execute(
+        "SELECT id, session, kind, target, since, created_at FROM subscriptions"
+        " WHERE closed_at IS NULL ORDER BY id"
+    ).fetchall()
+    by_target: dict[tuple[str, str], list] = {}
+    for sub in subs:
+        by_target.setdefault((sub["kind"], sub["target"]), []).append(sub)
+    result.watched = len(by_target)
+    if not by_target:
+        return result
+    cursors = {(r["kind"], r["target"]): parse_ts(r["last_seen"])
+               for r in conn.execute("SELECT kind, target, last_seen FROM cursors")}
+
+    comments: list[dict] = []
+    observations: list[dict] = []
+    good: list[tuple[str, str]] = []
+    for (kind, target), target_subs in by_target.items():
+        if kind != "project":
+            continue
+        try:
+            found = _fetch_project(target, target_subs, cursors.get((kind, target)), state_dir)
+        except TransportError as exc:
+            result.errors.append(exc)
+            continue
+        comments += found[0]
+        observations += found[1]
+        good.append((kind, target))
+    issue_bounds = {target: _bound(target_subs, cursors.get((kind, target)))
+                    for (kind, target), target_subs in by_target.items() if kind == "issue"}
+    for outcome in _fetch_issues(issue_bounds, state_dir):
+        if isinstance(outcome[1], TransportError):
+            result.errors.append(outcome[1])
+            continue
+        comments += outcome[1]
+        observations += outcome[2]
+        good += [("issue", ident) for ident in outcome[0]]
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        _write_cycle(conn, by_target, comments, observations, good, t, result)
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return result
+
+
+def _write_cycle(conn, by_target, comments, observations, good, t, result) -> None:
+    own_comments = {r["ref"] for r in conn.execute("SELECT ref FROM own_writes WHERE kind = 'comment'")}
+    own_states = {r["ref"]: (r["value"], parse_ts(r["at"]))
+                  for r in conn.execute("SELECT ref, value, at FROM own_writes WHERE kind = 'state'")}
+    known = {r["identifier"]: (r["state"], parse_ts(r["updated_at"]))
+             for r in conn.execute("SELECT identifier, state, updated_at FROM issue_states")}
+
+    def concerned(ident: str, project: str | None) -> list:
+        subs = list(by_target.get(("issue", ident), []))
+        if project:
+            subs += by_target.get(("project", project), [])
+        return subs
+
+    def emit(event_id: str, ts: datetime, text: str, subs: list) -> None:
+        for sub in subs:
+            if ts <= _floor(sub):
+                continue
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO events (id, session, ts, text) VALUES (?, ?, ?, ?)",
+                (event_id, sub["session"], fmt(ts), text),
+            ).rowcount
+            if inserted:
+                result.lines += 1
+                result.sessions.add(sub["session"])
+
+    seen: set[str] = set()
+    for c in sorted(comments, key=lambda c: (c["created"], c["id"])):
+        if c["id"] in seen or c["id"] in own_comments:
+            continue
+        seen.add(c["id"])
+        hhmm = c["created"].astimezone().strftime("%H:%M")  # the machine's local time
+        emit(f"comment:{c['id']}", c["created"],
+             _line(c["identifier"], f"comment by {c['author']} ({hhmm})", c["url"]),
+             concerned(c["identifier"], c["project"]))
+
+    newest: dict[str, dict] = {}
+    for obs in observations:
+        current = newest.get(obs["identifier"])
+        if current is None or obs["updated"] > current["updated"]:
+            newest[obs["identifier"]] = obs
+    for ident, obs in newest.items():
+        prev = known.get(ident)
+        if prev and prev[1] and obs["updated"] <= prev[1]:
+            continue  # nothing newer than what issue_states holds
+        if prev and prev[0] != obs["state"]:
+            own = own_states.get(ident)
+            mine = (own is not None and own[0] == obs["state"] and own[1] is not None
+                    and (prev[1] is None or own[1] >= prev[1] - CURSOR_OVERLAP))
+            if not mine:
+                emit(f"state:{ident}:{linear_ts(obs['updated'])}", obs["updated"],
+                     _line(ident, f"{prev[0]} → {obs['state']}", obs["url"]),
+                     concerned(ident, obs["project"]))
+        conn.execute(
+            "INSERT INTO issue_states (identifier, state, state_type, updated_at) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT (identifier) DO UPDATE SET state = excluded.state,"
+            " state_type = excluded.state_type, updated_at = excluded.updated_at",
+            (ident, obs["state"], obs["state_type"], linear_ts(obs["updated"])),
+        )
+
+    conn.executemany(
+        "INSERT INTO cursors (kind, target, last_seen) VALUES (?, ?, ?)"
+        " ON CONFLICT (kind, target) DO UPDATE SET last_seen = excluded.last_seen",
+        [(kind, target, fmt(t)) for kind, target in good],
+    )
+
+
+def cmd_daemon_once(conn: sqlite3.Connection, args) -> int:
+    state_dir = Path(conn.execute("PRAGMA database_list").fetchone()["file"]).parent
+    result = run_cycle(conn, state_dir)
+    for exc in result.errors:
+        print(f"lw: {exc}", file=sys.stderr)
+    if not result.watched:
+        print("lw: nothing watched")
+    else:
+        print(f"lw: cycle wrote {result.lines} line(s) for {len(result.sessions)} session(s)"
+              f" over {result.watched} target(s)"
+              + (f", {len(result.errors)} failed query(ies)" if result.errors else ""))
+    return 1 if result.errors else 0
+
+
+def register_poll(sub, common):
+    """Add `lw daemon once`; returns the daemon actions so LW-7 can add run/start/stop."""
+    p = sub.add_parser("daemon", parents=[common], help="poll Linear (once, for now)")
+    actions = p.add_subparsers(dest="daemon_action", required=True)
+    once = actions.add_parser(
+        "once", parents=[common], help="run one poll cycle",
+        description="Turn Linear changes into wake lines. Exit 1 when a query failed.",
+    )
+    once.set_defaults(func=cmd_daemon_once)
+    return actions
+
+
+# ── end of poll cycle (LW-3) ──────────────────────────────────────────────────
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -831,6 +1195,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_wait(sub, common)
     add_own_write_parser(sub, common)
+    daemon_actions = register_poll(sub, common)  # noqa: F841 (LW-7 adds run/start/stop)
     return parser
 
 

@@ -23,6 +23,14 @@ Controlled by the environment:
       paginated-array     comments-since-paginated.json (a bare array), exit 0
       hang                sleep 30 s, then answer like ok
   FAKE_LINEAR_FIXTURE  fixture file name served by `ok`, overriding ROUTES
+  FAKE_LINEAR_FIXTURE_DIR  directory to read the fixtures from (default:
+                       tests/fixtures/linear-real); the poll tests point it at
+                       an edited copy to simulate a state that moved
+  FAKE_LINEAR_NOW      ISO timestamp: Linear's "present". Nodes created or
+                       updated after it are hidden, so a test can replay the
+                       real day of LW-0 cycle by cycle (poll operations only)
+  FAKE_LINEAR_FAIL_OPS comma-separated operation names that fail like
+                       `unreachable` (exit 5) while the others answer
   FAKE_LINEAR_KEY      the only key this fake accepts; another non-empty key
                        gets the measured 401 (exit 4). Unset: any key is fine.
   FAKE_LINEAR_LOG      file to append one JSON line per call to: argv, stdin,
@@ -64,7 +72,80 @@ RATE_LIMITED_BODY = {
 
 
 def fixture(name: str) -> str:
-    return (FIXTURES / name).read_text()
+    return (Path(os.environ.get("FAKE_LINEAR_FIXTURE_DIR") or FIXTURES) / name).read_text()
+
+
+# ── poll operations (LW-3) ────────────────────────────────────────────────────
+# The real payloads are one snapshot; these operations replay it as Linear
+# would answer a query with these variables: the `since` filter and Linear's
+# present (FAKE_LINEAR_NOW) are applied, and a call with `after` gets the
+# terminal page. ProjectIssueStates and WatchedIssues were not captured in LW-0:
+# their answers are SYNTHESIZED from the captured issue and comment nodes.
+FAKE_PROJECT = "5842ed0c2bcd"  # the project the LW-0 payloads come from
+TERMINAL_PAGE = {"hasNextPage": False, "endCursor": None}
+
+
+def _ts(value: str) -> str:
+    """ISO timestamps compare as strings once normalized to …HH:MM:SS.mmmZ."""
+    value = value.replace("+00:00", "Z")
+    if "." not in value:
+        value = value.replace("Z", ".000Z")
+    return value
+
+
+def _visible(nodes: list, field: str, since: str | None) -> list:
+    present = os.environ.get("FAKE_LINEAR_NOW")
+    kept = []
+    for node in nodes:
+        at = _ts(node[field])
+        if since and at <= _ts(since):
+            continue
+        if present and at > _ts(present):
+            continue
+        kept.append(node)
+    return kept
+
+
+def _connection(nodes: list, page_info: dict) -> dict:
+    return {"nodes": nodes, "pageInfo": page_info}
+
+
+def poll_answer(operation: str, variables: dict) -> str | None:
+    """The answer to a poll operation, or None for any other operation."""
+    if operation not in ("CommentsSince", "IssuesUpdatedSince", "ProjectIssueStates", "WatchedIssues"):
+        return None
+    after = variables.get("after")
+    if operation == "CommentsSince":
+        conn = json.loads(fixture("comments-since.json"))["data"]["comments"]
+        nodes = [] if after else _visible(conn["nodes"], "createdAt", variables.get("since"))
+        return json.dumps({"data": {"comments": _connection(nodes, TERMINAL_PAGE if after else conn["pageInfo"])}})
+    issues = json.loads(fixture("issues-updated-since.json"))["data"]["issues"]
+    if operation == "IssuesUpdatedSince":
+        nodes = [] if after else _visible(issues["nodes"], "updatedAt", variables.get("since"))
+        return json.dumps({"data": {"issues": _connection(nodes, TERMINAL_PAGE if after else issues["pageInfo"])}})
+    if operation == "ProjectIssueStates":
+        nodes = [] if after else [
+            n for n in _visible(issues["nodes"], "updatedAt", None)
+            if n["state"]["type"] not in ("completed", "canceled")
+        ]
+        return json.dumps({"data": {"issues": _connection(nodes, TERMINAL_PAGE)}})
+    # WatchedIssues: issues by identifier, each with its comments since $since
+    wanted = set(variables.get("ids") or [])
+    comments = json.loads(fixture("comments-since.json"))["data"]["comments"]["nodes"]
+    nodes = []
+    # issues are never hidden here: a watched issue exists before its last
+    # update, Linear would return it (with an older state the snapshot lacks)
+    for node in issues["nodes"]:
+        if node["identifier"] not in wanted:
+            continue
+        mine = [c for c in comments if c["issue"]["identifier"] == node["identifier"]]
+        mine = _visible(mine, "createdAt", variables.get("since"))
+        for c in mine:
+            del c["issue"]
+        node["comments"] = _connection(mine, TERMINAL_PAGE)
+        node["project"] = {"slugId": FAKE_PROJECT}
+        nodes.append(node)
+    return json.dumps({"data": {"issues": _connection(nodes, TERMINAL_PAGE)}})
 
 
 def operation_name(document: str) -> str:
@@ -134,6 +215,13 @@ def main() -> None:
     if mode == "hang":
         time.sleep(30)
         mode = "ok"
+    failing = {op for op in os.environ.get("FAKE_LINEAR_FAIL_OPS", "").split(",") if op}
+    if mode == "ok" and operation_name(document) in failing:
+        mode = "unreachable"
+    if mode == "ok" and not os.environ.get("FAKE_LINEAR_FIXTURE"):
+        answer = poll_answer(operation_name(document), variables or {})
+        if answer is not None:
+            out(answer, 0)
     if mode == "ok":
         name = os.environ.get("FAKE_LINEAR_FIXTURE") or ROUTES.get(operation_name(document))
         if not name:
