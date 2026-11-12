@@ -1527,9 +1527,11 @@ def register_doctor(sub, common) -> None:
 import signal  # noqa: E402
 from xml.sax.saxutils import escape as xml_escape  # noqa: E402
 
-LW_SCRIPT = os.path.abspath(__file__)
+# Every path is derived from the running script, symlinks resolved (like prw's
+# PRW_SELF): the skill may move (LW-10), so no install location is written here.
+LW_SCRIPT = os.path.realpath(__file__)
 LAUNCHD_LABEL = "com.linear-watch.daemon"
-DAEMON_TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / f"{LAUNCHD_LABEL}.plist"
+DAEMON_TEMPLATE = Path(LW_SCRIPT).parent.parent / "templates" / f"{LAUNCHD_LABEL}.plist"
 DAEMON_LOG = "daemon.log"
 DAEMON_LOG_MAX = 1_000_000  # bytes
 DAEMON_LOG_LINE_MAX = 500
@@ -1721,8 +1723,8 @@ def cmd_daemon_start(conn: sqlite3.Connection, args) -> int:
         raise LwError(
             f"refusing: lw runs from a git checkout or worktree ({script}); the launchd"
             " plist would keep pointing at it after it moves or disappears.\n"
-            "  Install the skill first (bash install.sh, from the repository) and run the"
-            " installed copy: ~/.agents/skills/linear-watch/scripts/lw daemon start"
+            "  Install the skill first (bash install.sh, from the repository) and run"
+            " `lw daemon start` from the installed copy."
         )
     launchctl = _launchctl()
     binary = linear_bin()

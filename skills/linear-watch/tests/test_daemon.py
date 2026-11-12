@@ -440,9 +440,34 @@ class CheckoutRefusalTest(DaemonCase):
         code, _, err = self.lw("daemon", "start")
         self.assertEqual(code, 0, err)
 
+    def test_the_refusal_names_no_install_location(self):
+        repo = self.tmp / "repo"
+        (repo / ".git").mkdir(parents=True)
+        self.point_script_at(repo / "scripts" / "lw")
+        _, _, err = self.lw("daemon", "start")
+        self.assertNotIn(".agents", err)
+        self.assertIn(str(repo / "scripts" / "lw"), err)
+
     def test_the_installed_copy_is_accepted(self):
         self.assertFalse(lw.in_checkout(str(self.installed)))
         self.assertEqual(self.lw("daemon", "start")[0], 0)
+
+
+class ScriptPathTest(unittest.TestCase):
+    def test_paths_follow_the_script_through_a_symlink(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            link = Path(tmp) / "bin" / "lw"
+            link.parent.mkdir()
+            link.symlink_to(LW_PATH)
+            loader = SourceFileLoader("lw_link", str(link))
+            module = module_from_spec(spec_from_loader("lw_link", loader))
+            loader.exec_module(module)
+        self.assertEqual(module.LW_SCRIPT, os.path.realpath(LW_PATH))
+        self.assertEqual(module.DAEMON_TEMPLATE,
+                         Path(os.path.realpath(LW_PATH)).parent.parent / "templates"
+                         / "com.linear-watch.daemon.plist")
+        self.assertNotIn("linear-watch/scripts", Path(LW_PATH).read_text().split(
+            "# ── daemon (LW-7)", 1)[1].split("# ── end of daemon (LW-7)", 1)[0])
 
 
 class TemplateTest(unittest.TestCase):

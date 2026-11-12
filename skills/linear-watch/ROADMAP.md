@@ -273,9 +273,10 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   on the machine, `lw doctor` is all `ok` after `lw daemon start`.
 - **Delivered with caveats:**
   - The machine check is still the human's: `lw daemon start` was never run
-    here (it must run from the installed copy,
-    `~/.agents/skills/linear-watch/scripts/lw`), so "`lw doctor` all `ok`" is
-    not verified yet. Under launchd, stderr goes to `daemon.out`; the per-cycle
+    here (it must run from the installed copy), so "`lw doctor` all `ok`" is
+    not verified yet. Every path (plist, checkout check, re-exec, template) is
+    derived from the running script with symlinks resolved, so the LW-10 move
+    changes nothing here. Under launchd, stderr goes to `daemon.out`; the per-cycle
     log is `daemon.log` in the state dir.
   - Re-exec fires when the script's mtime **differs** from the one recorded in
     `daemon.started` at start (not only when newer), so a `cp -p` of an older
