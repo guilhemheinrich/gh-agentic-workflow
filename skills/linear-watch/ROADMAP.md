@@ -86,7 +86,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
 
 ## Items
 
-### [ ] LW-0 — Measure the Linear CLI
+### [x] LW-0 — Measure the Linear CLI
 
 - **Goal:** know exactly how `linear api` behaves before `lw` relies on it.
 - **Do:** install `schpet/tap/linear`; measure, and write down in
