@@ -201,7 +201,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   issue from the Linear UI, run `lw daemon once`: the session wakes with one
   line.
 
-### [ ] LW-5 — Expiry and doctor
+### [x] LW-5 — Expiry and doctor
 
 - **Goal:** the watcher never keeps watching finished things.
 - **Do:** at the start of each cycle, close subscriptions with a logged reason:
@@ -217,6 +217,8 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
 - **Depends on:** LW-3.
 - **Done when:** a test per close reason, using a fake desktop sessions folder;
   doctor prints `FAIL` on a stale heartbeat and on a credential error.
+- **Delivered unwired:** built against hand-written rows; calling
+  `expire_subscriptions(conn, now, desktop_dir)` at the start of each cycle moves to LW-7.
 
 ### [x] LW-6 — Own-writes hook
 

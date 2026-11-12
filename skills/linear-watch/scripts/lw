@@ -794,6 +794,339 @@ def add_own_write_parser(sub, common) -> None:
     p.set_defaults(func=cmd_own_write)
 
 
+# ── expiry and doctor (LW-5) ──────────────────────────────────────────────────
+#   lw expire [--desktop-dir DIR]   close what must not be watched any more
+#   lw doctor [--quiet]             ok / warn / FAIL per check; exit 1 on a FAIL
+#
+# expire_subscriptions(conn, now, desktop_dir) closes open subscriptions, one
+# reason each, first match wins:
+#   archived      a desktop session file has isArchived: true and its
+#                 cliSessionId or priorCliSessionIds carry the session, and no
+#                 non-archived file carries it (a resumed session lives on)
+#   session-gone  no desktop session file carries the session; skipped when
+#                 the folder is missing (CLI-only machine), holds no session
+#                 file, or holds one that cannot be read (maybe half-written)
+#   issue-done    issue_states.state_type of the issue is completed/canceled
+#   project-done  project_states.state_type of the project is completed/canceled
+#   ttl           renewed_at older than LW_TTL_DAYS (default 7)
+# The two desktop reasons apply only to harness claude-code: other harnesses
+# have no desktop file. It then purges delivered events older than 7 days;
+# undelivered lines stay, so the last transition of a finished issue is still
+# delivered after its subscription closed. LW-7 calls it at the start of each
+# cycle; until then `lw expire` runs it by hand.
+#
+# Desktop files (default DESKTOP_SESSIONS_DEFAULT, else $LW_DESKTOP_DIR) are
+# globbed as */*/local_*.json and read for three keys only: cliSessionId,
+# priorCliSessionIds, isArchived. Nothing else of them is kept or printed. The
+# folder is scanned before the write lock is taken: it holds thousands of files
+# and a long lock would starve `lw wait`.
+#
+# project_states(slug_id, state_type, updated_at) holds the last seen
+# status.type of a watched project; the poll fills it with
+# record_project_state(). It is created here with IF NOT EXISTS rather than as
+# a MIGRATIONS entry so that LW-3, which edits this file in parallel, keeps the
+# migration list to itself; fold it into a migration when both have landed.
+#
+# The heartbeat is <state_dir>/heartbeat; its mtime is the beat (the daemon
+# touches it after each cycle, LW-7). doctor fails when it is absent (daemon not
+# started) or older than 3 x LW_POLL_SECONDS (default 300). doctor never calls
+# Linear: the credential and transport checks read transport.json (LW-2).
+import time  # noqa: E402  (also imported by LW-4; kept so this section stands alone)
+
+DESKTOP_SESSIONS_DEFAULT = Path("Library") / "Application Support" / "Claude" / "claude-code-sessions"
+DESKTOP_GLOB = "*/*/local_*.json"
+DESKTOP_HARNESSES = ("claude-code",)
+DONE_STATE_TYPES = ("completed", "canceled")
+TTL_DAYS_DEFAULT = 7.0
+EVENT_RETENTION = timedelta(days=7)
+HEARTBEAT_FILE = "heartbeat"
+POLL_SECONDS_DEFAULT = 300.0
+HEARTBEAT_INTERVALS = 3
+
+
+def default_desktop_dir() -> Path:
+    env = os.environ.get("LW_DESKTOP_DIR")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / DESKTOP_SESSIONS_DEFAULT
+
+
+def _positive_env(name: str, default: float) -> float:
+    raw = os.environ.get(name, "")
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.0
+    if not value > 0:
+        raise LwError(f"{name} must be a positive number, got {raw!r}")
+    return value
+
+
+def ttl_days() -> float:
+    return _positive_env("LW_TTL_DAYS", TTL_DAYS_DEFAULT)
+
+
+def poll_seconds() -> float:
+    return _positive_env("LW_POLL_SECONDS", POLL_SECONDS_DEFAULT)
+
+
+def ensure_expiry_schema(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS project_states ("
+        " slug_id TEXT PRIMARY KEY, state_type TEXT NOT NULL, updated_at TEXT NOT NULL)"
+    )
+
+
+def record_project_state(conn: sqlite3.Connection, slug_id: str, state_type: str,
+                         updated_at: str | None = None) -> None:
+    """Upsert a project's status.type (backlog, planned, started, paused, completed, canceled)."""
+    ensure_expiry_schema(conn)
+    conn.execute(
+        "INSERT INTO project_states (slug_id, state_type, updated_at) VALUES (?, ?, ?)"
+        " ON CONFLICT (slug_id) DO UPDATE SET"
+        " state_type = excluded.state_type, updated_at = excluded.updated_at",
+        (slug_id, state_type, updated_at or fmt(now())),
+    )
+
+
+def scan_desktop_sessions(desktop_dir) -> dict | None:
+    """{"live", "archived", "complete"} from the desktop session files; None without a folder.
+
+    live: ids carried by a non-archived file; archived: ids carried only by
+    archived files; complete: every file was read and there was at least one.
+    """
+    if not desktop_dir or not Path(desktop_dir).is_dir():
+        return None
+    live: set[str] = set()
+    archived: set[str] = set()
+    files = unreadable = 0
+    for path in Path(desktop_dir).glob(DESKTOP_GLOB):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            unreadable += 1
+            continue
+        if not isinstance(data, dict):
+            unreadable += 1
+            continue
+        cli, prior, is_archived = (
+            data.get("cliSessionId"), data.get("priorCliSessionIds"), data.get("isArchived")
+        )
+        del data  # nothing else of the file is kept
+        files += 1
+        ids = [cli] if isinstance(cli, str) and cli else []
+        if isinstance(prior, list):
+            ids += [p for p in prior if isinstance(p, str) and p]
+        (archived if is_archived is True else live).update(ids)
+    return {"live": live, "archived": archived - live, "complete": files > 0 and not unreadable}
+
+
+def _close_reason(row: sqlite3.Row, scan: dict | None, stale_before: str) -> str | None:
+    if scan is not None and row["harness"] in DESKTOP_HARNESSES:
+        if row["session"] in scan["archived"]:
+            return "archived"
+        if scan["complete"] and row["session"] not in scan["live"]:
+            return "session-gone"
+    if row["kind"] == "issue" and row["issue_type"] in DONE_STATE_TYPES:
+        return "issue-done"
+    if row["kind"] == "project" and row["project_type"] in DONE_STATE_TYPES:
+        return "project-done"
+    if row["renewed_at"] < stale_before:
+        return "ttl"
+    return None
+
+
+def expire_subscriptions(conn: sqlite3.Connection, now: datetime, desktop_dir) -> dict:
+    """Close what must not be watched any more and purge old delivered events.
+
+    Returns {"closed": [{"session", "kind", "target", "reason"}], "purged": n}.
+    `now` is the cycle's clock (a datetime); the module-level now() is not used.
+    """
+    ensure_expiry_schema(conn)
+    stale_before = fmt(now - timedelta(days=ttl_days()))
+    purge_before = fmt(now - EVENT_RETENTION)
+    at = fmt(now)
+    scan = scan_desktop_sessions(desktop_dir)
+    closed: list[dict] = []
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        rows = conn.execute(
+            "SELECT s.id, s.session, s.harness, s.kind, s.target, s.renewed_at,"
+            " i.state_type AS issue_type, p.state_type AS project_type"
+            " FROM subscriptions s"
+            " LEFT JOIN issue_states i ON s.kind = 'issue' AND i.identifier = s.target"
+            " LEFT JOIN project_states p ON s.kind = 'project' AND p.slug_id = s.target"
+            " WHERE s.closed_at IS NULL ORDER BY s.session, s.kind, s.target, s.id"
+        ).fetchall()
+        for row in rows:
+            reason = _close_reason(row, scan, stale_before)
+            if reason is None:
+                continue
+            conn.execute(
+                "UPDATE subscriptions SET closed_at = ?, close_reason = ?"
+                " WHERE id = ? AND closed_at IS NULL",
+                (at, reason, row["id"]),
+            )
+            closed.append({"session": row["session"], "kind": row["kind"],
+                           "target": row["target"], "reason": reason})
+        purged = conn.execute(
+            "DELETE FROM events WHERE delivered_at IS NOT NULL AND delivered_at < ?",
+            (purge_before,),
+        ).rowcount
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return {"closed": closed, "purged": purged}
+
+
+def cmd_expire(conn: sqlite3.Connection, args) -> int:
+    result = expire_subscriptions(conn, now(), args.desktop_dir or default_desktop_dir())
+    for c in result["closed"]:
+        print(f"closed {c['session']} {c['kind']} {c['target']}: {c['reason']}")
+    if result["purged"]:
+        print(f"purged {result['purged']} delivered event(s) older than {EVENT_RETENTION.days} days")
+    if not result["closed"] and not result["purged"]:
+        print("nothing expired")
+    return 0
+
+
+def register_expiry(sub, common) -> None:
+    p = sub.add_parser(
+        "expire", parents=[common], help="close finished or abandoned subscriptions now",
+        description="Close subscriptions of archived or gone sessions, of finished"
+        " issues and projects, and those not renewed for LW_TTL_DAYS; purge delivered"
+        " events older than 7 days.",
+    )
+    p.add_argument(
+        "--desktop-dir", type=Path, metavar="DIR",
+        help="Claude desktop sessions folder (default: $LW_DESKTOP_DIR or"
+        f" ~/{DESKTOP_SESSIONS_DEFAULT})",
+    )
+    p.set_defaults(func=cmd_expire)
+
+
+def heartbeat_age(state_dir: Path) -> float | None:
+    """Seconds since the daemon's last beat; None when it never beat."""
+    try:
+        return max(0.0, time.time() - (Path(state_dir) / HEARTBEAT_FILE).stat().st_mtime)
+    except OSError:
+        return None
+
+
+def _age(seconds: float) -> str:
+    s = int(max(0, seconds))
+    d, h, m = s // 86400, s % 86400 // 3600, s % 3600 // 60
+    if d:
+        return f"{d}d {h}h"
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m"
+    return f"{s}s"
+
+
+def _parse_ts(value: str) -> datetime:
+    return datetime.strptime(value, TS_FORMAT).replace(tzinfo=timezone.utc)
+
+
+def doctor_checks(conn: sqlite3.Connection, state_dir: Path) -> list[tuple[str, str]]:
+    checks: list[tuple[str, str]] = []
+
+    binary = linear_bin()
+    if binary and os.path.isfile(binary) and os.access(binary, os.X_OK):
+        checks.append(("ok", f"linear binary {binary}"))
+    elif os.environ.get("LW_LINEAR_BIN"):
+        checks.append(("FAIL", f"linear binary not found at {binary} (LW_LINEAR_BIN)"))
+    else:
+        checks.append(("FAIL", "linear binary not found: brew install schpet/tap/linear,"
+                               f" or set LW_LINEAR_BIN (default {LINEAR_DEFAULT_BIN})"))
+
+    status = read_transport_status(state_dir)
+    last_ok = status.get("last_ok") if isinstance(status.get("last_ok"), str) else None
+    err = status.get("last_error") if isinstance(status.get("last_error"), dict) else None
+    err_at = str(err.get("at", "")) if err else ""
+    current = bool(err) and (last_ok is None or err_at >= last_ok)
+    code = err.get("code") if err else None
+
+    if not load_linear_key():
+        checks.append(("FAIL", "credential missing: no LINEAR_API_KEY in the environment"
+                               " nor in ~/.config/linear/env"))
+    elif current and code == T_CREDENTIAL:
+        checks.append(("FAIL", f"credential rejected by Linear at {err_at}: fix LINEAR_API_KEY"
+                               " in ~/.config/linear/env"))
+    else:
+        source = "environment" if os.environ.get("LINEAR_API_KEY") else "~/.config/linear/env"
+        checks.append(("ok", f"credential present ({source})"))
+
+    try:
+        limit = HEARTBEAT_INTERVALS * poll_seconds()
+    except LwError as exc:
+        checks.append(("FAIL", f"heartbeat limit unknown: {exc}"))
+    else:
+        age = heartbeat_age(state_dir)
+        if age is None:
+            checks.append(("FAIL", "heartbeat absent: daemon not started"))
+        elif age > limit:
+            checks.append(("FAIL", f"heartbeat stale: {_age(age)} old"
+                                   f" (limit {_age(limit)} = {HEARTBEAT_INTERVALS} x LW_POLL_SECONDS)"))
+        else:
+            checks.append(("ok", f"heartbeat {_age(age)} old"))
+
+    if current:
+        level = "warn" if code == T_RATE_LIMITED else "FAIL"
+        checks.append((level, f"last Linear call failed at {err_at}: {err.get('query')}:"
+                              f" {err.get('message')} (code {code})"))
+    elif err:
+        checks.append(("ok", f"last Linear call ok at {last_ok}"
+                             f" (recovered from code {code} at {err_at})"))
+    elif last_ok:
+        checks.append(("ok", f"last Linear call ok at {last_ok}"))
+    else:
+        checks.append(("ok", "no Linear call recorded yet"))
+
+    t = now()
+    sessions: dict[str, list[sqlite3.Row]] = {}
+    for row in conn.execute(
+        "SELECT session, kind, target, created_at, renewed_at FROM subscriptions"
+        " WHERE closed_at IS NULL ORDER BY session, kind, target"
+    ):
+        sessions.setdefault(row["session"], []).append(row)
+    for session, rows in sessions.items():
+        oldest = min(_parse_ts(r["created_at"]) for r in rows)
+        renewed = max(_parse_ts(r["renewed_at"]) for r in rows)
+        targets = ", ".join(f"{r['kind']} {r['target']}" for r in rows)
+        checks.append(("ok", f"session {session}: {len(rows)} open ({targets}),"
+                             f" oldest {_age((t - oldest).total_seconds())},"
+                             f" renewed {_age((t - renewed).total_seconds())} ago"))
+    if not sessions:
+        checks.append(("ok", "no open subscription"))
+    return checks
+
+
+def cmd_doctor(conn: sqlite3.Connection, args) -> int:
+    state_dir = Path(conn.execute("PRAGMA database_list").fetchone()["file"]).parent
+    checks = doctor_checks(conn, state_dir)
+    if not args.quiet:
+        for level, text in checks:
+            print(f"{level} {text}")
+    return 1 if any(level == "FAIL" for level, _ in checks) else 0
+
+
+def register_doctor(sub, common) -> None:
+    p = sub.add_parser(
+        "doctor", parents=[common], help="check binary, credential, heartbeat, transport",
+        description="One ok/warn/FAIL line per check; exit 1 when any check fails."
+        " Never calls Linear.",
+    )
+    p.add_argument("--quiet", action="store_true", help="print nothing; the exit code says it")
+    p.set_defaults(func=cmd_doctor)
+
+
+# ── end of expiry and doctor (LW-5) ───────────────────────────────────────────
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -831,6 +1164,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_wait(sub, common)
     add_own_write_parser(sub, common)
+    register_expiry(sub, common)
+    register_doctor(sub, common)
     return parser
 
 
