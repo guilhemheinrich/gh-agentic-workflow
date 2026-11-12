@@ -181,6 +181,21 @@ is part of the fingerprint, so a pilot woken by a report is re-judged.
 The other three have no fact yet: the agent judges them from what it knows,
 such as a pipeline it is waiting on.
 
+#### A side session titled "To close" gets archived by its pilot
+
+A side session that ends on `to-close` ("🟢 📦 To close · 042-webhook") or
+`closed` ("✅ Closed · …") says its work is done. Its pilot should archive it
+rather than leave it in the sidebar. `hooks/session-title-close-kids.sh`
+(UserPromptSubmit) makes that deterministic. The app wakes the pilot with a
+`<side-sessions-event>` message when a side session ends a turn, which fires
+the hook. The hook runs `session-title.sh closable`, which reads the side
+sessions' app files (same `spawnedFrom` link as the counter), strips the age
+or working dot, and keeps the titles that open on 📦 or ✅. For each one not
+reported before, the hook asks the agent to call `archive_session`. A side
+session the pilot leaves open on purpose is reported once only (cache
+`closeAsked`); `closable --all` lists them all again. Disable only this hook
+with `SESSION_TITLE_CLOSE_KIDS=0`.
+
 ## Language: one setting for every label
 
 `SESSION_TITLE_LANG` sets the language of every fixed label, statuses and
@@ -494,7 +509,7 @@ On a device that has never run it, asking an agent to "install the
 session-title skill" means these steps, in order:
 
 1. From a clone of this repository, run `bash install.sh` (macOS, Linux) or
-   `.\install.ps1` (Windows). It copies the skill, the five hooks, and
+   `.\install.ps1` (Windows). It copies the skill, the six hooks, and
    registers them. Check `jq` is installed: every hook exits silently without it.
 2. Check the copy: `bash ~/.agents/skills/session-title/scripts/session-title.sh watcher-status`
    prints `{"state":"never"}` on a fresh device.
@@ -512,7 +527,7 @@ script in memory until its next wake relaunches `watch`.
 
 `install.sh` / `install.ps1` copy the skill to `~/.claude/skills/` (and to the
 other agent directories), copy `hooks/` to `~/.agents/hooks/` and `scripts/` to
-`~/.agents/scripts/`, then register the five hooks in `~/.claude/settings.json`
+`~/.agents/scripts/`, then register the six hooks in `~/.claude/settings.json`
 through `scripts/hooktools/merge-claude-hooks.cjs` (requires Node.js). The merge
 is idempotent and leaves every other setting and hook untouched; pass
 `--no-claude-hooks` (`-NoClaudeHooks` on PowerShell) to skip it. The manifest is
@@ -525,7 +540,7 @@ is idempotent and leaves every other setting and hook untouched; pass
     "Stop": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-sync.sh" }] }],
     "PreToolUse": [{ "matcher": "AskUserQuestion", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-ask.sh" }] }],
     "PostToolUse": [{ "matcher": "Agent|Task|Edit|Write|MultiEdit", "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-progress.sh" }] }],
-    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-working.sh" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-working.sh" }, { "type": "command", "command": "bash ~/.agents/hooks/session-title-close-kids.sh" }] }],
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "bash ~/.agents/hooks/session-title-watcher-check.sh" }] }]
   }
 }
@@ -542,6 +557,7 @@ session-title.sh facts  --session <id> --repo . --transcript <jsonl>   # what th
 session-title.sh set to-ship --session <id> --repo . --subject "Mes Mailles impersonation"
 session-title.sh gate --session <id>                                  # deny once before a question, then allow
 session-title.sh pilot --session <id> --name "Facturation réception"  # pin a pilot's subject; --name "" unpins
+session-title.sh closable --session <id> [--all]                       # side sessions titled to-close/closed, new since last call
 session-title.sh render to-merge --subject 042-webhook --pr 12
 session-title.sh list --mode free
 session-title.sh forget --session <id>                                 # drop the cache

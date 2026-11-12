@@ -29,6 +29,7 @@
 #   session-title.sh working --session ID           # prompt arrived: activity menu for the working title
 #   session-title.sh restore --session ID           # Stop, facts unchanged: previous title, fresh dot
 #   session-title.sh pilot --session ID --name TEXT # pin a pilot's subject (Linear project, roadmap); --name "" unpins
+#   session-title.sh closable --session ID [--all]  # side sessions titled to-close/closed, new since the last call (one JSON line each)
 #
 # Freshness: every title carries an age dot ("🟡 🔀 À merger #12 · 042-webhook").
 # `set` always renders 🟢 (the turn just ended); a scheduled task runs `sweep`
@@ -315,6 +316,30 @@ children() {
              and ((.title // "") | startswith($wi + " ") | not) and ((.title // "") != $wi))
       | {running: ((.title // "" | startswith($w)) and ($now - ((.lastActivityAt // 0) / 1000)) < $stale)}' 2>/dev/null \
     | jq -sc '{total: length, running: (map(select(.running)) | length)}'
+  return 0
+}
+
+# closable SESSION — one {sessionId,title} line per non-archived side session of
+# SESSION whose title, once its age or working dot is stripped, opens on the
+# to-close or closed icon: "🟢 📦 To close · 042-webhook". Such a child says it is
+# done, so the pilot that started it should archive it. Same exclusions as
+# children (detached lineages, the watcher).
+closable() {
+  local parent
+  parent="$(local_id "$1")"
+  [[ -n "$parent" && -d "$APP_DIR" ]] || return 0
+  find "$APP_DIR" -type f -name 'local_*.json' -mtime -6 -print0 2>/dev/null \
+    | xargs -0 grep -lF "\"spawnedFrom\":{\"sessionId\":\"$parent\"" 2>/dev/null \
+    | tr '\n' '\0' \
+    | xargs -0 jq -c --arg p "$parent" --arg wi "$(watcher_icon)" --slurpfile tpl "$TEMPLATES" '
+      ([$tpl[0].freshness.levels[].dot, $tpl[0].freshness.workingDot] | map(. + " ")) as $dots
+      | ([$tpl[0].statuses["to-close"].icon, $tpl[0].statuses.closed.icon] | map(. + " ")) as $done
+      | select(.spawnedFrom.sessionId == $p and (.isArchived // false) == false
+               and (.lineageDetached // false) == false
+               and (.title | type) == "string" and (.title | startswith($wi + " ") | not))
+      | (reduce $dots[] as $d (.title; ltrimstr($d))) as $base
+      | select(any($done[]; . as $i | $base | startswith($i)))
+      | {sessionId, title}' 2>/dev/null
   return 0
 }
 
@@ -644,7 +669,7 @@ snapshot() {
 # ── Commands ─────────────────────────────────────────────────────────────────
 cmd="${1:-}"; [[ $# -gt 0 ]] && shift
 repo="$(pwd)"; session=""; subject=""; pr=""; progress=""; status_arg=""; name=""; name_set=""
-transcript=""; lastfile=""; mode_arg=""; sessions_file=""; days=""; interval=60; once=0
+transcript=""; lastfile=""; mode_arg=""; sessions_file=""; days=""; interval=60; once=0; all=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo) repo="$2"; shift 2 ;;
@@ -660,6 +685,7 @@ while [[ $# -gt 0 ]]; do
     --days) days="$2"; shift 2 ;;
     --interval) interval="$2"; shift 2 ;;
     --once) once=1; shift ;;
+    --all) all=1; shift ;;
     -*) die "unknown option: $1" ;;
     *) status_arg="$1"; shift ;;
   esac
@@ -907,6 +933,22 @@ case "$cmd" in
     merge_cache "$session" '.pilot = (if $n == "" then null else $n end) | .asked = ""' --arg n "$name"
     meta_set_pilot "$session" "$name"
     printf '%s\n' "${name:-(unpinned)}"
+    ;;
+  closable)
+    # Side sessions of --session titled to-close or closed, new since the last
+    # call: each id is reported once, so a pilot that leaves one open is not
+    # nagged every turn. --all reports them all again.
+    [[ -n "$session" ]] || die "closable needs --session"
+    found="$(closable "$session")"
+    [[ -n "$found" ]] || exit 0
+    if [[ -z "${all:-}" ]]; then
+      seen="$(read_cache "$session" | jq -c '.closeAsked // []')"
+      found="$(printf '%s\n' "$found" | jq -c --argjson s "$seen" 'select(.sessionId as $i | $s | index($i) | not)')"
+      [[ -n "$found" ]] || exit 0
+      merge_cache "$session" '.closeAsked = ((.closeAsked // []) + $n | unique)' \
+        --argjson n "$(printf '%s\n' "$found" | jq -sc 'map(.sessionId)')"
+    fi
+    printf '%s\n' "$found"
     ;;
   scheduled)
     is_scheduled "$transcript"
