@@ -1492,6 +1492,317 @@ def register_doctor(sub, common) -> None:
 # ── end of expiry and doctor (LW-5) ───────────────────────────────────────────
 
 
+# ── daemon (LW-7) ─────────────────────────────────────────────────────────────
+#   lw daemon run [--cycles N]   the loop: every LW_POLL_SECONDS (300), expire then poll
+#   lw daemon start              install and load ~/Library/LaunchAgents/com.linear-watch.daemon.plist
+#   lw daemon stop               unload it and remove the plist
+#   lw daemon alive              exit 0 when the heartbeat is younger than 3 intervals
+#
+# One cycle: beat, then on a fresh connection expire_subscriptions() (LW-5)
+# followed by run_cycle() (LW-3), beat again, and write one line to
+# <state_dir>/daemon.log (counts and failed query names only: no comment text,
+# no secret). Any Exception in a cycle is logged as `cycle failed: …` and the
+# loop goes on; a bad LW_POLL_SECONDS refuses to start instead (exit 2).
+# The log rolls over to daemon.log.1 past DAEMON_LOG_MAX bytes.
+#
+# Re-exec (lesson from pr-watch §9: a long-running process never reloads its
+# code): at start the daemon writes <state_dir>/daemon.started holding the
+# mtime of the script it runs. After each sleep, when the script's mtime
+# differs from it (newer after an install, or older after a `cp -p` of an
+# older copy), it os.execv()s the same interpreter on the same script with the
+# same --state-dir; the new process rewrites the marker. --cycles is not
+# carried over (launchd never passes it).
+#
+# `start` refuses to run from a git checkout or a worktree (a .git directory or
+# file above the script, or a `worktrees` component in its path): the plist
+# would keep pointing at a checkout that moves or disappears. LW_ALLOW_CHECKOUT=1
+# overrides it (tests). The plist gets absolute paths only: the interpreter
+# running `start`, the script, the state dir, and the linear binary as resolved
+# now (LW_LINEAR_BIN: launchd's PATH lacks /opt/homebrew/bin). No secret goes
+# into it: the transport reads ~/.config/linear/env itself.
+#
+# Exit codes: run 0 after --cycles, 2 bad configuration · start 0 loaded,
+# 1 launchctl failed, 2 refused (checkout, no launchctl, no linear binary) ·
+# stop 0 · alive 0 alive, 1 not alive (one line on stdout either way).
+import signal  # noqa: E402
+from xml.sax.saxutils import escape as xml_escape  # noqa: E402
+
+# Every path is derived from the running script, symlinks resolved (like prw's
+# PRW_SELF): the skill may move (LW-10), so no install location is written here.
+LW_SCRIPT = os.path.realpath(__file__)
+LAUNCHD_LABEL = "com.linear-watch.daemon"
+DAEMON_TEMPLATE = Path(LW_SCRIPT).parent.parent / "templates" / f"{LAUNCHD_LABEL}.plist"
+DAEMON_LOG = "daemon.log"
+DAEMON_LOG_MAX = 1_000_000  # bytes
+DAEMON_LOG_LINE_MAX = 500
+DAEMON_STARTED = "daemon.started"
+LAUNCHCTL_RETRY_SECONDS = 1.0  # bootout is asynchronous: one retry of bootstrap
+
+
+def _daemon_state_dir(args) -> Path:
+    return Path(getattr(args, "state_dir", None) or default_state_dir()).expanduser().absolute()
+
+
+def _write_private(path: Path, text: str) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def daemon_log(state_dir: Path, text: str) -> None:
+    """Append one timestamped line to daemon.log; never fails the daemon."""
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path = state_dir / DAEMON_LOG
+        try:
+            if path.stat().st_size > DAEMON_LOG_MAX:
+                os.replace(path, state_dir / f"{DAEMON_LOG}.1")
+        except OSError:
+            pass
+        line = " ".join(f"{fmt(now())} {text}".split())[:DAEMON_LOG_LINE_MAX]
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except OSError:
+        pass
+
+
+def daemon_beat(state_dir: Path) -> None:
+    """Rewrite the heartbeat file: its mtime is what doctor and alive read."""
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _write_private(state_dir / HEARTBEAT_FILE, f"{int(time.time())}\n")
+    except OSError:
+        pass
+
+
+def _cycle_summary(expired: dict, result: CycleResult) -> str:
+    parts = []
+    if expired["closed"]:
+        reasons: dict[str, int] = {}
+        for c in expired["closed"]:
+            reasons[c["reason"]] = reasons.get(c["reason"], 0) + 1
+        detail = ", ".join(f"{r} {n}" for r, n in sorted(reasons.items()))
+        parts.append(f"expired {len(expired['closed'])} ({detail})")
+    if expired["purged"]:
+        parts.append(f"purged {expired['purged']} event(s)")
+    if not result.watched:
+        parts.append("nothing watched")
+    else:
+        parts.append(f"wrote {result.lines} line(s) for {len(result.sessions)} session(s)"
+                     f" over {result.watched} target(s)")
+    if result.errors:
+        seen = list(dict.fromkeys(f"{e.query}: {e.message} (code {e.code})" for e in result.errors))
+        parts.append(f"{len(result.errors)} failed query(ies): " + "; ".join(seen))
+    return "cycle " + ", ".join(parts)
+
+
+def daemon_cycle(state_dir: Path, desktop_dir) -> str:
+    """Expire then poll once; returns the log text. Never raises an Exception."""
+    daemon_beat(state_dir)
+    try:
+        conn = connect(state_dir)
+        try:
+            expired = expire_subscriptions(conn, now(), desktop_dir)
+            result = run_cycle(conn, state_dir)
+        finally:
+            conn.close()
+    except Exception as exc:  # noqa: BLE001 — a failing cycle never kills the loop
+        text = f"cycle failed: {type(exc).__name__}: {exc}"
+    else:
+        text = _cycle_summary(expired, result)
+    daemon_beat(state_dir)
+    return text
+
+
+def _script_mtime() -> int | None:
+    try:
+        return os.stat(LW_SCRIPT).st_mtime_ns
+    except OSError:
+        return None
+
+
+def write_start_marker(state_dir: Path) -> None:
+    _write_private(state_dir / DAEMON_STARTED, f"{_script_mtime() or 0}\n")
+
+
+def script_changed(state_dir: Path) -> bool:
+    """The script on disk is not the one this process loaded."""
+    current = _script_mtime()
+    if current is None:
+        return False  # being replaced right now: look again next cycle
+    try:
+        recorded = int((state_dir / DAEMON_STARTED).read_text().strip())
+    except (OSError, ValueError):
+        return False
+    return current != recorded
+
+
+def daemon_run(state_dir: Path, cycles: int | None = None, sleep=time.sleep,
+               desktop_dir=None) -> int:
+    interval = poll_seconds()  # LwError on a bad value: refuse to start
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    write_start_marker(state_dir)
+    desktop_dir = desktop_dir or default_desktop_dir()
+    daemon_log(state_dir, f"daemon started (pid {os.getpid()}, every {interval:g} s, {LW_SCRIPT})")
+    done = 0
+    while True:
+        daemon_log(state_dir, daemon_cycle(state_dir, desktop_dir))
+        done += 1
+        if cycles is not None and done >= cycles:
+            return 0
+        sleep(interval)
+        if script_changed(state_dir):
+            daemon_log(state_dir, f"script changed on disk ({LW_SCRIPT}): re-exec (pid {os.getpid()})")
+            argv = [sys.executable, LW_SCRIPT, "daemon", "run", "--state-dir", str(state_dir)]
+            os.execv(sys.executable, argv)
+
+
+def _on_term(signum, _frame):
+    raise SystemExit(0)
+
+
+def cmd_daemon_run(conn: sqlite3.Connection, args) -> int:
+    if args.cycles is not None and args.cycles < 1:
+        raise LwError(f"--cycles must be 1 or more, got {args.cycles}")
+    state_dir = _daemon_state_dir(args)
+    conn.close()  # each cycle opens its own connection
+    previous = signal.signal(signal.SIGTERM, _on_term)  # launchd stops with TERM
+    try:
+        return daemon_run(state_dir, cycles=args.cycles)
+    except SystemExit:
+        daemon_log(state_dir, f"daemon stopped by signal (pid {os.getpid()})")
+        raise
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def cmd_daemon_alive(conn: sqlite3.Connection, args) -> int:
+    limit = HEARTBEAT_INTERVALS * poll_seconds()
+    age = heartbeat_age(_daemon_state_dir(args))
+    if age is None:
+        print("not alive: no heartbeat, the daemon never ran")
+        return 1
+    if age > limit:
+        print(f"not alive: heartbeat {_age(age)} old (limit {_age(limit)})")
+        return 1
+    print(f"alive: heartbeat {_age(age)} old")
+    return 0
+
+
+def in_checkout(script: str) -> bool:
+    """The script lives in a git checkout or a worktree, not in an installed copy."""
+    path = Path(script).absolute()
+    if "worktrees" in path.parts:
+        return True
+    return any((parent / ".git").exists() for parent in path.parents)
+
+
+def plist_path() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+
+
+def render_plist(values: dict[str, str]) -> str:
+    text = DAEMON_TEMPLATE.read_text(encoding="utf-8")
+    for key, value in values.items():
+        text = text.replace(f"@{key}@", xml_escape(value))
+    return text
+
+
+def _launchctl() -> str:
+    binary = shutil.which("launchctl")
+    if not binary:
+        raise LwError("launchd not available (no launchctl on PATH):"
+                      " run `nohup lw daemon run >/dev/null 2>&1 &` instead")
+    return binary
+
+
+def cmd_daemon_start(conn: sqlite3.Connection, args) -> int:
+    script = LW_SCRIPT
+    if os.environ.get("LW_ALLOW_CHECKOUT") != "1" and in_checkout(script):
+        raise LwError(
+            f"refusing: lw runs from a git checkout or worktree ({script}); the launchd"
+            " plist would keep pointing at it after it moves or disappears.\n"
+            "  Install the skill first (bash install.sh, from the repository) and run"
+            " `lw daemon start` from the installed copy."
+        )
+    launchctl = _launchctl()
+    binary = linear_bin()
+    if not binary or not os.path.isfile(binary) or not os.access(binary, os.X_OK):
+        raise LwError(f"linear binary not found ({binary or 'nothing on PATH'}):"
+                      " brew install schpet/tap/linear, or set LW_LINEAR_BIN")
+    if not sys.executable:
+        raise LwError("cannot tell which python runs lw (sys.executable is empty)")
+    state_dir = _daemon_state_dir(args)
+    plist = plist_path()
+    text = render_plist({
+        "PYTHON": sys.executable,
+        "LW": script,
+        "STATE": str(state_dir),
+        "HOME": str(Path.home()),
+        "LINEAR_BIN": os.path.abspath(binary),  # the PATH entry, never its realpath
+    })
+    plist.parent.mkdir(parents=True, exist_ok=True)
+    tmp = plist.with_name(f".{plist.name}.{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.chmod(0o644)
+    os.replace(tmp, plist)
+
+    domain = f"gui/{os.getuid()}"
+    subprocess.run([launchctl, "bootout", f"{domain}/{LAUNCHD_LABEL}"], capture_output=True)
+    for attempt in range(2):
+        proc = subprocess.run([launchctl, "bootstrap", domain, str(plist)],
+                              capture_output=True, text=True)
+        if proc.returncode == 0:
+            print(f"daemon started ({plist})")
+            return 0
+        if attempt == 0:
+            time.sleep(LAUNCHCTL_RETRY_SECONDS)
+    detail = (proc.stderr or proc.stdout).strip().splitlines()
+    print(f"lw: launchctl bootstrap failed (exit {proc.returncode})"
+          + (f": {detail[0]}" if detail else ""), file=sys.stderr)
+    return 1
+
+
+def cmd_daemon_stop(conn: sqlite3.Connection, args) -> int:
+    launchctl = _launchctl()
+    proc = subprocess.run([launchctl, "bootout", f"gui/{os.getuid()}/{LAUNCHD_LABEL}"],
+                          capture_output=True, text=True)
+    try:
+        plist_path().unlink()
+    except FileNotFoundError:
+        pass
+    print("daemon stopped" if proc.returncode == 0 else "daemon was not loaded")
+    return 0
+
+
+def register_daemon(actions, common) -> None:
+    """Add run/start/stop/alive to the `daemon` actions register_poll() returned."""
+    p = actions.add_parser(
+        "run", parents=[common], help="poll every LW_POLL_SECONDS (what launchd runs)",
+        description="Loop: expire subscriptions, poll Linear, beat the heartbeat, log one"
+        " line to daemon.log; re-exec when the script changes on disk.",
+    )
+    p.add_argument("--cycles", type=int, metavar="N",
+                   help="stop after N cycles (tests, a manual check)")
+    p.set_defaults(func=cmd_daemon_run)
+    p = actions.add_parser(
+        "start", parents=[common], help=f"install and load the launchd agent {LAUNCHD_LABEL}",
+        description="Refused from a git checkout or worktree (LW_ALLOW_CHECKOUT=1 overrides)."
+        " Exit 1 when launchctl fails, 2 when refused.",
+    )
+    p.set_defaults(func=cmd_daemon_start)
+    p = actions.add_parser("stop", parents=[common], help="unload the launchd agent, remove its plist")
+    p.set_defaults(func=cmd_daemon_stop)
+    p = actions.add_parser(
+        "alive", parents=[common], help="exit 0 when the heartbeat is younger than 3 intervals",
+    )
+    p.set_defaults(func=cmd_daemon_alive)
+
+
+# ── end of daemon (LW-7) ──────────────────────────────────────────────────────
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -1531,7 +1842,8 @@ def build_parser() -> argparse.ArgumentParser:
     add_own_write_parser(sub, common)
     register_expiry(sub, common)
     register_doctor(sub, common)
-    daemon_actions = register_poll(sub, common)  # noqa: F841 (LW-7 adds run/start/stop)
+    daemon_actions = register_poll(sub, common)
+    register_daemon(daemon_actions, common)
     return parser
 
 
