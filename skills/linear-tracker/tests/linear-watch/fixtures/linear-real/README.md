@@ -4,7 +4,7 @@ Captured on **2026-11-12** (≈ 16:50 Europe/Paris) with `linear` 3.1.0
 (`schpet/linear-cli`, `brew install schpet/tap/linear`), read-only GraphQL,
 workspace `septeo-proptech`, project slugId `5842ed0c2bcd`
 (`broker-pa-run-and-evolutions-courant`). How each call behaves is documented
-in [`references/linear-cli.md`](../../../references/linear-cli.md).
+in [`references/linear-watch-cli.md`](../../../../references/linear-watch-cli.md).
 
 ## What was rewritten
 

@@ -2,7 +2,8 @@
 name: linear-tracker
 description: >-
   Use Linear as the tracker a repository publishes findings to, through the
-  Linear MCP. Covers how a repository knows its Linear team (`team` in the
+  Linear MCP, and wake agent sessions on Linear changes with `lw`, its
+  watcher. Covers how a repository knows its Linear team (`team` in the
   lifecycle `phases.json`) and why the project is never a repository property
   (it is given per call, or recorded per spec), the mapping from a grievance record to a Linear
   issue and the two mappings that silently corrupt data if taken literally, the
@@ -27,13 +28,22 @@ description: >-
   Feature, Improvement, Proof, Technical task), the order of questions that
   picks one, and a workspace template body for each. Use it too when choosing
   which ticket type to open, telling a Question from a Blocker, proving a
-  merged lot on an environment, or drafting Linear templates.
+  merged lot on an environment, or drafting Linear templates. It also ships
+  `lw`, the Linear watcher: a launchd daemon that polls Linear every 5 minutes
+  and wakes the agent sessions subscribed to a Linear project or issue with
+  each new comment or state transition (`lw subscribe`, then `lw wait` in the
+  background), subscriptions ending on their own when the session is archived
+  or the watched issue is finished. Use it when a session must be woken by
+  a Linear comment or state change, or when installing or checking the watcher
+  (`lw setup --claude`, `lw daemon start`, `lw doctor`).
   Triggers on "Linear", "phases.json", "publish a grievance", "tracker",
   "issue from a finding", "which project does this spec belong to",
   "follow a spec in Linear", "spec-kit lifecycle", "ticket type",
   "Linear template", "proof ticket", "dependency tree", "dependency graph",
   "draw Linear tickets", "what blocks this issue", "is every proof blocked",
-  "LINEAR_API_KEY".
+  "LINEAR_API_KEY", "linear watch", "lw subscribe", "lw wait",
+  "watch this ticket", "réveiller la session sur Linear",
+  "surveiller le projet Linear".
 license: Apache-2.0
 tags:
   - hooks
@@ -839,6 +849,24 @@ Three rules carry most of the weight:
   lot's milestone, reached when its last Proof is closed. Example (made up):
   milestone « Staging: invitations » holds the two dev issues of the lot and
   two Proofs, each blocked by both.
+
+## Linear watcher — waking a session when Linear changes
+
+A session that writes to Linear does not hear from it: a decision taken in a
+comment on a `Blocked` ticket reaches nobody unless the human relays it.
+`scripts/lw` is a daemon (launchd, every 5 minutes) that polls the projects and
+issues sessions subscribed to and wakes each one with lines such as
+`Linear · TT-2287 comment by Jane Doe (08:44) · <issue URL>`. A session runs
+`lw subscribe --session <id> --project <slug> --since 3d`, then
+`lw wait --session <id>` in the background; the wait's exit is the wake.
+Subscriptions end on their own (unsubscribe, session archived or silent for
+7 days, watched issue finished; finished projects and terminal-started
+sessions are known gaps, see the reference), and the agent's own Linear MCP
+writes never wake it. Install it from the installed copy
+(`~/.agents/skills/linear-tracker/scripts/lw`), never from a checkout.
+
+Install, every command, the subscription lifecycle, the procedure when woken
+by `lw wait`, and `lw doctor`: [references/linear-watch.md](references/linear-watch.md).
 
 ## Boundaries
 

@@ -4,7 +4,7 @@ The loop is driven with `--cycles N` and a tiny LW_POLL_SECONDS; every Linear
 call goes to the fake CLI in tests/bin/linear. `launchctl` is a stub written
 into a temp dir put first on PATH: it records its argv and never touches
 launchd. The re-exec is observed by patching os.execv.
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_daemon
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_daemon
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from pathlib import Path
 from unittest import mock
 
 TESTS = Path(__file__).resolve().parent
-LW_PATH = TESTS.parent / "scripts" / "lw"
+LW_PATH = TESTS.parents[1] / "scripts" / "lw"
 FAKE_LINEAR = TESTS / "bin" / "linear"
 
 
@@ -93,7 +93,7 @@ class DaemonCase(unittest.TestCase):
         lw.reset_linear_bin()
         self.addCleanup(lw.reset_linear_bin)
         # An installed copy: a path with no .git above it and no /worktrees/.
-        self.installed = self.tmp / "installed" / "skills" / "linear-watch" / "scripts" / "lw"
+        self.installed = self.tmp / "installed" / "skills" / "linear-tracker" / "scripts" / "lw"
         self.installed.parent.mkdir(parents=True)
         self.installed.write_text("# stand-in for the installed lw\n")
         patcher = mock.patch.object(lw, "LW_SCRIPT", str(self.installed))
@@ -418,14 +418,14 @@ class CheckoutRefusalTest(DaemonCase):
     def test_refuses_from_a_git_checkout(self):
         repo = self.tmp / "repo"
         (repo / ".git").mkdir(parents=True)
-        self.point_script_at(repo / "skills" / "linear-watch" / "scripts" / "lw")
+        self.point_script_at(repo / "skills" / "linear-tracker" / "scripts" / "lw")
         self.assert_refused()
 
     def test_refuses_from_a_linked_worktree(self):
         wt = self.tmp / "wt"
         wt.mkdir()
         (wt / ".git").write_text("gitdir: /somewhere/.git/worktrees/wt\n")
-        self.point_script_at(wt / "skills" / "linear-watch" / "scripts" / "lw")
+        self.point_script_at(wt / "skills" / "linear-tracker" / "scripts" / "lw")
         self.assert_refused()
 
     def test_refuses_from_a_worktrees_path(self):
@@ -435,7 +435,7 @@ class CheckoutRefusalTest(DaemonCase):
     def test_allow_checkout_overrides(self):
         repo = self.tmp / "repo"
         (repo / ".git").mkdir(parents=True)
-        self.point_script_at(repo / "skills" / "linear-watch" / "scripts" / "lw")
+        self.point_script_at(repo / "skills" / "linear-tracker" / "scripts" / "lw")
         os.environ["LW_ALLOW_CHECKOUT"] = "1"
         code, _, err = self.lw("daemon", "start")
         self.assertEqual(code, 0, err)
@@ -466,13 +466,15 @@ class ScriptPathTest(unittest.TestCase):
         self.assertEqual(module.DAEMON_TEMPLATE,
                          Path(os.path.realpath(LW_PATH)).parent.parent / "templates"
                          / "com.linear-watch.daemon.plist")
-        self.assertNotIn("linear-watch/scripts", Path(LW_PATH).read_text().split(
-            "# ── daemon (LW-7)", 1)[1].split("# ── end of daemon (LW-7)", 1)[0])
+        daemon_section = Path(LW_PATH).read_text().split(
+            "# ── daemon (LW-7)", 1)[1].split("# ── end of daemon (LW-7)", 1)[0]
+        for skill_name in ("linear-watch/scripts", "linear-tracker/scripts"):
+            self.assertNotIn(skill_name, daemon_section)
 
 
 class TemplateTest(unittest.TestCase):
     def test_the_template_is_a_plist_with_placeholders(self):
-        path = TESTS.parent / "templates" / "com.linear-watch.daemon.plist"
+        path = TESTS.parents[1] / "templates" / "com.linear-watch.daemon.plist"
         text = path.read_text()
         for placeholder in ("@PYTHON@", "@LW@", "@STATE@", "@HOME@", "@LINEAR_BIN@"):
             self.assertIn(placeholder, text)

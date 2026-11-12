@@ -2,7 +2,7 @@
 
 Built against hand-written rows and the fake desktop folder in
 tests/fixtures/desktop-sessions/ (the poll cycle, LW-3, is not needed).
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_expiry
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_expiry
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 TESTS = Path(__file__).resolve().parent
-LW_PATH = TESTS.parent / "scripts" / "lw"
+LW_PATH = TESTS.parents[1] / "scripts" / "lw"
 DESKTOP = TESTS / "fixtures" / "desktop-sessions"
 
 

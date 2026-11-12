@@ -1,6 +1,6 @@
 """LW-8 — Claude adapter: the SessionStart hook and `lw setup|uninstall --claude`.
 
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_claude_adapter
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_claude_adapter
 
 Every subprocess gets a temporary HOME, so ~/.claude/settings.json is always a
 temp file. `lw daemon alive|start` (LW-7) are stubbed by a wrapper that logs
@@ -20,7 +20,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parent.parent
+SKILL = Path(__file__).resolve().parents[2]
 LW_PATH = SKILL / "scripts" / "lw"
 ADAPTER = SKILL / "adapters" / "claude"
 HOOK = ADAPTER / "session-start-hook.sh"
@@ -136,7 +136,7 @@ class SessionStartHookTest(AdapterCase):
         self.assertIn(f"project {PROJECT}", context)
         self.assertIn("issue TT-2287", context)
         self.assertIn("untrusted", context)
-        self.assertIn(str(SKILL / "references" / "usage.md"), context)
+        self.assertIn(str(SKILL / "references" / "linear-watch.md"), context)
         self.assertNotIn("python3", context)  # the script is run by its path
         self.assertEqual(self.daemon_calls(), ["alive"])
 
