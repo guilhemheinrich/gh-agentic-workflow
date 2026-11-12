@@ -153,6 +153,9 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
 - **Depends on:** LW-0 (measured exit codes), LW-1.
 - **Done when:** every code has a test; a test asserts the key never appears
   in the argv the fake binary receives.
+- **Delivered with a caveat:** both rate-limit shapes (code 12) are
+  synthesized, never observed from Linear. LW-5's `doctor` reports the last
+  real error verbatim, which is where a wrong shape would first show.
 
 ### [ ] LW-3 — Poll cycle (`lw daemon once`)
 
