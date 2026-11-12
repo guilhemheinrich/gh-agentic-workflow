@@ -487,6 +487,169 @@ def cmd_list(conn: sqlite3.Connection, args) -> int:
     return 0
 
 
+# ── wait (LW-4) ───────────────────────────────────────────────────────────────
+# `lw wait --session ID [--timeout S]` is the session's doorbell, the twin of
+# `prw wait`: the session runs it in the background and its exit wakes it.
+#
+#   exit 0  lines printed (then a "still watching" line while subscribed)
+#   exit 2  --timeout elapsed, nothing on stdout or stderr (errors also exit 2,
+#           but always say why on stderr)
+#   exit 3  no open subscription and nothing left to deliver
+#   exit 4  another wait already runs for this session
+#
+# Self-contained so that the other items editing `lw` merge without conflict:
+# its imports live here and build_parser() only calls register_wait().
+import fcntl  # noqa: E402
+import hashlib  # noqa: E402
+import time  # noqa: E402
+
+WAIT_POLL_DEFAULT = 10.0  # seconds; LW_WAIT_POLL overrides it (tests use 0.05)
+WAIT_EXIT_LINES, WAIT_EXIT_TIMEOUT, WAIT_EXIT_UNWATCHED, WAIT_EXIT_BUSY = 0, 2, 3, 4
+SAFE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+
+
+def wait_poll_seconds() -> float:
+    raw = os.environ.get("LW_WAIT_POLL", "")
+    if not raw:
+        return WAIT_POLL_DEFAULT
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.0
+    if not value > 0:
+        raise LwError(f"LW_WAIT_POLL must be a positive number of seconds, got {raw!r}")
+    return value
+
+
+def lock_name(session: str) -> str:
+    """A file name for the session's lock: the id itself when it is safe,
+    else a sanitized form plus a hash so two odd ids never share a lock."""
+    if SAFE_NAME_RE.match(session):
+        return f"{session}.lock"
+    clean = re.sub(r"[^A-Za-z0-9._-]", "_", session).strip("._")[:64] or "session"
+    digest = hashlib.sha256(session.encode()).hexdigest()[:10]
+    return f"{clean}-{digest}.lock"
+
+
+def acquire_wait_lock(state_dir: Path, session: str) -> int | None:
+    """Take the session's wait lock; None when another live wait holds it.
+
+    flock belongs to the open file and the kernel drops it when the holder
+    dies, so a killed wait never leaves a stale lock behind. The file stays
+    on disk on purpose: removing it would let two waits lock two inodes.
+    """
+    path = state_dir / "waits" / lock_name(session)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(fd)
+        return None
+    os.ftruncate(fd, 0)
+    os.write(fd, f"{os.getpid()}\n".encode())
+    return fd
+
+
+def lock_holder(state_dir: Path, session: str) -> str:
+    try:
+        return (state_dir / "waits" / lock_name(session)).read_text().strip()
+    except OSError:
+        return ""
+
+
+def renew_subscriptions(conn: sqlite3.Connection, session: str, ts: str) -> int:
+    """Renew the session's open subscriptions; returns how many are open."""
+    return conn.execute(
+        "UPDATE subscriptions SET renewed_at = ? WHERE session = ? AND closed_at IS NULL",
+        (ts, session),
+    ).rowcount
+
+
+def wait_once(conn: sqlite3.Connection, session: str) -> int | None:
+    """One poll: renew, deliver pending lines, report. None = keep waiting.
+
+    Lines, their acknowledgement and the subscription count come from one
+    write transaction, so a cycle that writes a last line and closes the
+    subscription is seen whole: the line is delivered, and only the next wait
+    exits 3. A line is printed before it is marked: a crash in between
+    delivers it twice rather than never.
+    """
+    t = fmt(now())
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        open_count = renew_subscriptions(conn, session, t)
+        rows = conn.execute(
+            "SELECT id, text FROM events WHERE session = ? AND delivered_at IS NULL"
+            " ORDER BY ts, id",
+            (session,),
+        ).fetchall()
+        for row in rows:
+            print(row["text"], flush=True)
+        if rows:
+            conn.executemany(
+                "UPDATE events SET delivered_at = ? WHERE session = ? AND id = ?",
+                [(t, session, row["id"]) for row in rows],
+            )
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    if rows:
+        if open_count:
+            print(
+                f"lw: still watching {open_count} Linear subscription(s) — run "
+                f"`lw wait --session {session}` again with run_in_background.",
+                flush=True,
+            )
+        return WAIT_EXIT_LINES
+    if not open_count:
+        print("no open subscription", flush=True)
+        return WAIT_EXIT_UNWATCHED
+    return None
+
+
+def cmd_wait(conn: sqlite3.Connection, args) -> int:
+    if args.timeout is not None and args.timeout < 0:
+        raise LwError(f"--timeout must be zero or more seconds, got {args.timeout:g}")
+    poll = wait_poll_seconds()
+    state_dir = Path(conn.execute("PRAGMA database_list").fetchone()["file"]).parent
+    fd = acquire_wait_lock(state_dir, args.session)
+    if fd is None:
+        holder = lock_holder(state_dir, args.session)
+        print(f"already waiting (pid {holder})" if holder else "already waiting", flush=True)
+        return WAIT_EXIT_BUSY
+    try:
+        deadline = None if args.timeout is None else time.monotonic() + args.timeout
+        while True:
+            code = wait_once(conn, args.session)
+            if code is not None:
+                return code
+            if deadline is not None:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return WAIT_EXIT_TIMEOUT
+                time.sleep(min(poll, left))
+            else:
+                time.sleep(poll)
+    finally:
+        os.close(fd)
+
+
+def register_wait(sub, common) -> None:
+    p = sub.add_parser(
+        "wait", parents=[common], help="block until the session has Linear lines",
+        description="Print the session's undelivered lines and exit. Exit 0 lines,"
+        " 2 timeout, 3 no open subscription, 4 another wait runs for this session.",
+    )
+    p.add_argument("--session", required=True)
+    p.add_argument("--timeout", type=float, metavar="S", help="give up after S seconds (exit 2)")
+    p.set_defaults(func=cmd_wait)
+
+
+# ── end of wait (LW-4) ────────────────────────────────────────────────────────
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -521,6 +684,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--closed", action="store_true", help="include closed subscriptions")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_list)
+
+    register_wait(sub, common)
     return parser
 
 
