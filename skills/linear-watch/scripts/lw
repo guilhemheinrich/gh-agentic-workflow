@@ -1,0 +1,339 @@
+#!/usr/bin/env python3
+"""lw — linear-watch: wake agent sessions on Linear changes.
+
+    lw subscribe   --session ID (--project SLUG|URL | --issue TT-123) [--since 3d] [--harness H]
+    lw unsubscribe --session ID (--project SLUG|URL | --issue TT-123 | --all)
+    lw list        [--session ID] [--closed] [--json]
+
+Every command takes --state-dir (default: $LW_STATE_DIR, else
+~/.local/state/linear-watch). The store is one SQLite file, lw.sqlite, in that
+directory; its schema is versioned with PRAGMA user_version and migrated on
+open.
+
+A subscription ties one session to one Linear target: a project (stored as its
+slugId, the 12-hex suffix of the project slug) or an issue (stored as its
+uppercase identifier). Subscribing twice is a no-op that renews the row.
+--since is capped at 7 days: nothing older is ever delivered.
+
+Standard library only. Errors go to stderr with exit 2.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sqlite3
+import sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import urlparse
+
+TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+MAX_SINCE = timedelta(days=7)
+DEFAULT_HARNESS = "claude-code"
+DB_NAME = "lw.sqlite"
+
+# ── schema ────────────────────────────────────────────────────────────────────
+# MIGRATIONS[n] takes the store from user_version n to n + 1. Each script runs
+# inside one transaction together with its user_version bump, so a crash never
+# leaves a half-migrated file. Append new migrations; never edit a shipped one.
+MIGRATIONS = [
+    """
+    CREATE TABLE subscriptions (
+      id           INTEGER PRIMARY KEY,
+      session      TEXT NOT NULL,
+      harness      TEXT NOT NULL,
+      kind         TEXT NOT NULL CHECK (kind IN ('project', 'issue')),
+      target       TEXT NOT NULL,
+      since        TEXT,
+      created_at   TEXT NOT NULL,
+      renewed_at   TEXT NOT NULL,
+      closed_at    TEXT,
+      close_reason TEXT
+    );
+    -- one open subscription per (session, target); closed rows are history
+    CREATE UNIQUE INDEX subscriptions_open
+      ON subscriptions (session, kind, target) WHERE closed_at IS NULL;
+    CREATE INDEX subscriptions_target ON subscriptions (kind, target);
+
+    CREATE TABLE cursors (
+      kind      TEXT NOT NULL,
+      target    TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      PRIMARY KEY (kind, target)
+    );
+
+    CREATE TABLE issue_states (
+      identifier TEXT PRIMARY KEY,
+      state      TEXT NOT NULL,
+      state_type TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE own_writes (
+      kind  TEXT NOT NULL CHECK (kind IN ('comment', 'state')),
+      ref   TEXT NOT NULL,
+      value TEXT,
+      at    TEXT NOT NULL,
+      PRIMARY KEY (kind, ref)
+    );
+
+    -- id is the source event id (e.g. "comment:<uuid>"); one change fans out
+    -- to every subscribed session, so dedup is per (session, id)
+    CREATE TABLE events (
+      id           TEXT NOT NULL,
+      session      TEXT NOT NULL,
+      ts           TEXT NOT NULL,
+      text         TEXT NOT NULL,
+      delivered_at TEXT,
+      PRIMARY KEY (session, id)
+    );
+    CREATE INDEX events_pending ON events (session) WHERE delivered_at IS NULL;
+    """,
+]
+SCHEMA_VERSION = len(MIGRATIONS)
+
+
+class LwError(Exception):
+    """A user-facing error: printed to stderr, exit 2."""
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def fmt(ts: datetime) -> str:
+    return ts.astimezone(timezone.utc).strftime(TS_FORMAT)
+
+
+def default_state_dir() -> Path:
+    env = os.environ.get("LW_STATE_DIR")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".local" / "state" / "linear-watch"
+
+
+def connect(state_dir: Path) -> sqlite3.Connection:
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    conn = sqlite3.connect(state_dir / DB_NAME, timeout=5, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    migrate(conn)
+    return conn
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version > SCHEMA_VERSION:
+        raise LwError(
+            f"store schema v{version} is newer than this lw (v{SCHEMA_VERSION}); update lw"
+        )
+    for target in range(version, SCHEMA_VERSION):
+        conn.executescript(
+            f"BEGIN IMMEDIATE;\n{MIGRATIONS[target]}\nPRAGMA user_version = {target + 1};\nCOMMIT;"
+        )
+
+
+# ── input normalization ───────────────────────────────────────────────────────
+SLUG_ID_RE = re.compile(r"^[0-9a-f]{12}$")
+ISSUE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-[0-9]+$")
+DURATION_RE = re.compile(r"^([0-9]+)([smhdw])$")
+UNITS = {"s": "seconds", "m": "minutes", "h": "hours", "d": "days", "w": "weeks"}
+
+
+def _path_parts(value: str) -> list[str]:
+    if "://" in value:
+        return [p for p in urlparse(value).path.split("/") if p]
+    return [value.strip().strip("/")]
+
+
+def normalize_project(value: str) -> str:
+    """Reduce a project slug, slugId or URL to its slugId.
+
+    linear.app/<ws>/project/<name>-5842ed0c2bcd/overview -> 5842ed0c2bcd
+    """
+    parts = _path_parts(value)
+    if "project" in parts and parts.index("project") + 1 < len(parts):
+        slug = parts[parts.index("project") + 1]
+    elif len(parts) == 1:
+        slug = parts[0]
+    else:
+        slug = ""
+    slug_id = slug.rsplit("-", 1)[-1].lower()
+    if not SLUG_ID_RE.match(slug_id):
+        raise LwError(
+            f"cannot find a project slugId (12 hex characters) in {value!r}; "
+            "pass the project URL, its slug or its slugId"
+        )
+    return slug_id
+
+
+def normalize_issue(value: str) -> str:
+    """Reduce an issue identifier or URL to its uppercase identifier (TT-2287)."""
+    parts = _path_parts(value)
+    if "issue" in parts and parts.index("issue") + 1 < len(parts):
+        ident = parts[parts.index("issue") + 1]
+    elif len(parts) == 1:
+        ident = parts[0]
+    else:
+        ident = ""
+    if not ISSUE_RE.match(ident):
+        raise LwError(f"not a Linear issue identifier or URL: {value!r} (expected e.g. TT-123)")
+    return ident.upper()
+
+
+def parse_duration(value: str) -> timedelta:
+    """'90m', '12h', '3d', '1w' -> timedelta, capped at MAX_SINCE."""
+    match = DURATION_RE.match(value.strip())
+    if not match:
+        raise ValueError(f"bad duration {value!r}: expected <number><s|m|h|d|w>, e.g. 3d")
+    return min(timedelta(**{UNITS[match.group(2)]: int(match.group(1))}), MAX_SINCE)
+
+
+def target_of(args) -> tuple[str, str]:
+    if getattr(args, "project", None):
+        return "project", normalize_project(args.project)
+    return "issue", normalize_issue(args.issue)
+
+
+# ── commands ──────────────────────────────────────────────────────────────────
+def cmd_subscribe(conn: sqlite3.Connection, args) -> int:
+    kind, target = target_of(args)
+    t = now()
+    try:
+        since = fmt(t - parse_duration(args.since)) if args.since else None
+    except ValueError as exc:
+        raise LwError(str(exc)) from exc
+    conn.execute("BEGIN IMMEDIATE")
+    row = conn.execute(
+        "SELECT id, since FROM subscriptions"
+        " WHERE session = ? AND kind = ? AND target = ? AND closed_at IS NULL",
+        (args.session, kind, target),
+    ).fetchone()
+    if row is None:
+        conn.execute(
+            "INSERT INTO subscriptions"
+            " (session, harness, kind, target, since, created_at, renewed_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (args.session, args.harness, kind, target, since, fmt(t), fmt(t)),
+        )
+        verb = "subscribed"
+    else:
+        # keep the earliest --since: a later, narrower one must not hide
+        # changes the first subscribe asked for
+        kept = min(s for s in (row["since"], since) if s) if (row["since"] or since) else None
+        conn.execute(
+            "UPDATE subscriptions SET renewed_at = ?, since = ? WHERE id = ?",
+            (fmt(t), kept, row["id"]),
+        )
+        since, verb = kept, "renewed"
+    conn.execute("COMMIT")
+    tail = f" since {since}" if since else ""
+    print(f"{verb} {args.session} to {kind} {target}{tail}")
+    return 0
+
+
+def cmd_unsubscribe(conn: sqlite3.Connection, args) -> int:
+    sql = (
+        "UPDATE subscriptions SET closed_at = ?, close_reason = 'unsubscribed'"
+        " WHERE session = ? AND closed_at IS NULL"
+    )
+    params: list = [fmt(now()), args.session]
+    if not args.all:
+        kind, target = target_of(args)
+        sql += " AND kind = ? AND target = ?"
+        params += [kind, target]
+    count = conn.execute(sql, params).rowcount
+    print(f"closed {count} subscription(s) of {args.session}")
+    return 0
+
+
+LIST_COLUMNS = (
+    "session", "harness", "kind", "target", "since",
+    "created_at", "renewed_at", "closed_at", "close_reason",
+)
+
+
+def cmd_list(conn: sqlite3.Connection, args) -> int:
+    sql = f"SELECT {', '.join(LIST_COLUMNS)} FROM subscriptions WHERE 1 = 1"
+    params: list = []
+    if not args.closed:
+        sql += " AND closed_at IS NULL"
+    if args.session:
+        sql += " AND session = ?"
+        params.append(args.session)
+    rows = [dict(r) for r in conn.execute(sql + " ORDER BY session, kind, target, id", params)]
+    if args.json:
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print("no subscription")
+        return 0
+    for r in rows:
+        since = f" since {r['since']}" if r["since"] else ""
+        state = f" closed {r['closed_at']} ({r['close_reason']})" if r["closed_at"] else ""
+        print(f"{r['session']}  {r['kind']:<7} {r['target']}{since}  renewed {r['renewed_at']}{state}")
+    return 0
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+def build_parser() -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "--state-dir", type=Path, default=argparse.SUPPRESS,
+        help="state directory (default: $LW_STATE_DIR or ~/.local/state/linear-watch)",
+    )
+    parser = argparse.ArgumentParser(
+        prog="lw", parents=[common], description=__doc__.split("\n\n")[0]
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("subscribe", parents=[common], help="watch a project or an issue")
+    p.add_argument("--session", required=True)
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--project", metavar="SLUG|URL")
+    target.add_argument("--issue", metavar="TT-123")
+    p.add_argument("--since", metavar="3d", help="also deliver changes since then (max 7d)")
+    p.add_argument("--harness", default=DEFAULT_HARNESS)
+    p.set_defaults(func=cmd_subscribe)
+
+    p = sub.add_parser("unsubscribe", parents=[common], help="stop watching")
+    p.add_argument("--session", required=True)
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--project", metavar="SLUG|URL")
+    target.add_argument("--issue", metavar="TT-123")
+    target.add_argument("--all", action="store_true")
+    p.set_defaults(func=cmd_unsubscribe)
+
+    p = sub.add_parser("list", parents=[common], help="show subscriptions")
+    p.add_argument("--session")
+    p.add_argument("--closed", action="store_true", help="include closed subscriptions")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_list)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    state_dir = getattr(args, "state_dir", None) or default_state_dir()
+    try:
+        if args.command in ("subscribe", "unsubscribe") and not getattr(args, "all", False):
+            target_of(args)  # validate before touching the store
+        conn = connect(state_dir)
+        try:
+            return args.func(conn, args)
+        finally:
+            conn.close()
+    except LwError as exc:
+        print(f"lw: {exc}", file=sys.stderr)
+        return 2
+    except sqlite3.Error as exc:
+        print(f"lw: store error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

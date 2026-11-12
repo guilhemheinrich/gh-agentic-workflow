@@ -110,7 +110,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   give a distinguishable exit code for a GraphQL error, the note says so and
   LW-2 parses the body instead.
 
-### [ ] LW-1 — Skeleton, store and subscriptions
+### [x] LW-1 — Skeleton, store and subscriptions
 
 - **Goal:** `lw subscribe`, `lw unsubscribe`, `lw list` work against SQLite.
 - **Do:**
