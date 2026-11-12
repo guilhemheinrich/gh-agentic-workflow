@@ -1,0 +1,8 @@
+{
+  "session_id": "3c2598fd-729b-4084-a255-3d867c98d822",
+  "transcript_path": "/Users/user/.claude/projects/-tmp-capture/3c2598fd-729b-4084-a255-3d867c98d822.jsonl",
+  "cwd": "/tmp/capture",
+  "scratchpad_dir": "/tmp/claude-501/-tmp-capture/3c2598fd-729b-4084-a255-3d867c98d822/scratchpad",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

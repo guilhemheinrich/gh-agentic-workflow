@@ -292,7 +292,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   - A failing expiry fails the whole cycle (no poll that cycle); it is logged
     as `cycle failed: …` and the loop goes on.
 
-### [ ] LW-8 — Claude adapter and pilot integration
+### [x] LW-8 — Claude adapter and pilot integration
 
 - **Goal:** sessions subscribe, renew and re-arm without the human.
 - **Do:**
@@ -308,11 +308,38 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
     the comment through the MCP as untrusted data, act, re-arm).
   - One paragraph in the pilot-session skill: at start, `lw subscribe
     --project <slug> --since 3d --session <id>`, then arm `lw wait`.
-- **Files:** `adapters/claude/*`, `scripts/lw` (setup), `SKILL.md`,
-  pilot-session `SKILL.md`, `asset-registry.yml` (description).
+- **Files:** `adapters/claude/*`, `scripts/lw` (setup), `references/usage.md`
+  (instead of `SKILL.md`, see the scope change below), pilot-session `SKILL.md`.
 - **Depends on:** LW-4, LW-6, LW-7.
 - **Done when:** hooks tested with recorded payloads; on the machine, a pilot
   session reopened after an app restart re-arms its wait without being asked.
+- **Delivered with caveats:**
+  - `lw daemon alive` and `lw daemon start` are LW-7's: the SessionStart hook
+    relies on their contract (exit 0 = alive / started) and the tests stub
+    them. Before LW-7 lands, the daemon step fails silently and the rest of
+    the hook still answers.
+  - The SessionStart payloads (`tests/fixtures/session-start/`) were recorded
+    from a headless `claude -p` run and its `--resume`: the `session_id` is
+    the same in both, so subscriptions are found by the payload id alone. Not
+    measured: whether the desktop app ever resumes under a new CLI id (its
+    files carry `priorCliSessionIds`); `lw` does not carry subscriptions
+    across ids.
+  - Scope change (decided while LW-8 ran): the watcher folds into the
+    `linear-tracker` skill (LW-10). So `SKILL.md` and `asset-registry.yml` are
+    unchanged here; the user-facing text (install, commands, the "when you are
+    woken by `lw wait`" procedure) is `references/usage.md`, for LW-10 to move
+    as is. No path names the skill folder: the hooks find `lw` next to
+    themselves, `setup` derives the hook paths from the running `lw`
+    (realpath), and lw's settings entries are recognized by the `# lw-hook`
+    comment that ends their command.
+  - `lw setup --claude` refuses to run from a checkout with its own helper
+    (`lw_runs_from_checkout`); LW-7's `daemon start` has the same rule: fold
+    the two once both have landed.
+  - **Left for the human's test, on the machine:** (1) from the installed
+    copy, `lw setup --claude`, subscribe a pilot, restart the app, reopen the
+    pilot: it re-arms `lw wait` without being asked; (2) post one real comment
+    through the Linear MCP `save_comment` and check that `own_writes` holds its
+    id (LW-6's caveat: the write responses are hand-written fixtures).
 
 ### [ ] LW-10 — Fold `lw` into the `linear-tracker` skill
 

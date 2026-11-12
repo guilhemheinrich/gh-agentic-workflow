@@ -1,0 +1,12 @@
+{
+  "session_id": "3c2598fd-729b-4084-a255-3d867c98d822",
+  "transcript_path": "/Users/user/.claude/projects/-tmp-capture/3c2598fd-729b-4084-a255-3d867c98d822.jsonl",
+  "cwd": "/tmp/capture",
+  "scratchpad_dir": "/tmp/claude-501/-tmp-capture/3c2598fd-729b-4084-a255-3d867c98d822/scratchpad",
+  "hook_event_name": "SessionStart",
+  "source": "resume",
+  "seconds_since_last_response": 10,
+  "context_tokens": 54499,
+  "prompt_cache_likely_expired": false,
+  "estimated_cache_write_usd": 0.0068
+}
