@@ -1,0 +1,23 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/agent/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/work",
+  "permission_mode": "auto",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__notion__save_comment",
+  "tool_input": {
+    "pageId": "abc",
+    "body": "hello"
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "{\"id\":\"9a1b2c3d-0000-4e62-bbc6-000000000001\",\"body\":\"Fixture comment body.\",\"attachments\":[],\"createdAt\":\"2026-11-10T11:13:08.863Z\",\"updatedAt\":\"2026-11-10T11:13:08.863Z\",\"parentId\":null,\"resolvedAt\":null,\"quotedText\":null,\"author\":{\"id\":\"00000000-0000-4000-8000-000000000001\",\"name\":\"Jane Doe\"},\"onBehalfOf\":null}"
+    }
+  ],
+  "tool_use_id": "toolu_fixture09",
+  "mcp_server": {
+    "name": "Notion",
+    "source": "claudeai"
+  }
+}

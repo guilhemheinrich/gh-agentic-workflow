@@ -215,7 +215,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
 - **Done when:** a test per close reason, using a fake desktop sessions folder;
   doctor prints `FAIL` on a stale heartbeat and on a credential error.
 
-### [ ] LW-6 — Own-writes hook
+### [x] LW-6 — Own-writes hook
 
 - **Goal:** a pilot is not woken by the comments and state moves of its own
   child sessions.
@@ -233,6 +233,10 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   nothing and exits 0.
 - **Known gap, accepted:** writes made through `linear api` mutations in Bash
   are not recorded.
+- **Delivered with a caveat:** the hook envelope was captured live, the write
+  responses were not (Linear writes refused by the auto-mode classifier); the
+  `save-*` fixtures are hand-written from the observed response shapes. See
+  `tests/fixtures/mcp-responses/README.md`. LW-8 re-checks on the machine.
 
 ### [ ] LW-7 — Daemon under launchd
 

@@ -649,6 +649,150 @@ def register_wait(sub, common) -> None:
 
 # ── end of wait (LW-4) ────────────────────────────────────────────────────────
 
+# ── own writes (LW-6) ─────────────────────────────────────────────────────────
+#   lw own-write --comment ID                 a comment this machine's agent wrote
+#   lw own-write --issue TT-123 --state NAME  a state move this agent made
+#   lw own-write --hook                       a PostToolUse payload on stdin
+#
+# Agent and human comments are indistinguishable in Linear (botActor is null
+# on comments posted through the MCP), so the poll cycle drops what this table
+# lists. Rows:
+#   ('comment', <comment uuid>, NULL)          matches event id comment:<uuid>
+#   ('state', <TT-123>, <state name>)          upserted on every own move
+# `at` is when the row was recorded. --hook parses the payload of the Linear
+# MCP save_comment / save_issue tools (tests/fixtures/mcp-responses/README.md)
+# and is silent: it prints nothing and exits 0 on a bad payload.
+UUID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+OWN_WRITE_TOOL_RE = re.compile(r"^mcp__.+__(save_comment|save_issue)$")
+LINEAR_URL_PREFIX = "https://linear.app/"
+# keys only a Linear comment carries, next to the generic id/body/createdAt
+COMMENT_MARKERS = ("quotedText", "onBehalfOf", "resolvedAt")
+
+
+def _response_objects(response) -> list[dict]:
+    """Every JSON object in a tool_response: content blocks, a dict, JSON text."""
+    if isinstance(response, str):
+        try:
+            return _response_objects(json.loads(response))
+        except ValueError:
+            return []  # "Error: …" text of a failed call
+    if isinstance(response, list):
+        return [obj for item in response for obj in _response_objects(item)]
+    if not isinstance(response, dict):
+        return []
+    if response.get("type") == "text" and isinstance(response.get("text"), str):
+        return _response_objects(response["text"])
+    if isinstance(response.get("content"), list) and "id" not in response:
+        return _response_objects(response["content"])
+    return [response]
+
+
+def _is_linear_comment(obj: dict) -> bool:
+    return (
+        isinstance(obj.get("id"), str)
+        and bool(UUID_RE.match(obj["id"].lower()))
+        and isinstance(obj.get("body"), str)
+        and isinstance(obj.get("createdAt"), str)
+        and isinstance(obj.get("author"), dict)
+        and any(key in obj for key in COMMENT_MARKERS)
+    )
+
+
+def _is_linear_issue(obj: dict) -> bool:
+    return (
+        isinstance(obj.get("id"), str)
+        and bool(ISSUE_RE.match(obj["id"]))
+        and isinstance(obj.get("url"), str)
+        and obj["url"].startswith(LINEAR_URL_PREFIX)
+        and isinstance(obj.get("status"), str)
+        and bool(obj["status"].strip())
+    )
+
+
+def own_write_from_payload(payload) -> list[tuple[str, str, str | None]]:
+    """The own_writes rows a PostToolUse payload calls for; [] for anything else.
+
+    Another MCP server's save_comment is rejected by its mcp_server name when
+    the payload carries one, otherwise by the response shape. A save_issue
+    yields a row only when its input set a state; the value is the state name
+    the response reports (the input may be a type or an id).
+    """
+    if not isinstance(payload, dict):
+        return []
+    if payload.get("hook_event_name", "PostToolUse") != "PostToolUse":
+        return []
+    tool = payload.get("tool_name")
+    match = OWN_WRITE_TOOL_RE.match(tool) if isinstance(tool, str) else None
+    if not match:
+        return []
+    server = payload.get("mcp_server")
+    if isinstance(server, dict) and isinstance(server.get("name"), str):
+        if "linear" not in server["name"].lower():
+            return []
+    objects = _response_objects(payload.get("tool_response"))
+    if match.group(1) == "save_comment":
+        for obj in objects:
+            if _is_linear_comment(obj):
+                return [("comment", obj["id"].lower(), None)]
+        return []
+    tool_input = payload.get("tool_input")
+    if not isinstance(tool_input, dict) or tool_input.get("state") in (None, ""):
+        return []
+    for obj in objects:
+        if _is_linear_issue(obj):
+            return [("state", obj["id"].upper(), obj["status"].strip())]
+    return []
+
+
+def record_own_write(conn: sqlite3.Connection, kind: str, ref: str, value: str | None) -> None:
+    conn.execute(
+        "INSERT INTO own_writes (kind, ref, value, at) VALUES (?, ?, ?, ?)"
+        " ON CONFLICT (kind, ref) DO UPDATE SET value = excluded.value, at = excluded.at",
+        (kind, ref, value, fmt(now())),
+    )
+
+
+def cmd_own_write(conn: sqlite3.Connection, args) -> int:
+    if args.hook:
+        try:
+            for row in own_write_from_payload(json.loads(sys.stdin.read())):
+                record_own_write(conn, *row)
+        except Exception:  # a hook never fails the tool call it follows
+            pass
+        return 0
+    if args.state is not None and not args.issue:
+        raise LwError("--state goes with --issue TT-123")
+    if args.comment:
+        comment_id = args.comment.strip().lower()
+        if not UUID_RE.match(comment_id):
+            raise LwError(f"not a Linear comment id (UUID): {args.comment!r}")
+        record_own_write(conn, "comment", comment_id, None)
+        print(f"recorded own comment {comment_id}")
+        return 0
+    ident = normalize_issue(args.issue)
+    state = (args.state or "").strip()
+    if not state:
+        raise LwError("--issue needs --state NAME (the state the issue was moved to)")
+    record_own_write(conn, "state", ident, state)
+    print(f"recorded own state {ident} -> {state}")
+    return 0
+
+
+def add_own_write_parser(sub, common) -> None:
+    p = sub.add_parser(
+        "own-write", parents=[common],
+        help="record a comment or a state move this agent made, so it never wakes anyone",
+    )
+    what = p.add_mutually_exclusive_group(required=True)
+    what.add_argument("--comment", metavar="ID", help="comment id (UUID)")
+    what.add_argument("--issue", metavar="TT-123", help="issue identifier or URL (needs --state)")
+    what.add_argument(
+        "--hook", action="store_true",
+        help="read a Claude PostToolUse payload on stdin; silent, exit 0",
+    )
+    p.add_argument("--state", metavar="NAME", help="the state name the issue was moved to")
+    p.set_defaults(func=cmd_own_write)
+
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
@@ -686,6 +830,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_list)
 
     register_wait(sub, common)
+    add_own_write_parser(sub, common)
     return parser
 
 
