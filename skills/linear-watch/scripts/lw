@@ -199,6 +199,210 @@ def target_of(args) -> tuple[str, str]:
     return "issue", normalize_issue(args.issue)
 
 
+# ── transport (LW-2) ──────────────────────────────────────────────────────────
+# linear_api() is the only way lw talks to Linear: `linear api` (schpet/linear-cli)
+# with the GraphQL document on stdin and the variables through --variables-json
+# (never --variable, which turns an all-digit slugId into a number). Exit codes
+# and streams are the ones measured in references/linear-cli.md:
+#   0 ok (stdout) · 1 bad query, HTTP 400 (stderr JSON) · 2 usage (stderr text)
+#   3 not found, HTTP 200 + errors (stdout JSON) · 4 no key / 401
+#   5 unreachable, timeout, rate limit, 5xx (stderr text)
+# The error class is read from the exit code first, then from the error body,
+# whichever stream holds it. Rate limiting was never provoked: it is recognized
+# by the RATELIMITED code (Linear's documented error) or by its wording.
+#
+# The key comes from the environment, else from ~/.config/linear/env (launchd
+# starts the daemon with no LINEAR_API_KEY). It only ever goes into the child's
+# environment: never argv, never os.environ, never a log or the status file.
+# Imported here rather than at the top so this section stays self-contained.
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+
+T_OK = 0
+T_CREDENTIAL = 10    # no key, or Linear rejected it
+T_RATE_LIMITED = 12  # back off until the next cycle
+T_OTHER = 13         # anything else: bad query, not found, unreachable, garbage
+
+# The Homebrew symlink, never its Cellar/<version> realpath that brew upgrade moves.
+LINEAR_DEFAULT_BIN = "/opt/homebrew/bin/linear"
+LINEAR_TIMEOUT_S = 60.0
+TRANSPORT_FILE = "transport.json"
+LINEAR_FAILURE_PREFIX = "✗ API request failed: "
+RATE_LIMIT_RE = re.compile(r"rate.?limit|too many requests|\b429\b", re.IGNORECASE)
+OPERATION_RE = re.compile(r"^\s*(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)")
+ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?LINEAR_API_KEY\s*=\s*(.*?)\s*$")
+
+
+class TransportError(Exception):
+    """A failed linear_api() call: code is T_CREDENTIAL, T_RATE_LIMITED or T_OTHER."""
+
+    def __init__(self, code: int, message: str, query: str):
+        super().__init__(f"linear api {query}: {message} (code {code})")
+        self.code = code
+        self.message = message
+        self.query = query
+
+
+_linear_bin_cache: str | None = None
+
+
+def reset_linear_bin() -> None:
+    """Forget the resolved binary (tests, or after installing linear)."""
+    global _linear_bin_cache
+    _linear_bin_cache = None
+
+
+def linear_bin() -> str | None:
+    """$LW_LINEAR_BIN, else LINEAR_DEFAULT_BIN, else `linear` on PATH (resolved once)."""
+    global _linear_bin_cache
+    env = os.environ.get("LW_LINEAR_BIN")
+    if env:
+        return env
+    if _linear_bin_cache is None:
+        if os.access(LINEAR_DEFAULT_BIN, os.X_OK):
+            _linear_bin_cache = LINEAR_DEFAULT_BIN
+        else:
+            _linear_bin_cache = shutil.which("linear")  # keeps the PATH entry, no realpath
+    return _linear_bin_cache
+
+
+def load_linear_key() -> str | None:
+    """LINEAR_API_KEY from the environment (empty = unset), else ~/.config/linear/env.
+
+    The file is parsed, never sourced: `LINEAR_API_KEY=…` with an optional
+    `export ` and optional quotes.
+    """
+    key = os.environ.get("LINEAR_API_KEY")
+    if key:
+        return key
+    path = Path.home() / ".config" / "linear" / "env"
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        match = ENV_LINE_RE.match(line)
+        if not match:
+            continue
+        value = match.group(1)
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if value:
+            key = value
+    return key or None
+
+
+def _operation_name(query: str) -> str:
+    match = OPERATION_RE.match(query)
+    return match.group(1) if match else "anonymous"
+
+
+def _parse_json(text: str):
+    try:
+        return json.loads(text)
+    except ValueError:
+        return None
+
+
+def _error_list(body) -> list:
+    if isinstance(body, dict) and isinstance(body.get("errors"), list):
+        return [e for e in body["errors"] if isinstance(e, dict)]
+    return []
+
+
+def _classify(rc: int, stdout: str, stderr: str) -> tuple[int, str]:
+    """(code, message) of a finished `linear api` run."""
+    out_body, err_body = _parse_json(stdout), _parse_json(stderr)
+    if rc == 0 and isinstance(out_body, dict) and "data" in out_body and not _error_list(out_body):
+        return T_OK, ""
+    errors = _error_list(out_body) or _error_list(err_body)
+    codes = {str((e.get("extensions") or {}).get("code", "")) for e in errors}
+    if errors:
+        message = str(errors[0].get("message") or "GraphQL error")
+    else:
+        text = (stderr.strip() or stdout.strip()).splitlines()
+        message = text[0] if text else ""
+        message = message.removeprefix(LINEAR_FAILURE_PREFIX).strip()
+        if rc == 0:
+            message = "unexpected output: " + (message[:80] or "empty")
+        message = message or f"exit {rc}"
+    if rc == 4 or "AUTHENTICATION_ERROR" in codes:
+        return T_CREDENTIAL, message
+    if "RATELIMITED" in codes or RATE_LIMIT_RE.search(stderr) or RATE_LIMIT_RE.search(message):
+        return T_RATE_LIMITED, message
+    return T_OTHER, message
+
+
+def _record_transport(state_dir: Path, field: str, value) -> None:
+    """Merge one field into <state_dir>/transport.json (atomic, mode 0600)."""
+    try:
+        state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        status = read_transport_status(state_dir)
+        status[field] = value
+        tmp = state_dir / f".{TRANSPORT_FILE}.{os.getpid()}"
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            json.dump(status, fh, indent=2)
+        os.replace(tmp, state_dir / TRANSPORT_FILE)
+    except OSError:
+        pass  # the status file is for doctor; never fail a call over it
+
+
+def read_transport_status(state_dir: Path) -> dict:
+    """{"last_ok": ts, "last_error": {"code", "message", "query", "at"}}, keys optional."""
+    try:
+        status = json.loads((Path(state_dir) / TRANSPORT_FILE).read_text())
+    except (OSError, ValueError):
+        return {}
+    return status if isinstance(status, dict) else {}
+
+
+def linear_api(query: str, variables: dict | None = None, *,
+               state_dir: Path | None = None, timeout: float | None = None) -> dict:
+    """Run one GraphQL document through `linear api` and return the parsed body.
+
+    Raises TransportError with code T_CREDENTIAL, T_RATE_LIMITED or T_OTHER.
+    The outcome is recorded in <state_dir>/transport.json for `lw doctor`.
+    """
+    name = _operation_name(query)
+    state_dir = Path(state_dir) if state_dir else default_state_dir()
+    if timeout is None:
+        try:
+            timeout = float(os.environ.get("LW_LINEAR_TIMEOUT") or LINEAR_TIMEOUT_S)
+        except ValueError:
+            timeout = LINEAR_TIMEOUT_S
+    key = load_linear_key()
+
+    def fail(code: int, message: str):
+        if key:
+            message = message.replace(key, "<key>")
+        message = message[:300]
+        _record_transport(state_dir, "last_error",
+                          {"code": code, "message": message, "query": name, "at": fmt(now())})
+        return TransportError(code, message, name)
+
+    if not key:
+        raise fail(T_CREDENTIAL, "no LINEAR_API_KEY in the environment nor in ~/.config/linear/env")
+    binary = linear_bin()
+    if not binary:
+        raise fail(T_OTHER, f"linear binary not found (set LW_LINEAR_BIN; default {LINEAR_DEFAULT_BIN})")
+    env = dict(os.environ, LINEAR_API_KEY=key, LINEAR_IGNORE_ENV_FILE="1")
+    try:
+        proc = subprocess.run(
+            [binary, "api", "--variables-json", json.dumps(variables or {})],
+            input=query, capture_output=True, text=True, env=env, cwd="/", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        raise fail(T_OTHER, f"timed out after {timeout:g} s") from None
+    except OSError as exc:
+        raise fail(T_OTHER, f"cannot run {binary}: {exc.strerror or exc}") from None
+    code, message = _classify(proc.returncode, proc.stdout, proc.stderr)
+    if code != T_OK:
+        raise fail(code, message)
+    _record_transport(state_dir, "last_ok", fmt(now()))
+    return json.loads(proc.stdout)
+
+
 # ── commands ──────────────────────────────────────────────────────────────────
 def cmd_subscribe(conn: sqlite3.Connection, args) -> int:
     kind, target = target_of(args)

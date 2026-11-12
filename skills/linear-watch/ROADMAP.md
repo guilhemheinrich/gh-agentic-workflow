@@ -136,7 +136,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   closes every row of the session with reason `unsubscribed`; schema migration
   from an empty file. Suite green in Docker.
 
-### [ ] LW-2 — Transport
+### [x] LW-2 — Transport
 
 - **Goal:** one function, `linear_api(query, variables) -> dict`, with the
   error codes the daemon acts on.
