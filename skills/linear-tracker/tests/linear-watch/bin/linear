@@ -3,7 +3,7 @@
 
 Implements only `linear api [--variables-json JSON]` with the GraphQL document
 on stdin, and reproduces the exit codes and streams measured in LW-0
-(references/linear-cli.md, section 2). It serves the real payloads of
+(references/linear-watch-cli.md, section 2). It serves the real payloads of
 tests/fixtures/linear-real/.
 
 Controlled by the environment:

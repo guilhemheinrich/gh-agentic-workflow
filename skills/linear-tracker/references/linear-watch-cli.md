@@ -4,7 +4,7 @@ Measured on **2026-11-12** on macOS (Darwin 25.5, Apple silicon) with
 `linear 3.1.0` (`schpet/linear-cli`, installed by
 `brew install schpet/tap/linear` → `/opt/homebrew/bin/linear`), workspace
 `septeo-proptech`. Read-only GraphQL only. Real payloads:
-[`tests/fixtures/linear-real/`](../tests/fixtures/linear-real/README.md).
+[`tests/linear-watch/fixtures/linear-real/`](../tests/linear-watch/fixtures/linear-real/README.md).
 
 In every transcript below the API key is loaded with
 `. ~/.config/linear/env; export LINEAR_API_KEY` and never appears on argv;

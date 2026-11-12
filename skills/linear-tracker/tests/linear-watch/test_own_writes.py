@@ -1,6 +1,6 @@
 """LW-6 — own writes: `lw own-write` and the Claude PostToolUse hook.
 
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_own_writes
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_own_writes
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 
-SKILL = Path(__file__).resolve().parent.parent
+SKILL = Path(__file__).resolve().parents[2]
 LW_PATH = SKILL / "scripts" / "lw"
 HOOK = SKILL / "adapters" / "claude" / "own-writes-hook.sh"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "mcp-responses"

@@ -1,7 +1,7 @@
 """LW-4 — delivery: `lw wait`.
 
 Built against hand-written event rows: the poll cycle (LW-3) is not needed.
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_wait
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_wait
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 from unittest import mock
 
-LW_PATH = Path(__file__).resolve().parent.parent / "scripts" / "lw"
+LW_PATH = Path(__file__).resolve().parents[2] / "scripts" / "lw"
 
 
 def load_lw():

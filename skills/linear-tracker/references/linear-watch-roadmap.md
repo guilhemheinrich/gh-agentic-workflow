@@ -341,7 +341,7 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
     through the Linear MCP `save_comment` and check that `own_writes` holds its
     id (LW-6's caveat: the write responses are hand-written fixtures).
 
-### [ ] LW-10 — Fold `lw` into the `linear-tracker` skill
+### [x] LW-10 — Fold `lw` into the `linear-tracker` skill
 
 - **Goal:** `lw` is not a skill of its own. It is the Linear watcher of the
   `linear-tracker` skill: mentioned briefly in that skill's `SKILL.md`, fully
@@ -376,6 +376,28 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   `skills/linear-tracker/` (branch `feat/linear-ticket-types`); touch only the
   section and frontmatter lines this item needs in `SKILL.md`, to keep that
   merge small.
+- **Delivered with caveats:**
+  - Moved with history: `references/usage.md` became `references/linear-watch.md`
+    (rewritten as the full reference: what ships, install and migration from the
+    standalone skill, every command and variable, lifecycle, wake procedure,
+    measured Linear facts, `doctor`); `references/linear-cli.md` became
+    `references/linear-watch-cli.md`; this roadmap is
+    `references/linear-watch-roadmap.md`. The `Files:` lines of the items above
+    are history and keep their old paths.
+  - Runtime names are unchanged on purpose: the launchd label
+    `com.linear-watch.daemon`, the plist name and the store
+    `~/.local/state/linear-watch/`. An existing store carries over; a daemon
+    started from the old path runs the old copy until `lw daemon start` is
+    re-run from the new one.
+  - `install.sh` copies without deleting, so a machine that had the standalone
+    skill keeps a stale `~/.agents/skills/linear-watch/` folder: re-run
+    `lw daemon start` and `lw setup --claude` from the new path, then delete it
+    (written in `references/linear-watch.md` §1). `install.sh` itself was not
+    run here (it writes into `$HOME`); it copies `skills/` recursively, which
+    puts `lw` at `~/.agents/skills/linear-tracker/scripts/lw`.
+  - Latent defect fixed: `scripts/lw` defined `DONE_STATE_TYPES` twice (a
+    GraphQL list for the poll queries, a tuple for expiry); the poll one is now
+    `DONE_STATE_TYPES_GRAPHQL`, and `test_cycle.DoneStateTypesTest` pins both.
 
 ### [ ] LW-9 — Server mode with webhooks (later, not scheduled)
 

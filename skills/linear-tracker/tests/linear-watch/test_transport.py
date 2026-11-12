@@ -1,7 +1,7 @@
 """LW-2 — transport: linear_api() over the `linear api` CLI.
 
 Every call goes to the fake CLI in tests/bin/linear, which replays the LW-0
-fixtures and exit codes. Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh
+fixtures and exit codes. Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 TESTS = Path(__file__).resolve().parent
-LW_PATH = TESTS.parent / "scripts" / "lw"
+LW_PATH = TESTS.parents[1] / "scripts" / "lw"
 FAKE_LINEAR = TESTS / "bin" / "linear"
 FIXTURES = TESTS / "fixtures" / "linear-real"
 

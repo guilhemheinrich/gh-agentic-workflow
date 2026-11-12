@@ -3,7 +3,7 @@
 Every call goes to the fake CLI in tests/bin/linear, which replays the real
 payloads of LW-0 (2026-11-12, project 5842ed0c2bcd) cycle by cycle: the test
 moves lw's clock and Linear's present (FAKE_LINEAR_NOW) together.
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_cycle
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_cycle
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from pathlib import Path
 from unittest import mock
 
 TESTS = Path(__file__).resolve().parent
-LW_PATH = TESTS.parent / "scripts" / "lw"
+LW_PATH = TESTS.parents[1] / "scripts" / "lw"
 FAKE_LINEAR = TESTS / "bin" / "linear"
 FIXTURES = TESTS / "fixtures" / "linear-real"
 
@@ -423,6 +423,17 @@ class HygieneTest(CycleCase):
         self.assertEqual(lw.issue_link("TT-2287", "https://linear.app/ws/issue/TT-2287/some-title"),
                          "https://linear.app/ws/issue/TT-2287")
         self.assertEqual(lw.issue_link("TT-2287", "javascript:alert(1)"), "")
+
+
+class DoneStateTypesTest(unittest.TestCase):
+    """The poll's GraphQL list and the expiry's tuple are two constants, not one name."""
+
+    def test_baseline_query_excludes_finished_issues(self):
+        self.assertIn('nin: ["completed", "canceled"]', lw.PROJECT_BASELINE_QUERY)
+
+    def test_expiry_keeps_its_tuple(self):
+        self.assertEqual(lw.DONE_STATE_TYPES, ("completed", "canceled"))
+        self.assertEqual(lw.DONE_STATE_TYPES_GRAPHQL, '["completed", "canceled"]')
 
 
 if __name__ == "__main__":

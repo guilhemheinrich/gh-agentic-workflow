@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""lw — linear-watch: wake agent sessions on Linear changes.
+"""lw — the Linear watcher of the linear-tracker skill: wake agent sessions on Linear changes.
 
     lw subscribe   --session ID (--project SLUG|URL | --issue TT-123) [--since 3d] [--harness H]
     lw unsubscribe --session ID (--project SLUG|URL | --issue TT-123 | --all)
@@ -203,7 +203,7 @@ def target_of(args) -> tuple[str, str]:
 # linear_api() is the only way lw talks to Linear: `linear api` (schpet/linear-cli)
 # with the GraphQL document on stdin and the variables through --variables-json
 # (never --variable, which turns an all-digit slugId into a number). Exit codes
-# and streams are the ones measured in references/linear-cli.md:
+# and streams are the ones measured in references/linear-watch-cli.md:
 #   0 ok (stdout) · 1 bad query, HTTP 400 (stderr JSON) · 2 usage (stderr text)
 #   3 not found, HTTP 200 + errors (stdout JSON) · 4 no key / 401
 #   5 unreachable, timeout, rate limit, 5xx (stderr text)
@@ -831,7 +831,7 @@ ISSUE_GROUP_SIZE = 50
 LINE_TEXT_MAX = 80
 CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
 ISSUE_LINK_RE = re.compile(r"^(https://linear\.app/[A-Za-z0-9_-]+/issue/([A-Za-z][A-Za-z0-9]*-[0-9]+))(?:[/?#].*)?$")
-DONE_STATE_TYPES = '["completed", "canceled"]'
+DONE_STATE_TYPES_GRAPHQL = '["completed", "canceled"]'
 
 _ISSUE_FIELDS = "identifier url updatedAt state { name type } project { slugId }"
 _COMMENT_FIELDS = "id createdAt user { name } botActor { name }"
@@ -854,14 +854,14 @@ PROJECT_ISSUES_QUERY = f"""query IssuesUpdatedSince($since: DateTimeOrDuration!,
 
 PROJECT_BASELINE_QUERY = f"""query ProjectIssueStates($p: String!, $after: String) {{
   issues(first: {POLL_PAGE_SIZE}, after: $after,
-         filter: {{project: {{slugId: {{eq: $p}}}}, state: {{type: {{nin: {DONE_STATE_TYPES}}}}}}}) {{
+         filter: {{project: {{slugId: {{eq: $p}}}}, state: {{type: {{nin: {DONE_STATE_TYPES_GRAPHQL}}}}}}}) {{
     nodes {{ {_ISSUE_FIELDS} }}
     pageInfo {{ hasNextPage endCursor }}
   }}
 }}"""
 
 # missing identifiers are simply absent from a connection filter, where one
-# missing alias would null the whole `data` (references/linear-cli.md §2)
+# missing alias would null the whole `data` (references/linear-watch-cli.md §2)
 WATCHED_ISSUES_QUERY = f"""query WatchedIssues($ids: [ID!], $since: DateTimeOrDuration!) {{
   issues(first: {ISSUE_GROUP_SIZE}, filter: {{id: {{in: $ids}}}}) {{
     nodes {{
@@ -1848,7 +1848,7 @@ def claude_adapter_dir() -> Path:
 
 
 def usage_doc() -> Path:
-    return lw_self().parent.parent / "references" / "usage.md"
+    return lw_self().parent.parent / "references" / "linear-watch.md"
 
 
 def claude_settings_path() -> Path:

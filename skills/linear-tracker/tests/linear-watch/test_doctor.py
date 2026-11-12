@@ -2,7 +2,7 @@
 
 Transport errors are recorded by calling the real linear_api() against the
 fake CLI in tests/bin/linear, so doctor reads what LW-2 actually writes.
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh test_doctor
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh test_doctor
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from pathlib import Path
 from unittest import mock
 
 TESTS = Path(__file__).resolve().parent
-LW_PATH = TESTS.parent / "scripts" / "lw"
+LW_PATH = TESTS.parents[1] / "scripts" / "lw"
 FAKE_LINEAR = TESTS / "bin" / "linear"
 
 

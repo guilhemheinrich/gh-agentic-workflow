@@ -1,6 +1,6 @@
 """LW-1 — store, schema migration and subscriptions.
 
-Run in Docker: bash skills/linear-watch/tests/run-in-docker.sh
+Run in Docker: bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 
-LW_PATH = Path(__file__).resolve().parent.parent / "scripts" / "lw"
+LW_PATH = Path(__file__).resolve().parents[2] / "scripts" / "lw"
 
 
 def load_lw():
