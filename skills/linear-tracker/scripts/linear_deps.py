@@ -746,7 +746,7 @@ def legend_items(graph, isolated, cards):
     return items
 
 
-PEEK_DELAY_MS = 900
+PEEK_DELAY_MS = 200
 
 # The hover preview: a panel drawn by a small inline script from data embedded at generation
 # time (the SVG cannot call Linear when viewed). Viewers that block scripts keep <title>.

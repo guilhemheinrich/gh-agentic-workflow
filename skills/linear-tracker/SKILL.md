@@ -653,7 +653,7 @@ the command line. Python standard library only; Docker is the execution rule.
   faded. Downstream issues are not lit: the question is what stands in the way of
   this one. The chains are computed when the SVG is generated (a cycle ends, an issue
   is never its own blocker); the legend's last two lines show the two strengths.
-- **Hover a card for about a second** to get a preview, like Linear's issue peek:
+- **Hover a card for a fifth of a second (200 ms)** to get a preview, like Linear's issue peek:
   state icon, identifier, full title, state · assignee · milestone, type and label
   chips, and the beginning of the description (about 500 characters, markdown noise
   stripped). The click still opens the issue. The text is embedded **when the SVG is

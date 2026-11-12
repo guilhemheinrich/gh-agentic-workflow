@@ -279,7 +279,7 @@ State: canceled</title><rect class="box" x="1268" y="382" width="96" height="24"
     var t = a.querySelector('title'); if (t) t.remove();   // the panel replaces the native tooltip
     var last = null;
     a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer); focus(d.id, d);
-      timer = setTimeout(function () { show(d, last); }, 900); });
+      timer = setTimeout(function () { show(d, last); }, 200); });
     a.addEventListener('mousemove', function (ev) { last = ev; });
     a.addEventListener('mouseleave', function () { hide(); unfocus(); });
   });
