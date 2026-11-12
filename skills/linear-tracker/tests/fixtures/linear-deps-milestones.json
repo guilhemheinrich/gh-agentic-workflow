@@ -1,0 +1,132 @@
+{
+ "project": {
+  "name": "Staging then production (made up)",
+  "milestones": [
+   "Staging",
+   "Production",
+   "Empty milestone"
+  ]
+ },
+ "issues": [
+  {
+   "identifier": "MS-1",
+   "title": "Schema migration",
+   "state": "completed",
+   "parent": null,
+   "state_name": "Done",
+   "assignee": null,
+   "milestone": "Staging",
+   "labels": []
+  },
+  {
+   "identifier": "MS-2",
+   "title": "Import worker",
+   "state": "started",
+   "parent": null,
+   "state_name": "In Progress",
+   "assignee": null,
+   "milestone": "Staging",
+   "labels": []
+  },
+  {
+   "identifier": "MS-3",
+   "title": "Production database",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": "Production",
+   "labels": []
+  },
+  {
+   "identifier": "MS-4",
+   "title": "Cut-over runbook",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": "Production",
+   "labels": []
+  },
+  {
+   "identifier": "MS-5",
+   "title": "Unplanned follow-up",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": null,
+   "labels": []
+  },
+  {
+   "identifier": "MS-6",
+   "title": "Staging smoke test",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": "Staging",
+   "labels": []
+  },
+  {
+   "identifier": "MS-7",
+   "title": "Rename a flag",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": "Staging",
+   "labels": []
+  },
+  {
+   "identifier": "MS-8",
+   "title": "Update the status page",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": "Production",
+   "labels": []
+  },
+  {
+   "identifier": "MS-9",
+   "title": "Tidy the wiki",
+   "state": "unstarted",
+   "parent": null,
+   "state_name": "Todo",
+   "assignee": null,
+   "milestone": null,
+   "labels": []
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "MS-1",
+   "to": "MS-2"
+  },
+  {
+   "type": "blocks",
+   "from": "MS-3",
+   "to": "MS-4"
+  },
+  {
+   "type": "blocks",
+   "from": "MS-2",
+   "to": "MS-5"
+  },
+  {
+   "type": "blocks",
+   "from": "MS-3",
+   "to": "MS-6"
+  },
+  {
+   "type": "blocks",
+   "from": "OTHER-1",
+   "to": "MS-3"
+  }
+ ],
+ "external": {
+  "OTHER-1": "Vendor approval"
+ }
+}

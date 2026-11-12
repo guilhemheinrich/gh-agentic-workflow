@@ -578,8 +578,8 @@ view draws **projects**, never issues. `scripts/linear_deps.py` fills that gap
 with one read of the project and two outputs:
 
 - **for a human, a clickable SVG** (`-o deps.svg`, always written): issues in
-  columns, blockers on the left, an arrow per blocking link, and **every box a
-  link to its issue**;
+  columns grouped in one band per project milestone, blockers on the left, an
+  arrow per blocking link, and **every box a link to its issue**;
 - **for an agent, a JSON graph** (`--json-out deps.json`): every issue with its
   ticket type, its direct blockers and blocked issues, every relation once, the
   cycles, and the issues with no dependency. `linear_deps.py check` then answers,
@@ -609,14 +609,29 @@ the command line. Python standard library only; Docker is the execution rule.
 | `--json-out FILE` | also write the JSON graph (see [The JSON graph](#the-json-graph)); independent of the drawing options below |
 | `--include-related` | also draw "related" links, dotted. Off by default: they order nothing |
 | `--external show` | draw issues outside the project as dashed boxes. Default `drop`: the links to them are counted in a footer note |
+| `--no-milestones` | flat layout: no milestone bands, no dashed separators. Default: one band per project milestone |
 | `--hide-isolated` | hide issues without dependency. Default: a strip of clickable chips below the graph |
 | `--no-descriptions` | do not fetch or embed description excerpts (no text in the hover preview, `description_excerpt: null` in the JSON). Use it for an SVG that will be shared: descriptions can be sensitive |
 | `--from-json FILE` | no API call; read the normalized data from FILE (see below) |
 
 ### How to read the picture
 
-- **Columns** come from the longest path: an issue sits one column to the right of
-  its furthest blocker. The leftmost issues are what to unblock first.
+- **Milestone bands.** The picture is cut into vertical bands, one per project
+  milestone that has an issue in the drawing, in the milestone order of Linear
+  (`sortOrder`, then target date, then name). Each band has its milestone name as a
+  header and a **dashed vertical line** separates it from the next. Example
+  (made up): a project with milestones "Staging" then "Production" shows every
+  Staging issue on the left, a dashed line, then the Production issues. Issues with
+  no milestone, and outside issues drawn with `--external show`, sit in a last band
+  named "No milestone". Milestones with no issue are not drawn. The issues without
+  dependency (the chip strip below the graph) are grouped by band too, so the
+  reading stays the same top to bottom. A link between two bands is drawn across
+  them as usual; when the blocker is in a later milestone than the issue it blocks,
+  the arrow simply points left (it is a normal link, not a cycle). A project whose
+  issues have no milestone is drawn flat, and `--no-milestones` forces that.
+- **Columns** come from the longest path **inside a band**: an issue sits one column
+  to the right of its furthest blocker of the same band (links from another band do
+  not move it). The leftmost issues of each band are what to unblock first.
 - **States follow Linear's own code.** Each card's border and left strip take the
   colour of its workflow state as the team configured it in Linear (`state.color`),
   so "In Review" keeps its own green although its type is `started`. The icon next to
@@ -666,7 +681,8 @@ Made-up sample, trimmed to two nodes and two edges
 {
  "format": "linear-deps/1",
  "project": {"name": "Invitations lot, broken (made up)",
-             "url": "https://linear.app/acme/project/invitations-0123456789ab"},
+             "url": "https://linear.app/acme/project/invitations-0123456789ab",
+             "milestones": ["Staging: invitations"]},
  "nodes": [
   {"identifier": "INV-1", "title": "Invitation API", "url": "https://linear.app/acme/issue/INV-1",
    "external": false, "state": "started", "state_name": null, "state_color": null, "assignee": null,
@@ -691,6 +707,10 @@ Made-up sample, trimmed to two nodes and two edges
 - **`edges`**: one per relation. A `blocks` on A and the inverse "blocked by" on B
   are one edge, `from` blocks `to`. `related` and `similar` are an unordered pair
   (sorted `from`/`to`), `duplicate` keeps its direction.
+- **`project.milestones`**: the project's milestone names in order (Linear's
+  `sortOrder`, then target date, then name), empty milestones included. It is the
+  band order of the SVG. In `--from-json` input this field is optional: when absent,
+  the order is derived from the issues' milestones, sorted by name.
 - **`type`**: the label of the workspace label group **Type** of
   [`references/ticket-types.md`](references/ticket-types.md); failing that, a label
   named like one of the eight types (`proof`, `technical-task`); else `null`.
@@ -770,7 +790,7 @@ one call per issue:
 
 ```json
 {
-  "project": {"name": "Checkout redesign"},
+  "project": {"name": "Checkout redesign", "milestones": ["M1 · Payments on staging", "M2 · Refunds"]},
   "issues": [{"identifier": "DEMO-2", "title": "...", "state": "started", "parent": null,
               "state_name": "In Review", "state_color": "#0f783c", "assignee": "Sam K.", "milestone": null, "labels": [{"name": "Proof", "group": "Type"}]}],
   "relations": [{"type": "blocks", "from": "DEMO-1", "to": "DEMO-2"}],
@@ -780,7 +800,8 @@ one call per issue:
 ```
 
 `state` is the Linear state type (`unstarted`, `started`, `completed`, `canceled`).
-`state_name`, `state_color`, `assignee`, `milestone`, `labels`, `external_labels` and
+`project.milestones` (the band order; without it the milestones found on the issues
+are ordered by name), `state_name`, `state_color`, `assignee`, `milestone`, `labels`, `external_labels` and
 `description` (raw markdown, or an already cut `description_excerpt`) are optional (without them `type` is
 `null`); a label may also be a bare name. A `{"type": "blocked_by", ...}` row is read
 as the inverse `blocks`. `tests/fixtures/linear-deps-demo.json` and
