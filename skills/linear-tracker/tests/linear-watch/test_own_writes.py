@@ -88,6 +88,7 @@ class OwnWritesCase(unittest.TestCase):
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "HOME": self._tmp.name,
             "LW_STATE_DIR": str(self.state_dir),
+            "LW_GRAPH": "0",  # LW-11 has its own tests; the hook must not spawn a rebuild here
             **env_extra,
         }
         return subprocess.run(

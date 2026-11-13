@@ -407,7 +407,7 @@ project's dependency graph, one file per project overwritten in place, never a
 new redundant file; host Python is assumed available (no Docker for the
 daemon or the hook).
 
-### [ ] LW-11 — Rebuild the dependency graph on every state change
+### [x] LW-11 — Rebuild the dependency graph on every state change
 
 - **Goal:** `~/linear-graphs/<slug>.svg` (and its `.json`) is always the
   current picture of a project's dependencies, without anyone asking.
