@@ -3,6 +3,7 @@
 #
 # Run from the repo root, in Docker (nothing touches the real HOME):
 #   docker run --rm -v "$PWD/skills/ai-usage-tracking/scripts/claude-code-macos":/t:ro alpine:3.20 sh /t/test-setup-sandbox.sh
+# (conso-report.py needs python3 and is tested by test-conso-report.py, see its header.)
 # Or directly (still sandboxed by a temp HOME): sh test-setup-sandbox.sh
 set -eu
 
@@ -38,7 +39,11 @@ done
 check "rc content preserved" grep -q 'FOO=1' "$HOME/.zshrc"
 check "symlink ~/.local/bin/conso" test -L "$HOME/.local/bin/conso"
 check "symlink resolves to the copied script" test -x "$HOME/.config/conso/conso.sh"
-check "installed script identical to the skill source" cmp -s "$HERE/conso.sh" "$HOME/.config/conso/conso.sh"
+for f in conso.sh conso-report.py conso-refresh.sh conso-merge.js; do
+  check "installed $f identical to the skill source" cmp -s "$HERE/$f" "$HOME/.config/conso/$f"
+done
+check "installed scripts executable" test -x "$HOME/.config/conso/conso-refresh.sh" -a -x "$HOME/.config/conso/conso-report.py"
+check "no interval file without --with-timer" test ! -e "$HOME/.config/conso/interval"
 check "fish file written" test -f "$HOME/.config/fish/conf.d/conso.fish"
 check "no timer without --with-timer" test ! -e "$PLIST"
 check "launchctl not called without --with-timer" test ! -e "$HOME/launchctl.calls"
@@ -48,7 +53,8 @@ sh "$HERE/setup-conso.sh" --with-timer >/dev/null
 check "plist written" test -f "$PLIST"
 check "plist has no unresolved placeholder" test "$(grep -c '__' "$PLIST")" = 0
 check "plist runs conso -S" grep -q '<string>-S</string>' "$PLIST"
-check "default interval: plist StartInterval 3600" grep -q '<integer>3600</integer>' "$PLIST"
+check "default interval: plist StartInterval 600 (10 min)" grep -q '<integer>600</integer>' "$PLIST"
+check "interval file records 600 (staleness = 3x)" test "$(cat "$HOME/.config/conso/interval")" = 600
 check "plist RunAtLoad" grep -q '<key>RunAtLoad</key>' "$PLIST"
 check "launchctl load went through the stub" grep -q "^load $PLIST" "$HOME/launchctl.calls"
 for rc in .zshrc .bashrc; do
@@ -59,7 +65,8 @@ done
 loads_before=$(grep -c "^load $PLIST" "$HOME/launchctl.calls")
 sh "$HERE/setup-conso.sh" --with-timer --interval 12h >/dev/null
 check "--interval 12h renders 43200" grep -q '<integer>43200</integer>' "$PLIST"
-check "old default no longer in plist" test "$(grep -c '<integer>3600</integer>' "$PLIST")" = 0
+check "old default no longer in plist" test "$(grep -c '<integer>600</integer>' "$PLIST")" = 0
+check "interval file follows --interval" test "$(cat "$HOME/.config/conso/interval")" = 43200
 check "RunAtLoad kept with custom interval" grep -q '<key>RunAtLoad</key>' "$PLIST"
 check "re-run with new interval reloaded the agent" test "$(grep -c "^load $PLIST" "$HOME/launchctl.calls")" = $((loads_before + 1))
 sh "$HERE/setup-conso.sh" --with-timer --interval 90m >/dev/null

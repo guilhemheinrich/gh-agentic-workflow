@@ -2128,5 +2128,6 @@ assets:
       - shell
     description: >-
       Track AI usage and spend per period and per model with a local persistence layer: report command (conso),
-      snapshots of live out-of-plan counters, opt-in hourly timer. Ships the Claude Code on macOS environment; new
-      environments are one reference plus one scripts folder.
+      an instant cache-backed report rebuilt by an opt-in 10-minute timer, billed out-of-plan evolution from snapshots
+      of the live counter. Ships the Claude Code on macOS environment; new environments are one reference plus one
+      scripts folder.
