@@ -1,7 +1,7 @@
 #!/bin/sh
 # setup-conso.sh - idempotent installer for the `conso` command (Claude Code usage report, macOS).
 #
-# Usage: sh setup-conso.sh [--with-timer] [--uninstall]
+# Usage: sh setup-conso.sh [--with-timer [--interval <duration>]] [--uninstall]
 #
 # What it does (safe to re-run):
 #   1. Copies conso.sh (next to this installer: single source of truth) to
@@ -12,7 +12,10 @@
 #      and its own file ~/.config/fish/conf.d/conso.fish.
 #   4. --with-timer (opt-in, never implied): installs the launchd agent
 #      ~/Library/LaunchAgents/com.gh-agentic.conso-snapshot.plist running `conso -S`
-#      hourly (StartInterval 3600, RunAtLoad), so out-of-plan snapshots accumulate.
+#      every --interval (default 1h; StartInterval in seconds, RunAtLoad), so out-of-plan
+#      snapshots accumulate. Re-run with a new --interval to change it (plist rewritten, reloaded).
+#      --interval <duration>: seconds, or a number + s|m|h|d (3600, 90m, 12h, 1d). Minimum 60s.
+#      Invalid/non-positive/<60s values, and --interval without --with-timer, exit 1.
 #   --uninstall removes everything above, including the timer if present.
 #
 # Overridable for testing: HOME, CONSO_DIR, LAUNCHCTL (launchctl binary or stub).
@@ -33,16 +36,52 @@ strip_block() { # $1 = rc file
   sed "/^$MARK_START\$/,/^$MARK_END\$/d" "$1" > "$1.conso.tmp" && mv "$1.conso.tmp" "$1"
 }
 
+# parse_duration <value>: prints seconds (integer >= 60) or exits 1 with a clear error.
+parse_duration() {
+  v=$1
+  num=${v%[smhd]}
+  unit=${v#"$num"}
+  case "$num" in
+    ''|*[!0-9]*) echo "invalid --interval '$v': expected seconds or a number with unit s|m|h|d (e.g. 3600, 90m, 12h)" >&2; exit 1 ;;
+  esac
+  [ ${#num} -le 9 ] || { echo "invalid --interval '$v': number too large" >&2; exit 1; }
+  num=$(printf '%s' "$num" | sed 's/^0*//')
+  num=${num:-0}
+  case "$unit" in
+    ''|s) mult=1 ;;
+    m) mult=60 ;;
+    h) mult=3600 ;;
+    d) mult=86400 ;;
+  esac
+  secs=$((num * mult))
+  [ "$secs" -gt 0 ] || { echo "invalid --interval '$v': must be positive" >&2; exit 1; }
+  [ "$secs" -ge 60 ] || { echo "invalid --interval '$v': below the 60 s minimum" >&2; exit 1; }
+  printf '%s' "$secs"
+}
+
 WITH_TIMER=0
 UNINSTALL=0
-for arg in "$@"; do
-  case "$arg" in
+INTERVAL_RAW=""
+INTERVAL_SET=0
+while [ $# -gt 0 ]; do
+  case "$1" in
     --with-timer) WITH_TIMER=1 ;;
     --uninstall) UNINSTALL=1 ;;
-    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
-    *) echo "unknown option: $arg" >&2; exit 1 ;;
+    --interval)
+      [ $# -ge 2 ] || { echo "--interval requires a value (e.g. 12h)" >&2; exit 1; }
+      INTERVAL_RAW=$2; INTERVAL_SET=1; shift ;;
+    --interval=*) INTERVAL_RAW=${1#--interval=}; INTERVAL_SET=1 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
+  shift
 done
+
+INTERVAL_SECS=3600
+if [ "$INTERVAL_SET" = 1 ]; then
+  [ "$WITH_TIMER" = 1 ] && [ "$UNINSTALL" = 0 ] || { echo "--interval only applies together with --with-timer" >&2; exit 1; }
+  INTERVAL_SECS=$(parse_duration "$INTERVAL_RAW") || exit 1
+fi
 
 if [ "$UNINSTALL" = 1 ]; then
   if [ -f "$PLIST" ]; then
@@ -88,14 +127,14 @@ FISH
   echo "  wrote $FISH_FILE"
 fi
 
-# 4. Opt-in hourly snapshot timer.
+# 4. Opt-in snapshot timer (default hourly; re-running reloads it with the new interval).
 if [ "$WITH_TIMER" = 1 ]; then
   mkdir -p "$(dirname "$PLIST")" "$HOME/.local/share/conso"
-  sed -e "s|__CONSO_BIN__|$BIN_DIR/conso|g" -e "s|__HOME__|$HOME|g" \
+  sed -e "s|__CONSO_BIN__|$BIN_DIR/conso|g" -e "s|__HOME__|$HOME|g" -e "s|__INTERVAL__|$INTERVAL_SECS|g" \
     "$SRC_DIR/com.gh-agentic.conso-snapshot.plist.template" > "$PLIST"
   "$LAUNCHCTL" unload "$PLIST" >/dev/null 2>&1 || true
   "$LAUNCHCTL" load "$PLIST"
-  echo "  timer installed: $PLIST (hourly conso -S)"
+  echo "  timer installed: $PLIST (conso -S every ${INTERVAL_SECS}s)"
 fi
 
 "$BIN_DIR/conso" -h >/dev/null 2>&1 || true

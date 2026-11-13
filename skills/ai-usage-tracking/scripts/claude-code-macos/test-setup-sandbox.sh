@@ -48,12 +48,47 @@ sh "$HERE/setup-conso.sh" --with-timer >/dev/null
 check "plist written" test -f "$PLIST"
 check "plist has no unresolved placeholder" test "$(grep -c '__' "$PLIST")" = 0
 check "plist runs conso -S" grep -q '<string>-S</string>' "$PLIST"
-check "plist StartInterval 3600" grep -q '<integer>3600</integer>' "$PLIST"
+check "default interval: plist StartInterval 3600" grep -q '<integer>3600</integer>' "$PLIST"
 check "plist RunAtLoad" grep -q '<key>RunAtLoad</key>' "$PLIST"
 check "launchctl load went through the stub" grep -q "^load $PLIST" "$HOME/launchctl.calls"
 for rc in .zshrc .bashrc; do
   check "still one marker block in $rc" test "$(count_blocks "$HOME/$rc")" = 1
 done
+
+# Interval: re-running with a new --interval rewrites the plist and reloads it via launchctl.
+loads_before=$(grep -c "^load $PLIST" "$HOME/launchctl.calls")
+sh "$HERE/setup-conso.sh" --with-timer --interval 12h >/dev/null
+check "--interval 12h renders 43200" grep -q '<integer>43200</integer>' "$PLIST"
+check "old default no longer in plist" test "$(grep -c '<integer>3600</integer>' "$PLIST")" = 0
+check "RunAtLoad kept with custom interval" grep -q '<key>RunAtLoad</key>' "$PLIST"
+check "re-run with new interval reloaded the agent" test "$(grep -c "^load $PLIST" "$HOME/launchctl.calls")" = $((loads_before + 1))
+sh "$HERE/setup-conso.sh" --with-timer --interval 90m >/dev/null
+check "--interval 90m renders 5400" grep -q '<integer>5400</integer>' "$PLIST"
+sh "$HERE/setup-conso.sh" --with-timer --interval=3600 >/dev/null
+check "--interval=3600 (bare seconds) renders 3600" grep -q '<integer>3600</integer>' "$PLIST"
+sh "$HERE/setup-conso.sh" --with-timer --interval 1d >/dev/null
+check "--interval 1d renders 86400" grep -q '<integer>86400</integer>' "$PLIST"
+sh "$HERE/setup-conso.sh" --with-timer --interval 60 >/dev/null
+check "--interval 60 (minimum) accepted" grep -q '<integer>60</integer>' "$PLIST"
+
+# Invalid values: exit non-zero, plist untouched, launchctl not called again.
+calls_before=$(wc -l < "$HOME/launchctl.calls")
+plist_before=$(cat "$PLIST")
+for bad in abc 12x 0 0h -5 -1h 1.5h 59 59s 1m5s ""; do
+  if sh "$HERE/setup-conso.sh" --with-timer --interval "$bad" >/dev/null 2>&1; then
+    fail "invalid --interval '$bad' rejected"
+  else
+    ok "invalid --interval '$bad' rejected"
+  fi
+done
+if sh "$HERE/setup-conso.sh" --with-timer --interval >/dev/null 2>&1; then
+  fail "--interval without a value rejected"
+else ok "--interval without a value rejected"; fi
+if sh "$HERE/setup-conso.sh" --interval 12h >/dev/null 2>&1; then
+  fail "--interval without --with-timer rejected"
+else ok "--interval without --with-timer rejected"; fi
+check "rejections left the plist untouched" test "$(cat "$PLIST")" = "$plist_before"
+check "rejections did not call launchctl" test "$(wc -l < "$HOME/launchctl.calls")" = "$calls_before"
 
 sh "$HERE/setup-conso.sh" --uninstall >/dev/null
 check "uninstall: launchctl unload went through the stub" grep -q "^unload $PLIST" "$HOME/launchctl.calls"

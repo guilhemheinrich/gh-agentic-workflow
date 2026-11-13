@@ -4,7 +4,7 @@ description: >-
   Track AI usage and spend per period and per model with a local persistence layer: a report command
   (`conso`) built per environment, plus snapshots that rebuild what the provider does not expose (daily
   out-of-plan spend). Ships the Claude Code on macOS environment (ccusage in Docker, plan and out-of-plan
-  figures, opt-in hourly launchd timer). Use for "conso", "AI usage", "token spend", "out-of-plan",
+  figures, opt-in launchd timer, default hourly). Use for "conso", "AI usage", "token spend", "out-of-plan",
   "how much did Claude cost me", "usage per model", "usage snapshot".
 ---
 
@@ -37,7 +37,10 @@ conso -S                    # silent snapshot (what the timer runs)
 ```
 
 Docker is required (ccusage runs in `node:22-slim`). Nothing is installed or scheduled without being asked:
-the hourly timer only exists with `setup-conso.sh --with-timer`.
+the timer only exists with `setup-conso.sh --with-timer [--interval <duration>]` (default 1 hour;
+`12h`, `90m`, `3600`; minimum 60 s; re-run with a new value to change it). launchd only fires while the
+Mac is on (a missed interval runs once at wake), and a longer interval can miss the day boundary of the
+per-day out-of-plan attribution; `12h` is fine for per-day reports (see the reference).
 
 ## Adding a new environment or AI
 
