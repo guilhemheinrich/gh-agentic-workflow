@@ -295,6 +295,30 @@ An item is not Done without that proof when the charter asks for one.
   file under `references/` at startup; if there is none for this harness, find
   out and write one.
 
+### Closing children
+
+Two independent mechanisms close a finished child, and neither replaces the
+other. The **title-driven hook** (`session-title-close-kids.sh`) archives a
+child whose title reads "To close" or "Closed"; it misses a child whose title
+is stale. The **pilot's judgement** closes a child whatever its title says; it
+covers what the hook misses, and the hook covers what the pilot forgets.
+
+- **The test:** "what is this child for, and is that done?" Close it when its
+  change is integrated (merged into the target branch, or reviewed read-only
+  and reported), its report has been read and acted on, nothing in its
+  branch or worktree is unmerged or dirty, and it is idle.
+- **Keep it open** while it owns an open PR the pilot follows, holds a decision
+  the human must read, or has a follow-up queued for it.
+- **Verify first** (a report is not proof): the branch is merged or
+  deliberately dropped, the worktree is clean. Then archive with the harness's
+  archive call. If the harness refuses ("still has live work") or asks to
+  re-issue the call with hook-modified input, re-issue **once** with that exact
+  input; if refused again, say so in one line in the next report and move on —
+  never loop.
+- *Made-up example:* a Sonnet child edited a skill, the pilot merged its
+  branch; at the next wake-up the pilot checks the worktree is clean and
+  archives the child, although its title still says "To ship".
+
 ## 7. Anti-patterns
 
 - **Reporting a pseudo-block** without having looked for a way around it.
@@ -314,12 +338,14 @@ An item is not Done without that proof when the charter asks for one.
   goes to the people concerned, with the pilot's opinion attached.
 - **Making a recommendation a prerequisite.** A missing watcher or review
   panel is a proposal, not a reason to stop.
+- **Leaving finished children open until the title says so.** Close them on
+  judgement (§6, "Closing children").
 
 ## Reminder hook (optional)
 
-`hooks/pilot-reminder.sh` re-injects `templates/pilot-reminder.md` (six lines:
+`hooks/pilot-reminder.sh` re-injects `templates/pilot-reminder.md` (seven lines:
 pilot, never code, never ask the probable-yes, start children, escalate real
-blocks only, keep the tracker true) at every turn of a session registered with
+blocks only, keep the tracker true, close finished children) at every turn of a session registered with
 `role pilot` (§2, step 0). Any other session gets nothing and pays one file
 check. Events: `UserPromptSubmit` (human messages and `<side-sessions-event>`
 wake-ups) and `SessionStart` (resume, compaction). `Stop` is not used: it can
