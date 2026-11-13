@@ -4,16 +4,17 @@
 # Usage: sh setup-conso.sh [--with-timer [--interval <duration>]] [--uninstall]
 #
 # What it does (safe to re-run):
-#   1. Copies conso.sh (next to this installer: single source of truth) to
-#      $CONSO_DIR/conso.sh (default ~/.config/conso).
+#   1. Copies conso.sh, conso-report.py, conso-refresh.sh and conso-merge.js (next to this installer:
+#      single source of truth) to $CONSO_DIR (default ~/.config/conso).
 #   2. Symlinks it as ~/.local/bin/conso.
 #   3. Maintains a marker block (# >>> conso >>> ... # <<< conso <<<) in ~/.zshrc and
 #      ~/.bashrc (stripped then re-appended, so it survives rewrites by other managers)
 #      and its own file ~/.config/fish/conf.d/conso.fish.
 #   4. --with-timer (opt-in, never implied): installs the launchd agent
 #      ~/Library/LaunchAgents/com.gh-agentic.conso-snapshot.plist running `conso -S`
-#      every --interval (default 1h; StartInterval in seconds, RunAtLoad), so out-of-plan
-#      snapshots accumulate. Re-run with a new --interval to change it (plist rewritten, reloaded).
+#      (= silent cache refresh: ccusage aggregation + usage snapshot) every --interval (default 10 min;
+#      StartInterval in seconds, RunAtLoad). The interval is also written to $CONSO_DIR/interval so
+#      `conso` knows when its cache is stale (3x the interval). Re-run with a new --interval to change it (plist rewritten, reloaded).
 #      --interval <duration>: seconds, or a number + s|m|h|d (3600, 90m, 12h, 1d). Minimum 60s.
 #      Invalid/non-positive/<60s values, and --interval without --with-timer, exit 1.
 #   --uninstall removes everything above, including the timer if present.
@@ -71,13 +72,13 @@ while [ $# -gt 0 ]; do
       [ $# -ge 2 ] || { echo "--interval requires a value (e.g. 12h)" >&2; exit 1; }
       INTERVAL_RAW=$2; INTERVAL_SET=1; shift ;;
     --interval=*) INTERVAL_RAW=${1#--interval=}; INTERVAL_SET=1 ;;
-    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 1 ;;
   esac
   shift
 done
 
-INTERVAL_SECS=3600
+INTERVAL_SECS=600
 if [ "$INTERVAL_SET" = 1 ]; then
   [ "$WITH_TIMER" = 1 ] && [ "$UNINSTALL" = 0 ] || { echo "--interval only applies together with --with-timer" >&2; exit 1; }
   INTERVAL_SECS=$(parse_duration "$INTERVAL_RAW") || exit 1
@@ -91,16 +92,19 @@ if [ "$UNINSTALL" = 1 ]; then
   rm -f "$BIN_DIR/conso" "$FISH_FILE"
   for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do strip_block "$rc"; done
   rm -rf "$CONSO_DIR"
-  echo "conso removed (snapshots in ~/.local/share/conso are kept)."
+  echo "conso removed (snapshots, cache and pinned ccusage in ~/.local/share/conso are kept)."
   exit 0
 fi
 
-[ -f "$SRC_DIR/conso.sh" ] || { echo "conso.sh not found next to the installer ($SRC_DIR)" >&2; exit 1; }
+FILES="conso.sh conso-report.py conso-refresh.sh conso-merge.js"
+for f in $FILES; do
+  [ -f "$SRC_DIR/$f" ] || { echo "$f not found next to the installer ($SRC_DIR)" >&2; exit 1; }
+done
 mkdir -p "$CONSO_DIR" "$BIN_DIR"
 
 # 1. The script itself (copied, never embedded).
-cp "$SRC_DIR/conso.sh" "$CONSO_DIR/conso.sh"
-chmod +x "$CONSO_DIR/conso.sh"
+for f in $FILES; do cp "$SRC_DIR/$f" "$CONSO_DIR/$f"; done
+chmod +x "$CONSO_DIR/conso.sh" "$CONSO_DIR/conso-report.py" "$CONSO_DIR/conso-refresh.sh"
 
 # 2. PATH entry.
 ln -sf "$CONSO_DIR/conso.sh" "$BIN_DIR/conso"
@@ -127,13 +131,14 @@ FISH
   echo "  wrote $FISH_FILE"
 fi
 
-# 4. Opt-in snapshot timer (default hourly; re-running reloads it with the new interval).
+# 4. Opt-in snapshot timer (default 10 min; re-running reloads it with the new interval).
 if [ "$WITH_TIMER" = 1 ]; then
   mkdir -p "$(dirname "$PLIST")" "$HOME/.local/share/conso"
   sed -e "s|__CONSO_BIN__|$BIN_DIR/conso|g" -e "s|__HOME__|$HOME|g" -e "s|__INTERVAL__|$INTERVAL_SECS|g" \
     "$SRC_DIR/com.gh-agentic.conso-snapshot.plist.template" > "$PLIST"
   "$LAUNCHCTL" unload "$PLIST" >/dev/null 2>&1 || true
   "$LAUNCHCTL" load "$PLIST"
+  printf '%s\n' "$INTERVAL_SECS" > "$CONSO_DIR/interval"
   echo "  timer installed: $PLIST (conso -S every ${INTERVAL_SECS}s)"
 fi
 
