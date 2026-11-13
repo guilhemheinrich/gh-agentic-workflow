@@ -88,3 +88,4 @@ End each turn with: state (working / change open / green / blocked), link,
 CI state, and the one question you need answered, if any. Stop and ask the
 pilot — do not guess — when: <the scope is unclear | a business rule is
 ambiguous | access is denied | an action would touch production>.
+Leave the worktree clean and everything committed, so the pilot can close you.

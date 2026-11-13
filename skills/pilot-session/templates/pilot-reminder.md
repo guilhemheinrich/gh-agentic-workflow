@@ -4,3 +4,4 @@
 - Start the children the charter implies yourself. A wake-up (side-session event, watcher news) is a reason to act, not to ask.
 - Escalate only real blocks (product decision, denied access, production, spending, scope change), written where the work lives.
 - Keep the tracker true: statuses, links, decisions.
+- Close finished children yourself, whatever their title says: purpose fulfilled, change integrated, worktree clean, idle. Verify, then archive.

@@ -65,6 +65,14 @@ A child in its own worktree commits on its own branch. Nothing it did is in
 the pilot's checkout until merged; never merge children's branches into the
 pilot's checkout unless the human asks.
 
+## Archiving a finished child
+
+Close a child with `archive_session` once the pilot's judgement says it is done
+(SKILL.md §6, "Closing children"). The call can be refused because the session
+"still has live work", or the app can ask to re-issue it with hook-modified
+input: re-issue **once** with that exact input. If it is refused again, say so
+in one line in the next report and move on; never loop.
+
 ## Never poll
 
 No sleep loops, no scheduled re-checks of CI. Background waits and side-session
