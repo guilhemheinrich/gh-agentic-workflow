@@ -399,6 +399,79 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
     GraphQL list for the poll queries, a tuple for expiry); the poll one is now
     `DONE_STATE_TYPES_GRAPHQL`, and `test_cycle.DoneStateTypesTest` pins both.
 
+## Release 2 — the dependency graph follows the tickets
+
+Integration branch: `release/linear-watch-graph`, cut from `main` after PR #44.
+Decided by the user on 2026-11-13: a state change on a ticket rebuilds its
+project's dependency graph, one file per project overwritten in place, never a
+new redundant file; host Python is assumed available (no Docker for the
+daemon or the hook).
+
+### [ ] LW-11 — Rebuild the dependency graph on every state change
+
+- **Goal:** `~/linear-graphs/<slug>.svg` (and its `.json`) is always the
+  current picture of a project's dependencies, without anyone asking.
+- **Do:**
+  - `lw graph (--project SLUG|URL | --issue TT-123)`: resolves the project
+    (an issue's project through the API), runs `scripts/linear_deps.py` with
+    the host Python (`sys.executable`), `LINEAR_API_KEY` from the environment
+    or `~/.config/linear/env`, never on argv. Output
+    `~/linear-graphs/<slug>.svg` + `.json` (`LW_GRAPH_DIR` overrides the
+    folder), `<slug>` = the project URL's name part without the slugId, as the
+    existing files (`broker-pa-run-evolutions-courant.svg`). Write to a temp
+    file in the same folder, then `os.replace`: nobody ever opens a half
+    graph. A per-project lock (flock) so two rebuilds never run at once; a
+    rebuild requested while one runs is coalesced, not queued N times.
+  - Daemon: after a cycle, one rebuild per project that had at least one
+    observed state transition, own transitions included (the own-writes filter
+    only decides who is woken, never whether the picture is updated).
+  - Own-writes hook: when it records a state move (`save_issue` with a state),
+    start `lw graph --issue <id>` detached in the background; the hook still
+    returns at once and silently. The hook is global, so child sessions are
+    covered.
+  - **No proliferation:** the hook path never creates a new graph file. It
+    rebuilds only a project watched by `lw` or one whose file already exists
+    in the graph folder. `lw graph` run by hand may create one.
+  - When a state transition wakes a session, its line ends with the graph
+    path: `Linear · TT-2290 Blocked → Todo · <url> · graph ~/linear-graphs/<slug>.svg`.
+  - Log each rebuild (project, duration, result) in `daemon.log`; a failed
+    rebuild keeps the previous files untouched and shows in `lw doctor`.
+- **Files:** `skills/linear-tracker/scripts/lw` (a delimited graph section),
+  `skills/linear-tracker/adapters/claude/own-writes-hook.sh`,
+  `skills/linear-tracker/tests/linear-watch/test_graph.py` and a fake
+  `linear_deps` for tests.
+- **Depends on:** nothing.
+- **Done when:** tests cover: one rebuild per project per cycle with several
+  transitions; own transition rebuilds but does not wake; atomic replace
+  (previous file intact when the renderer fails); lock coalescing; the hook
+  refuses to create a new file; slug naming; wake line carries the path; full
+  suite green in Docker.
+
+### [ ] LW-12 — Document the graph, and allow roadmap-scoped local files in summaries
+
+- **Goal:** every session knows the graph is rebuilt on its own, that there is
+  one file per project, and cites its local path; the end-of-reply summary may
+  link it.
+- **Do:**
+  - `skills/linear-tracker/SKILL.md` (short) and
+    `references/linear-watch.md` (full): automatic rebuild, the two triggers,
+    one file per project overwritten in place, never create a copy, and
+    **always cite the local path** of the graph when talking about the project
+    (`[Graph: <project>](file:///Users/<user>/linear-graphs/<slug>.svg)`).
+  - `skills/conversation-focus/` (`SKILL.md` and
+    `hooks/conversation-focus-prompt.sh`): the "Summary references" rule today
+    says "External URLs only, never local files". Change it to: external URLs,
+    plus **local files whose scope is a whole milestone, project or roadmap**
+    (the project's dependency graph `~/linear-graphs/<slug>.svg`, a
+    `ROADMAP.md`), as `file://` links; **never a code file**. Update the hook's
+    tests if any, and its example line.
+- **Files:** `skills/linear-tracker/SKILL.md` (the lw section only),
+  `skills/linear-tracker/references/linear-watch.md`,
+  `skills/conversation-focus/**`, `hooks/conversation-focus-prompt.sh`.
+- **Depends on:** nothing (written from LW-11's spec above).
+- **Done when:** the rule text names both allowed kinds and the forbidden one;
+  conversation-focus tests (if any) pass in Docker; docs merged.
+
 ### [ ] LW-9 — Server mode with webhooks (later, not scheduled)
 
 When `lw` runs on a reachable host: a Linear webhook endpoint that feeds the
