@@ -865,8 +865,18 @@ sessions are known gaps, see the reference), and the agent's own Linear MCP
 writes never wake it. Install it from the installed copy
 (`~/.agents/skills/linear-tracker/scripts/lw`), never from a checkout.
 
+**The project's dependency graph rebuilds itself.** On every ticket state
+change in a watched project, the daemon (each cycle) and the own-writes hook
+(at once, when this session or one of its child sessions moves a ticket)
+rewrite `~/linear-graphs/<slug>.svg` and `.json`: one file per project,
+overwritten in place, never a copy or a second file for the same project.
+`lw graph --project <slug|URL>` or `--issue TT-123` rebuilds it by hand.
+**Whenever a session talks about the project, it cites the graph's local path**
+as `[Graph: <project>](file:///Users/<user>/linear-graphs/<slug>.svg)`.
+
 Install, every command, the subscription lifecycle, the procedure when woken
-by `lw wait`, and `lw doctor`: [references/linear-watch.md](references/linear-watch.md).
+by `lw wait`, the graph rebuild, and `lw doctor`:
+[references/linear-watch.md](references/linear-watch.md).
 
 ## Boundaries
 

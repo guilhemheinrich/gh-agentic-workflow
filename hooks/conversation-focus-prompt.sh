@@ -48,11 +48,12 @@ command -v jq >/dev/null 2>&1 || exit 0
 
 payload="$(cat 2>/dev/null || true)"
 
-# External (http/https) links found in the italic closing summaries of this
+# External (http/https) links and whole-project file:// links (a dependency
+# graph, a ROADMAP.md) found in the italic closing summaries of this
 # transcript, joined with " · ": the session's very first summary link (in a
 # pilot session, its Linear project) always first, then the others by most
-# recent appearance, deduped by URL, capped. Local file links are never
-# carried. Only assistant lines holding "](" are parsed, so a 15 MB
+# recent appearance, deduped by URL, capped. A file:// link to a code file is
+# never carried. Only assistant lines holding "](" are parsed, so a 15 MB
 # transcript costs one grep, not one jq pass per line. The transcript keeps
 # the turns compaction removed from the agent's context.
 carried_links() {
@@ -68,7 +69,8 @@ carried_links() {
           | [ .message.content[]? | select(.type == "text") | .text ] | join("\n")
           | [ splits("\n[ \t]*\n") | gsub("^\\s+|\\s+$"; "") | select(length > 0) ] | last // ""
           | select(test("^\\*[^*]") and test("[^*]\\*$"))
-          | [ scan("\\[[^\\]\\n]+\\]\\(https?:[^)\\s]+\\)") ]
+          | [ scan("\\[[^\\]\\n]+\\]\\((?:https?:|file:)[^)\\s]+\\)")
+              | select(test("\\]\\(file:[^)]*\\.(py|ts|tsx|js|jsx|mjs|cjs|go|rs|java|kt|rb|php|c|cc|cpp|h|hpp|cs|swift|sh|bash|zsh|fish|sql|vue|svelte|scala)\\)$"; "i") | not) ]
           | select(length > 0) ]
         | select(length > 0)
         | ([ .[0][0] ] + (reverse | add)) | dedupe | .[:$max] | join(" · ")' 2>/dev/null
@@ -129,7 +131,7 @@ fi
 if [[ "${CONVERSATION_FOCUS_SUMMARY:-1}" == "1" ]]; then
   lines+=("- Closing summary: end the reply with one final paragraph wrapped in single asterisks (*…*), 2-3 sentences in the user's language, stating the conversation's main subject and where it stands — the whole conversation, not only this turn. Nothing after it. Write it once per user message: when a Stop hook makes you continue after it was written (e.g. a session-title update), do not write it again.")
   if [[ "${CONVERSATION_FOCUS_REFS:-1}" == "1" ]]; then
-    lines+=("- Summary references: end that italic paragraph, inside the asterisks, with markdown links to the objects this conversation tracks, separated by ' · ' — the Linear project a pilot session steers, the Linear issue the work implements, the pull request opened or reviewed, the pipeline being watched (e.g. '· [Linear: Broker PA](https://linear.app/…) · [ENG-123](https://linear.app/…) · [PR #28](https://github.com/…)'). External URLs only, never local files. Once a reference has appeared in the conversation, repeat it in every later summary while it still applies. Use only URLs seen in this conversation or returned by a tool; never guess one, and omit the links when there are none.")
+    lines+=("- Summary references: end that italic paragraph, inside the asterisks, with markdown links to the objects this conversation tracks, separated by ' · ' — the Linear project a pilot session steers, the Linear issue the work implements, the pull request opened or reviewed, the pipeline being watched (e.g. '· [Linear: Broker PA](https://linear.app/…) · [ENG-123](https://linear.app/…) · [PR #28](https://github.com/…) · [Graph: Broker PA](file:///Users/<user>/linear-graphs/broker-pa.svg) · [ROADMAP](file:///Users/<user>/lab/<repo>/ROADMAP.md)'). External URLs, plus local files whose scope is a whole milestone, project or roadmap — the project's dependency graph ~/linear-graphs/<slug>.svg, a ROADMAP.md — as file:// links; never a code file (not '[handler](file:///Users/<user>/lab/<repo>/src/handler.ts)', not a .py or .ts file). Once a reference has appeared in the conversation, repeat it in every later summary while it still applies. Use only URLs seen in this conversation or returned by a tool; never guess one, and omit the links when there are none.")
     links="$(carried_links)"
     if [[ -n "$links" ]]; then
       lines+=("- References already in your previous summaries (read from the transcript, so they survive compaction) — carry each one unless it no longer applies, then add new ones: $links")

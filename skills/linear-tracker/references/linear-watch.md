@@ -17,8 +17,10 @@ printed; the second line is a made-up example of the shape):
 
 ```
 Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/septeo-proptech/issue/TT-2287
-Linear · TT-2290 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-2290
+Linear · TT-2290 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-2290 · graph ~/linear-graphs/broker-pa-run-evolutions-courant.svg
 ```
+
+A state transition line ends with the path of the project's graph (§8).
 
 What ships with the skill (paths relative to the `linear-tracker` folder):
 
@@ -97,6 +99,7 @@ Both hooks exit 0 and stay silent on any problem; `LW_HOOKS=0` disables them.
 | `lw daemon run [--cycles N]` | Poll every `LW_POLL_SECONDS` (300); what launchd runs. Re-execs itself when `scripts/lw` changes on disk. |
 | `lw daemon start` · `lw daemon stop` | Install and load · unload and remove the launchd agent. |
 | `lw daemon alive` | Exit 0 when the heartbeat is younger than 3 poll intervals. |
+| `lw graph (--project SLUG\|URL \|--issue TT-123)` | Rebuild the project's dependency graph now (§8). An issue is resolved to its project through the API. |
 | `lw expire [--desktop-dir DIR]` | Close what must not be watched any more (§3), purge delivered events older than 7 days. Each `daemon run` cycle runs it before polling. |
 | `lw doctor [--quiet]` | Health check (§6); exit 1 on a `FAIL`. |
 | `lw session-start --session ID` | What the SessionStart hook runs: renew, print the hook answer (JSON). |
@@ -116,6 +119,7 @@ heartbeat.
 | `LW_TTL_DAYS` | 7 | a subscription not renewed for this long closes (`ttl`) |
 | `LW_WAIT_POLL` | 10 | seconds between two reads of the store by `lw wait` |
 | `LW_DESKTOP_DIR` | `~/Library/Application Support/Claude/claude-code-sessions` | desktop session files read by expiry |
+| `LW_GRAPH_DIR` | `~/linear-graphs` | folder of the dependency graphs (§8) |
 | `LW_HOOKS` | 1 | `0` silences both hooks |
 | `LW_BIN` | `../../scripts/lw` | the `lw` the hooks call |
 | `LW_ALLOW_CHECKOUT` | unset | `1` lets `setup` and `daemon start` run from a checkout (tests only) |
@@ -245,7 +249,78 @@ ok session 1f0c…: 1 open (project 5842ed0c2bcd), oldest 3h 12m, renewed 2m ago
   MCP write fixtures, desktop-only expiry signals) are listed per item in
   [`linear-watch-roadmap.md`](linear-watch-roadmap.md).
 
-## 8. Tests
+## 8. The dependency graph, rebuilt on its own
+
+`scripts/linear_deps.py` draws a project's "blocks / blocked by" relations as
+a clickable SVG plus a JSON graph (see the *Dependency graph of a project*
+section of [`SKILL.md`](../SKILL.md)). `lw` keeps that picture current without
+anyone asking: **every ticket state change in a watched project rebuilds the
+project's graph.** A decision taken in Linear (`Blocked → Todo`) changes who
+can start, and that is exactly what the graph shows.
+
+**Two triggers, one file.**
+
+| Trigger | When | Covers |
+|---|---|---|
+| the daemon | after each poll cycle, once per project that had at least one state transition, own transitions included | moves made by anyone, from anywhere (Linear UI, a colleague, another machine's agent) |
+| the own-writes hook | at once, when it records a state move (`save_issue` with a state) made through the Linear MCP, in the background; the hook returns immediately and silently | this session and its child sessions: the hook is global, so a child session that moves a ticket rebuilds the graph too, without waiting for the next cycle |
+
+The own-writes filter only decides **who is woken**, never whether the picture
+is updated: a session's own `Blocked → Todo` does not ring its own doorbell and
+does redraw the graph.
+
+**One file per project, overwritten in place.** The files are
+`~/linear-graphs/<slug>.svg` and `~/linear-graphs/<slug>.json` (`LW_GRAPH_DIR`
+changes the folder). `<slug>` is the project URL's name part without the
+slugId. Made-up example: the project
+`https://linear.app/acme/project/checkout-redesign-3f9a1c2b4d5e/overview`
+gets `~/linear-graphs/checkout-redesign.svg` and
+`~/linear-graphs/checkout-redesign.json`; the real ones on this machine look
+the same (`broker-pa-run-evolutions-courant.svg`). Rules:
+
+- **Never create a copy or a second file for the same project**: no
+  `-v2`, no dated suffix, no `graph-new.svg` next to the old one. Whoever
+  looks at the path gets the latest picture, always.
+- A rebuild writes a temporary file in the same folder, then replaces the
+  target atomically: nobody ever opens a half-written graph, and a failed
+  render leaves the previous files untouched.
+- A per-project lock means two rebuilds never run at once; a rebuild requested
+  while one runs is coalesced into one more run, not queued N times.
+- The hook path never creates a **new** graph file: it rebuilds only a project
+  watched by `lw` or one whose file already exists in the graph folder. Only
+  `lw graph` run by hand may create the first file of a project.
+- Each rebuild is logged in `daemon.log` (project, duration, result); a failed
+  one shows in `lw doctor`.
+
+**Rebuilding by hand.**
+
+```bash
+lw graph --project checkout-redesign-3f9a1c2b4d5e   # slug, slugId or project URL
+lw graph --issue TT-2290                            # the project of this ticket
+```
+
+It runs `linear_deps.py` with the host Python and reads `LINEAR_API_KEY` from
+the environment or `~/.config/linear/env`, never from argv.
+
+**The rule for every session: cite the graph's local path.** Whenever a
+session talks about the project (progress, what is blocked, what to do next),
+it gives the path of the graph as a link, so the human opens the current
+picture in one click:
+
+```text
+[Graph: Checkout redesign](file:///Users/jane/linear-graphs/checkout-redesign.svg)
+```
+
+(Made-up project and user name; use the real home folder.) Two points:
+
+- Cite **the path**, not a copy: do not paste the SVG into an artifact or a
+  message, do not save it under another name. An SVG embedded in an artifact
+  loses the hover chain and the issue preview, and goes stale.
+- In the closing summary of a reply, the `conversation-focus` rule allows this
+  link because the graph covers a whole project; a code file link is never
+  allowed there (see the `conversation-focus` skill, *Summary references*).
+
+## 9. Tests
 
 ```bash
 bash skills/linear-tracker/tests/linear-watch/run-in-docker.sh               # the whole suite
