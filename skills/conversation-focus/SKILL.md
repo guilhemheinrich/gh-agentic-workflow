@@ -99,17 +99,37 @@ conversation tracks, so the reader never scrolls back to find them:
 | Coding session tied to Linear | the Linear issue it implements |
 | Any session with a pull request | the PR opened or reviewed |
 | Any session watching CI | the pipeline under way |
+| Any session about a Linear project | the project's dependency graph, a local file (see below) |
+| Any session driving a roadmap | its `ROADMAP.md`, a local file (see below) |
 
 Example (real PR of this repo, made-up Linear URL):
 `*Sujet : épingler le sujet d'une session de pilotage. Fusionné ; reste la doc. · [ENG-42](https://linear.app/…) · [PR #28](https://github.com/guilhemheinrich/gh-agentic-workflow/pull/28)*`
+
+**Local files: only when their scope is a whole milestone, project or
+roadmap.** External URLs are always allowed; a local file is allowed as a
+`file://` link only if it describes a whole milestone, project or roadmap,
+never one change in it. Two kinds, plus the forbidden one (made-up paths):
+
+| Kind | Example |
+|---|---|
+| allowed: a project's dependency graph, one file per project | `[Graph: Broker PA](file:///Users/jane/linear-graphs/broker-pa.svg)` |
+| allowed: a roadmap | `[ROADMAP](file:///Users/jane/lab/billing/ROADMAP.md)` |
+| forbidden: a code file, whatever it is | `[handler](file:///Users/jane/lab/billing/src/handler.ts)` (same for a `.py`) |
+
+The reason for the line: a graph or a roadmap is a picture of the whole body
+of work, worth reopening every turn, and it is rebuilt in place (the `lw`
+watcher of the `linear-tracker` skill rewrites `~/linear-graphs/<slug>.svg` on
+every ticket state change). A code file is one detail of one change: the
+reader gets it from the diff or the PR.
 
 Rules: once a reference has appeared, it is repeated in every later summary
 while it still applies; only URLs seen in the conversation or returned by a
 tool are used, never a guessed one; no link at all when there is none. The
 agent picks them (principle 2): it already knows which project, issue or PR
 the conversation is about. `CONVERSATION_FOCUS_REFS=0` drops the links and
-keeps the summary. Only external URLs count: a local file link is not a
-reference.
+keeps the summary. A `file://` link counts as a reference only under the
+local-file rule above; a link to a code file is not a reference and is never
+carried forward.
 
 #### Carried forward from the transcript, not from memory
 
@@ -122,7 +142,8 @@ removed the earlier replies from its context. `c4746dbb` lost its links at
 #31 with no compaction at all.
 
 So the prompt hook reads `transcript_path`, which keeps what compaction
-removed, collects the links of past italic summaries and injects them: the
+removed, collects the links of past italic summaries (external URLs and `file://`
+links to a graph or a roadmap, never to a code file) and injects them: the
 session's first summary link (in a pilot, its Linear project) always first,
 then the others by most recent appearance, deduped by URL, capped at
 `CONVERSATION_FOCUS_LINKS` (default 6). If the agent drops every link one

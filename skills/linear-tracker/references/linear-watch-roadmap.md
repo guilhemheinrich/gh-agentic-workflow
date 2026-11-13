@@ -447,7 +447,7 @@ daemon or the hook).
   refuses to create a new file; slug naming; wake line carries the path; full
   suite green in Docker.
 
-### [ ] LW-12 — Document the graph, and allow roadmap-scoped local files in summaries
+### [x] LW-12 — Document the graph, and allow roadmap-scoped local files in summaries
 
 - **Goal:** every session knows the graph is rebuilt on its own, that there is
   one file per project, and cites its local path; the end-of-reply summary may
@@ -471,6 +471,18 @@ daemon or the hook).
 - **Depends on:** nothing (written from LW-11's spec above).
 - **Done when:** the rule text names both allowed kinds and the forbidden one;
   conversation-focus tests (if any) pass in Docker; docs merged.
+- **Delivered:** `SKILL.md` (lw section) and `linear-watch.md` §8 document the
+  two triggers, the one-file-per-project rule, `lw graph` and the citation
+  rule (`LW_GRAPH_DIR`, the `lw graph` row and the wake-line suffix are written
+  from the LW-11 spec: check them against the code when LW-11 lands). The
+  "Summary references" rule (hook text, `SKILL.md`, `references/claude-code.md`)
+  now allows `file://` links to a whole milestone, project or roadmap and
+  forbids code files, with one example of each in the rule's line.
+  `carried_links` in the hook also carries `file://` links forward (code-file
+  extensions filtered out), otherwise the graph link would be lost at the next
+  compaction like any other reference. conversation-focus has no test suite;
+  the hook was exercised by hand against a fake transcript (graph and ROADMAP
+  links carried, `.ts` and `.PY` links dropped).
 
 ### [ ] LW-9 — Server mode with webhooks (later, not scheduled)
 

@@ -1155,7 +1155,8 @@ assets:
       Keep every agent conversation on one subject and readable at a glance, through hooks written from host-agnostic
       intents: a split check that proposes a separate session when a message opens an unrelated subject, and an italic
       2-3 sentence closing summary of the conversation's main subject on every reply, ending with links to the Linear
-      project, Linear issue, pull request or pipeline the conversation tracks, carried forward from the transcript. States each rule as an intent, a
+      project, Linear issue, pull request or pipeline the conversation tracks, plus local files scoped to a whole project
+      or roadmap (a dependency graph, a ROADMAP.md, never a code file), carried forward from the transcript. States each rule as an intent, a
       lifecycle moment and a contract so the hooks can be ported to a future Claude Code or another agent host. Ships
       the Claude Code reference: `hooks/conversation-focus-prompt.sh` (UserPromptSubmit, injects both rules) and
       `hooks/conversation-focus-stop.sh` (Stop, blocks once when the summary is missing).
@@ -1573,7 +1574,9 @@ assets:
       It also draws the dependency graph of a Linear project ("blocks / blocked by" between its issues) as a clickable
       SVG for humans and exports it as a JSON graph agents can query, with `scripts/linear_deps.py` and a Linear API key
       read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline whether every issue of one type (every Proof)
-      is blocked by an issue of other types (a development task). `publish` is a verb of the `grievances` skill; this
+      is blocked by an issue of other types (a development task). `lw` rebuilds that graph by itself on every ticket
+      state change (`~/linear-graphs/<slug>.svg`, one file per project, overwritten in place) and sessions cite its
+      local path. `publish` is a verb of the `grievances` skill; this
       skill is one backend that answers it, and it never writes a ledger. Use when wiring a repository to a Linear
       project, when a finding must leave a repository and become an issue someone can own, when auditing which findings
       are already tracked, or when deciding what a tracker can and cannot hold. It also proposes eight issue types (Bug,
