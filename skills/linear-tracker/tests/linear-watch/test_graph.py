@@ -90,6 +90,46 @@ class SlugTest(unittest.TestCase):
             lw.graph_slug("https://example.com/whatever")
 
 
+class StemTest(unittest.TestCase):
+    """graph_stem: an existing pair keeps its name (the hand-made ones are titled, not URL slugs)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.folder = Path(self._tmp.name)
+        patcher = mock.patch.dict(os.environ, {"LW_GRAPH_DIR": str(self.folder)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def seed(self, stem: str, project_url: str) -> None:
+        (self.folder / f"{stem}.json").write_text(json.dumps({"project": {"url": project_url}}))
+        (self.folder / f"{stem}.svg").write_text("<svg/>")
+
+    def test_without_a_pair_the_stem_is_the_url_name(self):
+        self.assertEqual(lw.graph_stem(PROJECT_URL), SLUG)
+
+    def test_a_pair_for_the_same_project_keeps_its_name(self):
+        # real case: the URL says run-and-evolutions, the file on disk says run-evolutions
+        url = "https://linear.app/septeo-proptech/project/broker-pa-run-and-evolutions-courant-5842ed0c2bcd"
+        self.seed("broker-pa-run-evolutions-courant", url)
+        self.assertEqual(lw.graph_stem(url), "broker-pa-run-evolutions-courant")
+        self.assertEqual(lw.graph_stem(url + "/overview"), "broker-pa-run-evolutions-courant")
+
+    def test_another_projects_pair_is_left_alone(self):
+        self.seed("other", "https://linear.app/septeo-proptech/project/other-0123456789ab")
+        self.assertEqual(lw.graph_stem(PROJECT_URL), SLUG)
+
+    def test_temp_files_and_unreadable_json_are_ignored(self):
+        (self.folder / f".{SLUG}.1.json.tmp").write_text("{")
+        (self.folder / "broken.json").write_text("{not json")
+        (self.folder / "list.json").write_text("[1]")
+        self.assertEqual(lw.graph_stem(PROJECT_URL), SLUG)
+
+    def test_a_missing_folder_falls_back_to_the_url_name(self):
+        os.environ["LW_GRAPH_DIR"] = str(self.folder / "nope")
+        self.assertEqual(lw.graph_stem(PROJECT_URL), SLUG)
+
+
 class GraphCase(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -233,6 +273,14 @@ class GraphCommandTest(GraphCase):
             self.assertEqual(code, 2, ident)
             self.assertIn(ident, err)
         self.assertEqual(self.graph_files(), [])
+
+    def test_a_renamed_pair_of_the_same_project_is_overwritten_not_duplicated(self):
+        self.graphs.mkdir()
+        (self.graphs / "my-title.svg").write_text("OLD")
+        (self.graphs / "my-title.json").write_text(json.dumps({"project": {"url": PROJECT_URL}}))
+        self.ok("graph", "--project", PROJECT_URL)
+        self.assertEqual(self.graph_files(), ["my-title.json", "my-title.svg"])
+        self.assertIn("#1", (self.graphs / "my-title.svg").read_text())
 
     def test_a_second_run_overwrites_in_place(self):
         self.ok("graph", "--project", PROJECT_URL)

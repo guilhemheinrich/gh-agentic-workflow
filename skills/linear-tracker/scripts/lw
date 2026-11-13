@@ -2089,8 +2089,11 @@ def register_claude_adapter(sub, common) -> None:
 #
 # Keeps ~/linear-graphs/<slug>.svg (+ .json) the current picture of a project's
 # dependencies. <slug> is the project URL's name part without the slugId:
-# .../project/broker-pa-run-evolutions-courant-5842ed0c2bcd -> that name. LW_GRAPH_DIR
-# overrides the folder. One pair per project, always overwritten in place.
+# .../project/calendar-notifications-seule-and-iam-agence-fa180bf386d1 -> that name.
+# A pair already in the folder whose .json names the project (same slugId) keeps its
+# own name, whatever it is: graphs made by hand carry the project's title, not its URL
+# slug, and a second file would be a stale twin. LW_GRAPH_DIR overrides the folder.
+# One pair per project, always overwritten in place.
 #
 # The renderer is scripts/linear_deps.py (LW_GRAPH_RENDERER overrides it: tests),
 # run with this interpreter. It writes next to the final files under temp names,
@@ -2159,6 +2162,36 @@ def graph_slug(project_url: str) -> str:
     return slug
 
 
+def _graph_slug_id(project_url: str) -> str | None:
+    match = GRAPH_PROJECT_URL_RE.match(project_url.strip())
+    return match.group(1).rpartition("-")[2].lower() if match else None
+
+
+def graph_stem(project_url: str) -> str:
+    """The file stem of a project's graph: an existing pair keeps its name, else graph_slug().
+
+    Hand-made graphs were named after the project's title, not its URL
+    (broker-pa-run-evolutions-courant.json holds the project
+    .../broker-pa-run-and-evolutions-courant-5842ed0c2bcd). A pair whose .json
+    names this project (same slugId) is reused, so a rebuild overwrites it
+    instead of leaving a stale twin beside it.
+    """
+    fallback = graph_slug(project_url)
+    slug_id = _graph_slug_id(project_url)
+    try:
+        candidates = sorted(graph_dir().glob("*.json"))
+    except OSError:
+        return fallback
+    for path in candidates:
+        if path.name.startswith("."):
+            continue  # a temp file of a running rebuild
+        project = _read_graph_status(path).get("project")
+        url = project.get("url") if isinstance(project, dict) else None
+        if isinstance(url, str) and _graph_slug_id(url) == slug_id:
+            return path.stem
+    return fallback
+
+
 def graph_display(path: Path) -> str:
     """A path as a human or an agent would cite it: ~/… under the home folder."""
     try:
@@ -2172,7 +2205,7 @@ def graph_wake_suffix(project_url) -> str:
     if not graph_enabled() or not isinstance(project_url, str):
         return ""
     try:
-        return f" · graph {graph_display(graph_dir() / f'{graph_slug(project_url)}.svg')}"
+        return f" · graph {graph_display(graph_dir() / f'{graph_stem(project_url)}.svg')}"
     except LwError:
         return ""
 
@@ -2302,7 +2335,7 @@ def rebuild_graph(state_dir: Path, slug_id: str, url: str, *, create: bool = Tru
     that has no project name; renderer failures come back as status "failed".
     """
     state_dir = Path(state_dir)
-    slug = graph_slug(url)
+    slug = graph_stem(url)
     folder = graph_dir()
     svg, js = folder / f"{slug}.svg", folder / f"{slug}.json"
     if not create and not svg.exists() and not graph_watched(state_dir, slug_id):
