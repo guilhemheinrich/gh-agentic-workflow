@@ -7,7 +7,13 @@ tooling they name is actually in place. -->
 
 <!-- Before sending: start this session on the model that fits the task, not
 on the pilot's model (SKILL.md §5) — e.g. in Claude, Sonnet for coding and
-debugging. -->
+debugging. For a stronger tier (Opus, Fable), start read-only, switch the
+model, then send the go (harness reference, "Escalating a child's model"). -->
+
+<!-- Optional — keep as the very first line of the brief when the child must
+run on a stronger model than the pilot's: -->
+Read-only until told to proceed: do not analyse or answer yet, reply 'ready'
+only.
 
 You are a child session of a pilot session. You own one piece of work, end to
 end, up to a change that passes its gates. You do not integrate it yourself
