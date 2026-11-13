@@ -248,6 +248,7 @@ reported **at most once per session** and then falls silent:
 | Lint passes                   | nothing                                        | silent       |
 | Violation                     | linter output (Claude: stderr, exit 2; Cursor: `additional_context`) | see §6 |
 | No running container          | "start the stack" (`task up` / `make up`), once | silent      |
+| Container recreated (`make up-build`, `down`/`up`) | nothing — the cached id is re-resolved on the next edit (case `stack-recreated-recovers`) | silent |
 | Tool missing in container     | "`ruff` is not installed in `api`", once       | silent       |
 | Budget exceeded               | "too slow for a hook, move it to CI", once     | silent       |
 | No branch matches the file    | "no validation branch matches `.rs`", once     | silent       |
