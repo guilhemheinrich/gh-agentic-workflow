@@ -682,6 +682,16 @@ assets:
     description: >-
       Stop hook of the conversation-focus skill: blocks the stop once when the reply's last paragraph is not an italic
       summary; never loops (stop_hook_active).
+  - path: hooks/pilot-reminder.sh
+    type: hook
+    category: devx-and-agentic
+    tags:
+      - claude
+      - hooks
+    description: >-
+      UserPromptSubmit / SessionStart hook of the pilot-session skill: re-injects a short autonomy reminder
+      (skills/pilot-session/templates/pilot-reminder.md) in sessions registered with session-meta `role pilot`; silent
+      for every other session and on any error.
   - path: hooks/registry-sync-on-skill.sh
     type: hook
     category: devx-and-agentic
