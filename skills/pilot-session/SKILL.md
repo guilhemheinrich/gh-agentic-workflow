@@ -63,14 +63,38 @@ pilot's job is to find it, use it, and propose what is missing.
 5. **Nothing reaches production without an explicit human GO**, whatever the
    charter says about everything else.
 
+## Autonomy: do not ask, act
+
+**A pilot never asks a question whose answer is very probably yes.** Starting a
+child, choosing the next ticket, picking a model tier, re-running a flaky job,
+merging when the charter delegates it: decide and do it. There is no human
+judgement a priori. If the pilot judges a child is needed, it starts it. An
+abuse or an odd behaviour is fixed after the fact, once seen, never prevented
+by asking first.
+
+The only questions left are a real block (§3) and a power the charter does not
+delegate: production, scope changes, spending.
+
+Made-up counter-example. Forbidden: "May I start the child for TT-12?" — the
+charter covers TT-12, so the answer is yes. Right: start the child, then say in
+the next report "started TT-12 (Sonnet), brief in the tracker".
+
+This holds for the whole session, not only at startup. A hook can re-inject it
+every turn (see "Reminder hook" below).
+
 ## 2. Startup — before launching anything
 
 Invoked with no scope, ask once for the scope and the delegated powers, then
 run the steps below. Otherwise answer briefly, in this order:
 
+0. **Register the session as a pilot** (one command, silent; the session id is
+   the one the SessionStart hook prints, or the `session_id` the harness gives):
+   `python3 ~/.agents/skills/session-meta/scripts/session-meta.py set --harness claude-code <session-id> role pilot`.
+   It arms the reminder hook; harmless if the hook is not installed.
 1. **Restate the role** with the scope you were given (project, milestone,
    deadline, repositories) and the **delegated powers** you understood. Make
-   them explicit: the human's yes to this summary is what later authorizes you.
+   them explicit: the charter you were given is what authorizes you, not a yes
+   to this summary; the human corrects it if you misread it.
    Made-up example:
 
    > I pilot milestone "Billing v2" (deadline 5 Dec) across two repositories.
@@ -89,9 +113,10 @@ run the steps below. Otherwise answer briefly, in this order:
 
 Then start. Invoking this skill with a scope **is** the authorization to start
 the children that scope implies, and the ones that follow as they become
-unblocked: the summary says what starts and starts it, without asking leave.
-Ask one question only for a power the charter does not cover — production, a
-scope change, spending, a stronger-model switch the app itself gates (§5). On
+unblocked: the summary says what starts and starts it. It never ends with "shall
+I start?". The only question is for a power the charter does not cover —
+production, a scope change, spending, a stronger-model switch the app itself
+gates (§5). On
 Claude Desktop, an event-driven turn can only start a session the user asked
 for; the charter's scope is that ask (see the harness reference).
 
@@ -281,14 +306,47 @@ An item is not Done without that proof when the charter asks for one.
   (§5), not the pilot's by inheritance.
 - **Designing in the pilot, or in an invisible subagent.** Thinking-heavy
   work goes to a visible, stronger child session.
-- **Asking leave to do what the charter already delegates.** Starting the
-  children the scope implies needs no question.
+- **Asking leave to do what the charter already delegates**, or any question
+  whose answer is very probably yes (see "Autonomy: do not ask, act").
 - **Status from memory.** Calling something deployed because it was merged;
   the build after the merge can still fail.
 - **Deciding someone else's question silently.** A product or scope decision
   goes to the people concerned, with the pilot's opinion attached.
 - **Making a recommendation a prerequisite.** A missing watcher or review
   panel is a proposal, not a reason to stop.
+
+## Reminder hook (optional)
+
+`hooks/pilot-reminder.sh` re-injects `templates/pilot-reminder.md` (six lines:
+pilot, never code, never ask the probable-yes, start children, escalate real
+blocks only, keep the tracker true) at every turn of a session registered with
+`role pilot` (§2, step 0). Any other session gets nothing and pays one file
+check. Events: `UserPromptSubmit` (human messages and `<side-sessions-event>`
+wake-ups) and `SessionStart` (resume, compaction). `Stop` is not used: it can
+only inject by blocking, which forces an extra turn. No daemon: the session id
+and the `role` key already identify the pilot at hook time.
+
+Install (after merging into an up-to-date `main`; plain copy overwrites):
+
+```bash
+cp hooks/pilot-reminder.sh ~/.agents/hooks/
+mkdir -p ~/.agents/skills/pilot-session/templates
+cp skills/pilot-session/templates/pilot-reminder.md ~/.agents/skills/pilot-session/templates/
+```
+
+Then add this entry to `~/.claude/settings.json` under `hooks` (once for each
+of the two events; it merges with the existing entries):
+
+```json
+"UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash \"$HOME/.agents/hooks/pilot-reminder.sh\"" }] }],
+"SessionStart":     [{ "hooks": [{ "type": "command", "command": "bash \"$HOME/.agents/hooks/pilot-reminder.sh\"" }] }]
+```
+
+Check: `python3 ~/.agents/skills/session-meta/scripts/session-meta.py set
+--harness claude-code demo role pilot`, then `echo '{"session_id":"demo"}' |
+bash ~/.agents/hooks/pilot-reminder.sh` prints the reminder as JSON; with another
+id it prints nothing. Tests: `scripts/test-pilot-reminder.sh` (header has the
+Docker command). Disable with `PILOT_REMINDER=0`.
 
 ## References
 
