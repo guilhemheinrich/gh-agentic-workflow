@@ -80,6 +80,7 @@ class DaemonCase(unittest.TestCase):
             "LINEAR_API_KEY": TEST_KEY,
             "FAKE_LINEAR_KEY": TEST_KEY,
             "LW_POLL_SECONDS": "0.01",
+            "LW_GRAPH": "0",  # LW-11 has its own tests; here a transition must not render
             "LW_DESKTOP_DIR": str(self.tmp / "no-desktop"),
             "LAUNCHCTL_LOG": str(self.launchctl_log),
             "PATH": f"{self.bin}{os.pathsep}{os.environ.get('PATH', '')}",
