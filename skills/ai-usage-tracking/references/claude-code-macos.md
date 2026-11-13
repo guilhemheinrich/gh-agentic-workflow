@@ -37,7 +37,7 @@ Each run, and `conso -S`, appends one line to `~/.local/share/conso/extra.jsonl`
 `used` is the cumulative out-of-plan amount of the month in minor units (`dp` decimal places).
 Per-day out-of-plan = delta between consecutive snapshots, attributed to the day of the later one.
 A drop (`used` smaller than the previous one) means the month rolled over: the new value counts in full.
-Accuracy equals snapshot frequency: run `conso -S` hourly (timer below) or the day's spend is lumped
+Accuracy equals snapshot frequency: run `conso -S` often enough (timer below; hourly by default) or the day's spend is lumped
 onto the next snapshot's day. The report needs 2+ snapshots before showing any per-day figure.
 
 ## Install
@@ -45,6 +45,7 @@ onto the next snapshot's day. The report needs 2+ snapshots before showing any p
 ```sh
 sh skills/ai-usage-tracking/scripts/claude-code-macos/setup-conso.sh              # install
 sh skills/ai-usage-tracking/scripts/claude-code-macos/setup-conso.sh --with-timer # + hourly snapshots
+sh skills/ai-usage-tracking/scripts/claude-code-macos/setup-conso.sh --with-timer --interval 12h # custom interval
 sh skills/ai-usage-tracking/scripts/claude-code-macos/setup-conso.sh --uninstall  # remove all (keeps the store)
 ```
 
@@ -54,8 +55,19 @@ so it survives rewrites by other managers), and `~/.config/fish/conf.d/conso.fis
 
 **Timer (opt-in, never installed by default)**: `--with-timer` writes
 `~/Library/LaunchAgents/com.gh-agentic.conso-snapshot.plist` from the template
-(`StartInterval 3600`, `RunAtLoad`, runs `conso -S`, log in `~/.local/share/conso/snapshot.log`) and loads it
-with `launchctl`. `--uninstall` unloads and removes it.
+(`StartInterval` = the interval in seconds, `RunAtLoad`, runs `conso -S`, log in
+`~/.local/share/conso/snapshot.log`) and loads it with `launchctl`. `--uninstall` unloads and removes it.
+
+- `--interval <duration>`: seconds, or a number plus `s`, `m`, `h` or `d` (`3600`, `90m`, `12h`, `1d`).
+  Default 1 hour. Zero, negative, malformed or `< 60 s` values exit non-zero before anything is changed;
+  `--interval` without `--with-timer` is an error too.
+- Changing it: re-run with a new `--interval`; the plist is rewritten and reloaded (unload then load).
+- `RunAtLoad` is kept, so a snapshot is also taken at login.
+- launchd only fires while the Mac is on; an interval that elapsed during sleep or shutdown runs once at
+  wake (not once per missed tick).
+- Trade-off: figures are deltas between snapshots, attributed to the day of the later one. With a long
+  interval, spend made just before midnight is lumped onto the next day if the next snapshot lands after it.
+  `12h` is fine for per-day reports; keep the default (or shorter) when the day boundary matters.
 
 **Test** (fake HOME, stubbed `launchctl`, no effect on the real machine):
 
