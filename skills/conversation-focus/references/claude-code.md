@@ -29,7 +29,7 @@ Two payload facts the scripts rely on:
 [conversation-focus] Apply to this reply. Do not mention these rules to the user.
 - Split check, before any work: if this message opens a subject unrelated to the conversation's main subject (it builds on nothing said, found or decided so far), propose it as a separate session: call mcp__ccd_session__start_session with initiation "offer" and a short title naming the new subject, and do not start that work here unless the user says so. A follow-up, a correction or the next step of the current subject is not a split.
 - Closing summary: end the reply with one final paragraph wrapped in single asterisks (*…*), 2-3 sentences in the user's language, stating the conversation's main subject and where it stands — the whole conversation, not only this turn. Nothing after it. Write it once per user message: when a Stop hook makes you continue after it was written (e.g. a session-title update), do not write it again.
-- Summary references: end that italic paragraph, inside the asterisks, with markdown links to the objects this conversation tracks, separated by ' · ' — the Linear project a pilot session steers, the Linear issue the work implements, the pull request opened or reviewed (…). Once a reference has appeared in the conversation, repeat it in every later summary while it still applies. Use only URLs seen in this conversation or returned by a tool; never guess one, and omit the links when there are none.
+- Summary references: end that italic paragraph, inside the asterisks, with markdown links to the objects this conversation tracks, separated by ' · ' — the Linear project a pilot session steers, the Linear issue the work implements, the pull request opened or reviewed (…). External URLs, plus local files whose scope is a whole milestone, project or roadmap — the project's dependency graph ~/linear-graphs/<slug>.svg, a ROADMAP.md — as file:// links; never a code file (…). Once a reference has appeared in the conversation, repeat it in every later summary while it still applies. Use only URLs seen in this conversation or returned by a tool; never guess one, and omit the links when there are none.
 - References already in your previous summaries (read from the transcript, so they survive compaction) — carry each one unless it no longer applies, then add new ones: [Linear: Calendar · Notifications seule & IAM agence](https://linear.app/…) · [PR #152](https://bitbucket.org/…) · [TT-1843](https://linear.app/…)
 ```
 
@@ -93,7 +93,8 @@ not follow edits. Copy from an up-to-date `main` only: a copy from a stale
 branch rolls merged rules back (see SKILL.md, Installing).
 
 The last injected line appears only when a past italic summary in
-`transcript_path` held external markdown links. The hook greps assistant
+`transcript_path` held markdown links to external URLs or to a graph or
+roadmap file (`file://`; a link to a code file is filtered out). The hook greps assistant
 lines containing `](` before any JSON parsing: 0.11 s on a 14 MB pilot
 transcript. No transcript, no line (fail open).
 

@@ -755,8 +755,13 @@ def record_own_write(conn: sqlite3.Connection, kind: str, ref: str, value: str |
 def cmd_own_write(conn: sqlite3.Connection, args) -> int:
     if args.hook:
         try:
-            for row in own_write_from_payload(json.loads(sys.stdin.read())):
+            rows = own_write_from_payload(json.loads(sys.stdin.read()))
+            for row in rows:
                 record_own_write(conn, *row)
+            state_dir = Path(conn.execute("PRAGMA database_list").fetchone()["file"]).parent
+            for kind, ref, _value in rows:
+                if kind == "state":
+                    spawn_graph_rebuild(ref, state_dir)  # LW-11: detached, returns at once
         except Exception:  # a hook never fails the tool call it follows
             pass
         return 0
@@ -833,7 +838,7 @@ CONTROL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f  ]")
 ISSUE_LINK_RE = re.compile(r"^(https://linear\.app/[A-Za-z0-9_-]+/issue/([A-Za-z][A-Za-z0-9]*-[0-9]+))(?:[/?#].*)?$")
 DONE_STATE_TYPES_GRAPHQL = '["completed", "canceled"]'
 
-_ISSUE_FIELDS = "identifier url updatedAt state { name type } project { slugId }"
+_ISSUE_FIELDS = "identifier url updatedAt state { name type } project { slugId url }"
 _COMMENT_FIELDS = "id createdAt user { name } botActor { name }"
 
 PROJECT_COMMENTS_QUERY = f"""query CommentsSince($since: DateTimeOrDuration!, $p: String!, $after: String) {{
@@ -930,6 +935,14 @@ class CycleResult:
         self.sessions: set[str] = set()
         self.errors: list[TransportError] = []
         self.watched = 0
+        # project slugId -> {"url": project url or None, "issues": {identifiers}}:
+        # every observed state move, own ones included (LW-11 rebuilds the graph)
+        self.transitions: dict[str | None, dict] = {}
+
+    def add_transition(self, slug_id: str | None, url: str | None, ident: str) -> None:
+        entry = self.transitions.setdefault(slug_id, {"url": None, "issues": set()})
+        entry["url"] = entry["url"] or url
+        entry["issues"].add(ident)
 
 
 def _observation(node: dict, project: str | None = None) -> dict | None:
@@ -941,7 +954,7 @@ def _observation(node: dict, project: str | None = None) -> dict | None:
     project = project or ((node.get("project") or {}).get("slugId"))
     return {"identifier": ident, "url": node.get("url"), "updated": updated,
             "state": clean_text(state["name"]), "state_type": str(state.get("type") or ""),
-            "project": project}
+            "project": project, "project_url": (node.get("project") or {}).get("url")}
 
 
 def _comment(node: dict, ident: str, url, project: str | None) -> dict | None:
@@ -1108,12 +1121,14 @@ def _write_cycle(conn, by_target, comments, observations, good, t, result) -> No
         if prev and prev[1] and obs["updated"] <= prev[1]:
             continue  # nothing newer than what issue_states holds
         if prev and prev[0] != obs["state"]:
+            result.add_transition(obs["project"], obs.get("project_url"), ident)
             own = own_states.get(ident)
             mine = (own is not None and own[0] == obs["state"] and own[1] is not None
                     and (prev[1] is None or own[1] >= prev[1] - CURSOR_OVERLAP))
             if not mine:
                 emit(f"state:{ident}:{linear_ts(obs['updated'])}", obs["updated"],
-                     _line(ident, f"{prev[0]} → {obs['state']}", obs["url"]),
+                     _line(ident, f"{prev[0]} → {obs['state']}", obs["url"])
+                     + graph_wake_suffix(obs.get("project_url")),
                      concerned(ident, obs["project"]))
         conn.execute(
             "INSERT INTO issue_states (identifier, state, state_type, updated_at) VALUES (?, ?, ?, ?)"
@@ -1467,6 +1482,7 @@ def doctor_checks(conn: sqlite3.Connection, state_dir: Path) -> list[tuple[str, 
                              f" renewed {_age((t - renewed).total_seconds())} ago"))
     if not sessions:
         checks.append(("ok", "no open subscription"))
+    checks += graph_doctor_checks(state_dir)
     return checks
 
 
@@ -1600,6 +1616,7 @@ def _cycle_summary(expired: dict, result: CycleResult) -> str:
 def daemon_cycle(state_dir: Path, desktop_dir) -> str:
     """Expire then poll once; returns the log text. Never raises an Exception."""
     daemon_beat(state_dir)
+    result = None
     try:
         conn = connect(state_dir)
         try:
@@ -1611,6 +1628,8 @@ def daemon_cycle(state_dir: Path, desktop_dir) -> str:
         text = f"cycle failed: {type(exc).__name__}: {exc}"
     else:
         text = _cycle_summary(expired, result)
+    if result is not None:
+        graph_after_cycle(state_dir, result)  # LW-11: never raises
     daemon_beat(state_dir)
     return text
 
@@ -2065,6 +2084,389 @@ def register_claude_adapter(sub, common) -> None:
 # ── end of Claude adapter (LW-8) ──────────────────────────────────────────────
 
 
+# ── dependency graph (LW-11) ──────────────────────────────────────────────────
+#   lw graph (--project SLUG|URL | --issue TT-123) [--no-create]
+#
+# Keeps ~/linear-graphs/<slug>.svg (+ .json) the current picture of a project's
+# dependencies. <slug> is the project URL's name part without the slugId:
+# .../project/calendar-notifications-seule-and-iam-agence-fa180bf386d1 -> that name.
+# A pair already in the folder whose .json names the project (same slugId) keeps its
+# own name, whatever it is: graphs made by hand carry the project's title, not its URL
+# slug, and a second file would be a stale twin. LW_GRAPH_DIR overrides the folder.
+# One pair per project, always overwritten in place.
+#
+# The renderer is scripts/linear_deps.py (LW_GRAPH_RENDERER overrides it: tests),
+# run with this interpreter. It writes next to the final files under temp names,
+# then os.replace() swaps them in: nobody ever opens half a graph, and a failed
+# run leaves the previous pair untouched. The key goes into the child's
+# environment only (load_linear_key), never argv, a log or a status file.
+#
+# Concurrency: one flock per project (<state_dir>/graph-<slug>.lock). A request
+# touches graph-<slug>.pending first, then tries the lock without waiting; the
+# lock holder renders while the pending mark exists, consuming it before each
+# run, and re-checks it after releasing the lock. So N requests during a render
+# cost exactly one more run, and a request is never lost (it either takes the
+# lock or is seen by the holder's last check).
+#
+# Triggers: the daemon, once per project with an observed state transition in
+# a cycle (own moves included: the own-writes filter only decides who is woken);
+# the own-writes hook, a detached `lw graph --issue <id> --no-create` after it
+# records a state move; and by hand. --no-create never makes a new file: it
+# rebuilds a project that has an open project subscription or whose file exists.
+# LW_GRAPH=0 turns the automatic triggers (and the wake-line suffix) off.
+#
+# Each rebuild is logged in daemon.log; its outcome is kept per project in
+# <state_dir>/graph-<slug>.json for `lw doctor`.
+GRAPH_DEFAULT_DIR = "linear-graphs"
+GRAPH_TIMEOUT_S = 120.0
+GRAPH_MESSAGE_MAX = 200
+GRAPH_PROJECT_URL_RE = re.compile(r"^https://linear\.app/[A-Za-z0-9_-]+/project/([^/?#]+)")
+GRAPH_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]")
+
+GRAPH_PROJECT_QUERY = """query GraphProject($slug: String!) {
+  projects(first: 1, filter: {slugId: {eq: $slug}}) { nodes { slugId url } }
+}"""
+
+GRAPH_ISSUE_QUERY = """query GraphIssueProject($ids: [ID!]) {
+  issues(first: 1, filter: {id: {in: $ids}}) { nodes { identifier project { slugId url } } }
+}"""
+
+
+class GraphOutcome:
+    """status: rebuilt, failed, skipped or coalesced."""
+
+    def __init__(self, status: str, slug: str, path: Path, seconds: float = 0.0, message: str = ""):
+        self.status, self.slug, self.path = status, slug, path
+        self.seconds, self.message = seconds, message
+
+
+def graph_enabled() -> bool:
+    return os.environ.get("LW_GRAPH") != "0"
+
+
+def graph_dir() -> Path:
+    env = os.environ.get("LW_GRAPH_DIR")
+    return Path(env).expanduser() if env else Path.home() / GRAPH_DEFAULT_DIR
+
+
+def graph_slug(project_url: str) -> str:
+    """The graph file stem of a project URL: its name part, without the slugId."""
+    match = GRAPH_PROJECT_URL_RE.match(project_url.strip())
+    if not match:
+        raise LwError(f"not a Linear project URL: {project_url!r}"
+                      " (expected https://linear.app/<workspace>/project/<name>-<slugId>)")
+    name, _, tail = match.group(1).rpartition("-")
+    slug = GRAPH_UNSAFE_RE.sub("-", name).lstrip(".-")
+    if not slug or not SLUG_ID_RE.match(tail.lower()):
+        raise LwError(f"no project name before the slugId in {project_url!r}")
+    return slug
+
+
+def _graph_slug_id(project_url: str) -> str | None:
+    match = GRAPH_PROJECT_URL_RE.match(project_url.strip())
+    return match.group(1).rpartition("-")[2].lower() if match else None
+
+
+def graph_stem(project_url: str) -> str:
+    """The file stem of a project's graph: an existing pair keeps its name, else graph_slug().
+
+    Hand-made graphs were named after the project's title, not its URL
+    (broker-pa-run-evolutions-courant.json holds the project
+    .../broker-pa-run-and-evolutions-courant-5842ed0c2bcd). A pair whose .json
+    names this project (same slugId) is reused, so a rebuild overwrites it
+    instead of leaving a stale twin beside it.
+    """
+    fallback = graph_slug(project_url)
+    slug_id = _graph_slug_id(project_url)
+    try:
+        candidates = sorted(graph_dir().glob("*.json"))
+    except OSError:
+        return fallback
+    for path in candidates:
+        if path.name.startswith("."):
+            continue  # a temp file of a running rebuild
+        project = _read_graph_status(path).get("project")
+        url = project.get("url") if isinstance(project, dict) else None
+        if isinstance(url, str) and _graph_slug_id(url) == slug_id:
+            return path.stem
+    return fallback
+
+
+def graph_display(path: Path) -> str:
+    """A path as a human or an agent would cite it: ~/… under the home folder."""
+    try:
+        return "~/" + str(path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def graph_wake_suffix(project_url) -> str:
+    """` · graph <path>` for a wake line about a project's state move; '' when unknown."""
+    if not graph_enabled() or not isinstance(project_url, str):
+        return ""
+    try:
+        return f" · graph {graph_display(graph_dir() / f'{graph_stem(project_url)}.svg')}"
+    except LwError:
+        return ""
+
+
+def resolve_project_url(slug_id: str, state_dir: Path) -> str:
+    body = linear_api(GRAPH_PROJECT_QUERY, {"slug": slug_id}, state_dir=state_dir)
+    for node in ((body.get("data") or {}).get("projects") or {}).get("nodes") or []:
+        if isinstance(node, dict) and isinstance(node.get("url"), str):
+            return node["url"]
+    raise LwError(f"Linear has no project with slugId {slug_id}")
+
+
+def resolve_issue_project(ident: str, state_dir: Path) -> tuple[str, str]:
+    """(slugId, url) of the project an issue belongs to."""
+    body = linear_api(GRAPH_ISSUE_QUERY, {"ids": [ident]}, state_dir=state_dir)
+    for node in ((body.get("data") or {}).get("issues") or {}).get("nodes") or []:
+        project = node.get("project") if isinstance(node, dict) else None
+        if isinstance(project, dict) and isinstance(project.get("url"), str):
+            return str(project.get("slugId") or normalize_project(project["url"])), project["url"]
+        if isinstance(node, dict):
+            raise LwError(f"{ident} belongs to no project: nothing to draw")
+    raise LwError(f"Linear has no issue {ident}")
+
+
+def graph_watched(state_dir: Path, slug_id: str) -> bool:
+    conn = connect(state_dir)
+    try:
+        return conn.execute(
+            "SELECT 1 FROM subscriptions WHERE kind = 'project' AND target = ?"
+            " AND closed_at IS NULL LIMIT 1", (slug_id,)).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def _graph_status_path(state_dir: Path, slug: str) -> Path:
+    return state_dir / f"graph-{slug}.json"
+
+
+def _read_graph_status(path: Path) -> dict:
+    try:
+        status = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return status if isinstance(status, dict) else {}
+
+
+def _record_graph(state_dir: Path, slug: str, ok: bool, message: str = "") -> None:
+    """Merge the outcome of a rebuild into graph-<slug>.json (atomic, 0600)."""
+    try:
+        path = _graph_status_path(state_dir, slug)
+        status = _read_graph_status(path)
+        if ok:  # a success clears the failure: timestamps have 1 s resolution, never compare them
+            status["last_ok"] = fmt(now())
+            status.pop("last_error", None)
+        else:
+            status["last_error"] = {"at": fmt(now()), "message": message}
+        tmp = path.with_name(f".{path.name}.{os.getpid()}")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            json.dump(status, fh, indent=2)
+        os.replace(tmp, path)
+    except OSError:
+        pass  # the status file is for doctor; never fail a rebuild over it
+
+
+def _graph_failure(message: str, key: str | None) -> str:
+    if key:
+        message = message.replace(key, "<key>")
+    return " ".join(message.split())[:GRAPH_MESSAGE_MAX]
+
+
+def _render_graph(slug: str, url: str, svg: Path, js: Path) -> GraphOutcome:
+    """One renderer run, then the swap. Never raises; failed leaves svg and js alone."""
+    key = load_linear_key()
+    started = time.monotonic()
+
+    def failed(message: str) -> GraphOutcome:
+        return GraphOutcome("failed", slug, svg, time.monotonic() - started,
+                            _graph_failure(message, key))
+
+    if not key:
+        return failed("no LINEAR_API_KEY in the environment nor in ~/.config/linear/env")
+    renderer = os.environ.get("LW_GRAPH_RENDERER") or str(
+        Path(os.path.realpath(__file__)).parent / "linear_deps.py")
+    try:
+        timeout = float(os.environ.get("LW_GRAPH_TIMEOUT") or GRAPH_TIMEOUT_S)
+    except ValueError:
+        timeout = GRAPH_TIMEOUT_S
+    folder = svg.parent
+    tmp_svg = folder / f".{slug}.{os.getpid()}.svg.tmp"
+    tmp_json = folder / f".{slug}.{os.getpid()}.json.tmp"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        try:
+            proc = subprocess.run(
+                [sys.executable, renderer, url, "-o", str(tmp_svg), "--json-out", str(tmp_json)],
+                capture_output=True, text=True, timeout=timeout, cwd="/",
+                env=dict(os.environ, LINEAR_API_KEY=key),
+            )
+        except subprocess.TimeoutExpired:
+            return failed(f"renderer timed out after {timeout:g} s")
+        except OSError as exc:
+            return failed(f"cannot run the renderer: {exc.strerror or exc}")
+        if proc.returncode != 0:
+            lines = [l for l in (proc.stderr or proc.stdout or "").splitlines() if l.strip()]
+            return failed(f"renderer exit {proc.returncode}: {lines[-1] if lines else 'no output'}")
+        if not tmp_svg.is_file() or tmp_svg.stat().st_size == 0 or not tmp_json.is_file():
+            return failed("renderer exited 0 but wrote no graph")
+        os.replace(tmp_json, js)
+        os.replace(tmp_svg, svg)
+    except OSError as exc:
+        return failed(f"cannot write the graph: {exc.strerror or exc}")
+    finally:
+        for tmp in (tmp_svg, tmp_json):
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+    return GraphOutcome("rebuilt", slug, svg, time.monotonic() - started)
+
+
+def rebuild_graph(state_dir: Path, slug_id: str, url: str, *, create: bool = True) -> GraphOutcome:
+    """Rebuild a project's graph, coalescing with a rebuild already running.
+
+    create=False (the hook path) only rebuilds a project that has an open
+    project subscription or whose graph file exists. Raises LwError for a URL
+    that has no project name; renderer failures come back as status "failed".
+    """
+    state_dir = Path(state_dir)
+    slug = graph_stem(url)
+    folder = graph_dir()
+    svg, js = folder / f"{slug}.svg", folder / f"{slug}.json"
+    if not create and not svg.exists() and not graph_watched(state_dir, slug_id):
+        daemon_log(state_dir, f"graph {slug} skipped (no graph file yet, project not watched)")
+        return GraphOutcome("skipped", slug, svg)
+    state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+    pending = state_dir / f"graph-{slug}.pending"
+    pending.touch()
+    outcome: GraphOutcome | None = None
+    while True:
+        fd = os.open(state_dir / f"graph-{slug}.lock", os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:  # a rebuild is running: it will see our pending mark
+                return outcome or GraphOutcome("coalesced", slug, svg)
+            while True:
+                try:
+                    pending.unlink()
+                except FileNotFoundError:
+                    break
+                outcome = _render_graph(slug, url, svg, js)
+                _record_graph(state_dir, slug, outcome.status == "rebuilt", outcome.message)
+                if outcome.status == "rebuilt":
+                    daemon_log(state_dir, f"graph {slug} rebuilt in {outcome.seconds:.1f}s")
+                else:
+                    daemon_log(state_dir, f"graph {slug} failed after {outcome.seconds:.1f}s:"
+                                          f" {outcome.message}")
+                    break
+        finally:
+            os.close(fd)  # releases the lock
+        if outcome is not None and outcome.status == "failed":
+            try:
+                pending.unlink()
+            except OSError:
+                pass
+            return outcome
+        if not pending.exists():
+            return outcome or GraphOutcome("coalesced", slug, svg)
+
+
+def graph_after_cycle(state_dir: Path, result: CycleResult) -> None:
+    """One rebuild per project that had a state transition in the cycle. Never raises."""
+    if not graph_enabled():
+        return
+    for slug_id, entry in result.transitions.items():
+        if not slug_id:
+            continue  # an issue with no project has no graph
+        try:
+            rebuild_graph(state_dir, slug_id,
+                          entry["url"] or resolve_project_url(slug_id, state_dir))
+        except Exception as exc:  # noqa: BLE001 — a graph never fails the cycle
+            daemon_log(state_dir, f"graph {slug_id} failed: {type(exc).__name__}: {exc}")
+
+
+def spawn_graph_rebuild(ident: str, state_dir: Path) -> None:
+    """Start `lw graph --issue <id> --no-create` detached; returns at once, never raises."""
+    if not graph_enabled():
+        return
+    try:
+        subprocess.Popen(
+            [sys.executable, LW_SCRIPT, "graph", "--issue", ident, "--no-create",
+             "--state-dir", str(state_dir)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True, close_fds=True,
+        )
+    except OSError:
+        pass
+
+
+def graph_doctor_checks(state_dir: Path) -> list[tuple[str, str]]:
+    """One line per project that was ever rebuilt: warn while its last rebuild failed."""
+    checks: list[tuple[str, str]] = []
+    for path in sorted(Path(state_dir).glob("graph-*.json")):
+        slug = path.name[len("graph-"):-len(".json")]
+        status = _read_graph_status(path)
+        last_ok = status.get("last_ok") if isinstance(status.get("last_ok"), str) else None
+        err = status.get("last_error") if isinstance(status.get("last_error"), dict) else None
+        err_at = str(err.get("at", "")) if err else ""
+        if err:
+            checks.append(("warn", f"graph {slug}: last rebuild failed at {err_at}:"
+                                   f" {err.get('message')} (previous files kept)"))
+        elif last_ok:
+            checks.append(("ok", f"graph {slug}: last rebuild ok at {last_ok}"))
+    return checks
+
+
+def cmd_graph(conn: sqlite3.Connection, args) -> int:
+    state_dir = Path(conn.execute("PRAGMA database_list").fetchone()["file"]).parent
+    conn.close()  # rebuild_graph opens its own connection
+    try:
+        if args.project:
+            slug_id = normalize_project(args.project)
+            url = args.project if "://" in args.project else resolve_project_url(slug_id, state_dir)
+        else:
+            slug_id, url = resolve_issue_project(normalize_issue(args.issue), state_dir)
+        outcome = rebuild_graph(state_dir, slug_id, url, create=not args.no_create)
+    except TransportError as exc:
+        print(f"lw: {exc}", file=sys.stderr)
+        return 1
+    if outcome.status == "failed":
+        print(f"lw: graph {outcome.slug} failed: {outcome.message}", file=sys.stderr)
+        return 1
+    detail = {
+        "rebuilt": f"rebuilt in {outcome.seconds:.1f}s -> {outcome.path}",
+        "skipped": "skipped (no graph file yet and the project is not watched)",
+        "coalesced": "coalesced into the rebuild already running",
+    }[outcome.status]
+    print(f"lw: graph {outcome.slug} {detail}")
+    return 0
+
+
+def register_graph(sub, common) -> None:
+    p = sub.add_parser(
+        "graph", parents=[common], help="rebuild a project's dependency graph (SVG + JSON)",
+        description="Rebuild <graph dir>/<slug>.svg and .json (default ~/linear-graphs, LW_GRAPH_DIR"
+        " overrides), replacing them atomically. A rebuild requested while one runs is coalesced.",
+    )
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument("--project", metavar="SLUG|URL")
+    target.add_argument("--issue", metavar="TT-123", help="the project this issue belongs to")
+    p.add_argument(
+        "--no-create", action="store_true",
+        help="never create a file: rebuild only a watched project or an existing graph",
+    )
+    p.set_defaults(func=cmd_graph)
+
+
+# ── end of dependency graph (LW-11) ───────────────────────────────────────────
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
@@ -2107,6 +2509,7 @@ def build_parser() -> argparse.ArgumentParser:
     daemon_actions = register_poll(sub, common)
     register_daemon(daemon_actions, common)
     register_claude_adapter(sub, common)
+    register_graph(sub, common)
     return parser
 
 

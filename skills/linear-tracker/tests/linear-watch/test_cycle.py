@@ -52,7 +52,9 @@ NEWEST_LINE = (
     "https://linear.app/septeo-proptech/issue/TT-2537"
 )
 # TT-207 is Todo (unstarted) in the fixture, updated 15:48:31.600Z
-TT207_LINE = "Linear · TT-207 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-207"
+# a state move line ends with the project's graph path (LW-11); HOME is a temp dir here
+TT207_LINE = ("Linear · TT-207 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-207"
+              " · graph ~/linear-graphs/redacted-name.svg")
 
 
 def at(hhmmss: str) -> datetime:
