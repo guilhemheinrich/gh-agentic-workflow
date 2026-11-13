@@ -44,12 +44,17 @@ refuse to run from a checkout; `LW_ALLOW_CHECKOUT=1` is for tests only).
 0. **Install the skills.** From a checkout of this repository on its default
    branch, `bash install.sh` copies `skills/` into `~/.agents/skills/` (and the
    other tools' skill folders). The executable is then
-   `~/.agents/skills/linear-tracker/scripts/lw`. Link it on `PATH` for a bare
-   `lw` if you like — `lw` resolves the link to find its hooks and template:
+   `~/.agents/skills/linear-tracker/scripts/lw`. Put it on `PATH` for a bare
+   `lw` (bash, zsh and fish) — `lw` resolves the link to find its hooks and template:
 
    ```bash
-   ln -s ~/.agents/skills/linear-tracker/scripts/lw ~/.local/bin/lw
+   sh ~/.agents/skills/linear-tracker/scripts/install-lw-path.sh
    ```
+
+   It links `~/.local/bin/lw` and adds a `# >>> lw >>>` PATH block to `~/.zshrc`
+   and `~/.bashrc` plus `~/.config/fish/conf.d/lw-path.fish`, reusing any
+   `~/.local/bin` guard already there (the `conso` one). Safe to re-run;
+   `--uninstall` removes it. Open a new terminal afterwards.
 
    **Coming from the standalone `linear-watch` skill.** `install.sh` copies
    and never deletes, so the older `linear-watch` folder under `~/.agents/skills/`
