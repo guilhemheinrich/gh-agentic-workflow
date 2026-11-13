@@ -78,6 +78,7 @@ x-tag-descriptions:
   testing: Testing, unit and integration tests
   tooling: "[NEW] tooling"
   typescript: TypeScript / JavaScript
+  usage-tracking: AI usage and spend tracking per period and per model, local snapshots
   typography: "[NEW] typography"
   ui: "[NEW] ui"
   validation: Validation (Zod, Effect Schema, io-ts)
@@ -2117,3 +2118,15 @@ assets:
       Deterministic web analysis tools executable via Docker. Covers performance (Lighthouse, sitespeed.io),
       accessibility (pa11y, axe-core CLI), SEO, security headers, link checking, technology detection, and HTML
       validation. All tools produce machine-readable output without host dependencies.
+  - path: skills/ai-usage-tracking/
+    type: skill
+    category: devx-and-agentic
+    tags:
+      - usage-tracking
+      - claude
+      - docker
+      - shell
+    description: >-
+      Track AI usage and spend per period and per model with a local persistence layer: report command (conso),
+      snapshots of live out-of-plan counters, opt-in hourly timer. Ships the Claude Code on macOS environment; new
+      environments are one reference plus one scripts folder.
