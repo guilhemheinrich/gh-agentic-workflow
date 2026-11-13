@@ -87,10 +87,13 @@ run the steps below. Otherwise answer briefly, in this order:
 4. **Proposed children**: one line each (item, goal, done criterion), in the
    order you would start them, parallel ones marked.
 
-Then ask one question: may I start these children, each as its own session,
-and the ones that follow from them as they become unblocked? Phrase it so the
-answer covers the whole plan — some harnesses only let an event-driven turn
-start a session the user explicitly asked for (see the harness reference).
+Then start. Invoking this skill with a scope **is** the authorization to start
+the children that scope implies, and the ones that follow as they become
+unblocked: the summary says what starts and starts it, without asking leave.
+Ask one question only for a power the charter does not cover — production, a
+scope change, spending, a stronger-model switch the app itself gates (§5). On
+Claude Desktop, an event-driven turn can only start a session the user asked
+for; the charter's scope is that ask (see the harness reference).
 
 ## 3. Real block or pseudo-block
 
@@ -199,17 +202,48 @@ and send it as the session's first prompt. It always carries:
 - what to report back, and when to stop and ask instead of guessing.
 
 **Start every child on the model that fits its task**, whatever the tool or
-IDE. The pilot's own model is chosen for planning and arbitration; a child
-does not inherit it by default — the pilot sets it explicitly when it starts
-the child, using whatever the harness offers (a model parameter on the start
-call, a model picker, a CLI flag, an agent profile). Rule of thumb: execution
-work (coding, debugging, fixing a review remark) goes to a strong, fast coding
-model; mechanical or read-only work (collecting logs, checking a deployment,
-re-running a flaky job) can go to a lighter one; only a child that must itself
-design or arbitrate gets the pilot's tier. In Claude, for example: the pilot
-runs on Opus, and it starts its coding and debugging children on **Sonnet**.
-If the harness cannot choose a child's model, say so at startup (§2, tooling
-inventory) rather than silently running everything on the pilot's model.
+IDE. A child does not inherit the pilot's model by default; the pilot sets it
+when it starts the child, using whatever the harness offers (a model parameter,
+a picker, a CLI flag, an agent profile). Rule of thumb: execution work (coding,
+debugging, fixing a review remark) goes to a strong, fast coding model;
+mechanical or read-only work (collecting logs, checking a deployment, re-running
+a flaky job) to a lighter one; design and arbitration to a stronger one (see
+"Escalating intelligence"). In Claude: coding and debugging children on
+**Sonnet**. If the harness cannot choose a child's model, say so at startup (§2,
+tooling inventory) rather than silently running everything on the pilot's model.
+
+### Recommended pilot tier
+
+The pilot orchestrates and follows; it does not design. Recommended on Claude:
+**Sonnet at medium effort**, with the `advisor` tool (a stronger reviewer that
+sees the whole transcript) called before fixing the plan and before declaring
+done. This is a recommendation, not a prerequisite: a pilot on another tier
+works, and hands design work to children as below.
+
+### Escalating intelligence
+
+A thinking-heavy unit task that needs no interaction after its initial brief
+goes to a child **session**, not an invisible subagent: the human sees its
+reasoning in the harness's session tree and can talk to it.
+
+| Task | Tier |
+|---|---|
+| Read a project and plan it from a brief, arbitrate contradicting specs | Opus |
+| Critical security analysis, anything touching production or secrets | Fable |
+
+Exception: a small check whose answer the pilot needs inside its current turn
+may use a subagent with a model override (Claude: Agent tool, `model`). The
+advisor stays the cheap second opinion, not a substitute for these children.
+
+In Claude Desktop the child starts on the pilot's model whatever you ask, so
+the stronger model is set in two steps: read-only brief, switch, then go. Full
+procedure: `references/harness-claude-desktop.md`, "Escalating a child's model".
+
+Made-up example: a Sonnet pilot must plan milestone "Billing v2" from a brief.
+It starts a child whose brief opens with "Read-only until told to proceed",
+raises it to Opus (the app asks the human one approval; the pilot says "planning
+needs Opus"), then sends the real go. The plan appears in the tree; the pilot
+turns it into the child list.
 
 One child per independent piece; two children never edit the same files at the
 same time. A verification child is **read-only** on shared infrastructure —
@@ -243,9 +277,12 @@ An item is not Done without that proof when the charter asks for one.
   while it debugs.
 - **A brief that points at the pilot's conversation** ("as discussed above").
   The child cannot read it.
-- **Every child on the pilot's model.** Coding and debugging children run on a
-  coding model (Sonnet, in Claude), not on the pilot's planning model by
-  inheritance.
+- **Every child on the pilot's model.** Each child gets the tier of its task
+  (§5), not the pilot's by inheritance.
+- **Designing in the pilot, or in an invisible subagent.** Thinking-heavy
+  work goes to a visible, stronger child session.
+- **Asking leave to do what the charter already delegates.** Starting the
+  children the scope implies needs no question.
 - **Status from memory.** Calling something deployed because it was merged;
   the build after the merge can still fail.
 - **Deciding someone else's question silently.** A product or scope decision
