@@ -1,0 +1,215 @@
+{
+  "marketplace": {
+    "name": "gh-agentic-workflow",
+    "description": "Skills, agents, commands and hooks for AI-assisted development, split into focused plugins.",
+    "owner": {
+      "name": "guilhemheinrich"
+    }
+  },
+  "plugins": {
+    "foundations": {
+      "description": "Architecture patterns, coding standards, project philosophies and language-specific practices.",
+      "categories": [
+        "architecture",
+        "standards",
+        "philosophy",
+        "programming-languages"
+      ]
+    },
+    "frameworks": {
+      "description": "Framework and library usage (Nuxt, Lit, Playwright, fp-ts, MCP, ...) plus the spec templates built on them.",
+      "categories": [
+        "frameworks-and-libraries",
+        "templates-and-models"
+      ]
+    },
+    "domain": {
+      "description": "Business-domain specific skills (Hub app registration, Keycloak user registration, ...).",
+      "categories": [
+        "domain-specific"
+      ]
+    },
+    "quality": {
+      "description": "Testing, review and quality assurance: skills, QA agents and commands.",
+      "categories": [
+        "quality-assurance"
+      ]
+    },
+    "tools": {
+      "description": "Tooling, CLIs and configuration: Docker, Git, GitHub, Kubernetes, SonarQube, Makefile, ...",
+      "categories": [
+        "tools-and-configurations"
+      ]
+    },
+    "workflows": {
+      "description": "Development workflows and processes: SpecKit commands, orchestration agents, Linear, release flows.",
+      "categories": [
+        "workflows-and-processes",
+        "other"
+      ]
+    },
+    "devx-agentic": {
+      "description": "Developer experience and agent harness tooling: session titles, conversation focus, pilot sessions, skill discovery, hooks.",
+      "categories": [
+        "devx-and-agentic"
+      ]
+    }
+  },
+  "canonicalRoots": {
+    "skill": [
+      "skills/",
+      ".agents/skills/"
+    ],
+    "command": [
+      "commands/",
+      ".cursor/commands/",
+      ".specify/extensions/"
+    ],
+    "agent": [
+      "agents/"
+    ],
+    "hook": [
+      "hooks/"
+    ]
+  },
+  "hooks": {
+    "conversation-focus-prompt": {
+      "events": [
+        {
+          "event": "UserPromptSubmit"
+        }
+      ]
+    },
+    "conversation-focus-stop": {
+      "events": [
+        {
+          "event": "Stop"
+        }
+      ]
+    },
+    "pilot-reminder": {
+      "events": [
+        {
+          "event": "SessionStart"
+        },
+        {
+          "event": "UserPromptSubmit"
+        }
+      ]
+    },
+    "registry-sync-on-skill": {
+      "exclude": "repo-specific: reminds to update this repository's asset-registry.yml"
+    },
+    "session-title-ask": {
+      "events": [
+        {
+          "event": "PreToolUse",
+          "matcher": "AskUserQuestion"
+        }
+      ]
+    },
+    "session-title-close-kids": {
+      "events": [
+        {
+          "event": "UserPromptSubmit"
+        }
+      ]
+    },
+    "session-title-progress": {
+      "events": [
+        {
+          "event": "PostToolUse",
+          "matcher": "Agent|Task|Edit|Write|MultiEdit"
+        }
+      ]
+    },
+    "session-title-sync": {
+      "events": [
+        {
+          "event": "Stop"
+        }
+      ]
+    },
+    "session-title-watcher-check": {
+      "events": [
+        {
+          "event": "SessionStart"
+        }
+      ]
+    },
+    "session-title-working": {
+      "events": [
+        {
+          "event": "UserPromptSubmit"
+        }
+      ]
+    }
+  },
+  "externalReferences": {
+    "_comment": "Names that look like references but resolve to nothing this build ships. Grouped by reason; every use is listed in the build report.",
+    "skill": {
+      "unbuilt-skill-described-in-a-roadmap": [
+        "linear-watch"
+      ],
+      "test-fixture-path": [
+        "g"
+      ],
+      "relative-link-already-dangling-in-source": [
+        "scripts",
+        "shared",
+        "skills"
+      ]
+    },
+    "agent": {},
+    "slash": {
+      "http-endpoint-or-filesystem-path": [
+        "api",
+        "app",
+        "authorize",
+        "bootstrap",
+        "credits",
+        "health",
+        "healthz",
+        "info",
+        "items",
+        "logo.abcd1234.png",
+        "logout",
+        "metadata",
+        "metrics",
+        "models",
+        "providers",
+        "ready",
+        "service-token",
+        "tmp",
+        "user",
+        "var",
+        "version",
+        "work"
+      ],
+      "claude-code-builtin": [
+        "mcp",
+        "plugin",
+        "reload-plugins"
+      ],
+      "spec-kit-project-command-not-shipped-here": [
+        "dev-it",
+        "implement",
+        "index",
+        "plan",
+        "specify",
+        "speckit.memory",
+        "tasks"
+      ],
+      "command-defined-by-the-user-project-or-a-skill-workflow": [
+        "deploy",
+        "kubify",
+        "reflect",
+        "reflect-skills",
+        "review-implemented"
+      ],
+      "repo-command-not-in-registry-so-not-built": [
+        "debug"
+      ]
+    }
+  }
+}
