@@ -10,5 +10,9 @@
   "devDependencies": {
     "pi-mcp-adapter": "^2.5.1",
     "tsx": "^4.19.3"
+  },
+  "scripts": {
+    "build:plugins": "node scripts/build-plugins.mjs",
+    "test:plugins": "node --test scripts/plugin-builder/build.test.mjs"
   }
 }
