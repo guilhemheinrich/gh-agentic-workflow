@@ -361,7 +361,10 @@ cp skills/pilot-session/templates/pilot-reminder.md ~/.agents/skills/pilot-sessi
 ```
 
 Then add this entry to `~/.claude/settings.json` under `hooks` (once for each
-of the two events; it merges with the existing entries):
+of the two events; it merges with the existing entries). The hook script declares
+this wiring itself in `# @hook claude <Event>` header lines, which the Claude Code
+plugin build (`scripts/build-plugins.mjs`) turns into `hooks/hooks.json`, so the
+entry below is only for a manual, non-plugin install:
 
 ```json
 "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "bash \"$HOME/.agents/hooks/pilot-reminder.sh\"" }] }],

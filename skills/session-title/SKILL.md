@@ -534,6 +534,8 @@ is idempotent and leaves every other setting and hook untouched; pass
 `scripts/hooktools/claude-code-hooks.json`. For a manual setup, register them in
 `~/.claude/settings.json`:
 
+Each hook script declares its own wiring in `# @hook claude <Event> [matcher=…] [timeout=…]` header lines; the Claude Code plugin build (`scripts/build-plugins.mjs`) generates `hooks/hooks.json` from them, so the JSON below is only for a manual, non-plugin install.
+
 ```json
 {
   "hooks": {
