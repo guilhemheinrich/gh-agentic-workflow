@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import yaml from 'js-yaml';
 import { buildPlugins } from './build.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -36,17 +37,13 @@ function fixture(files, assets) {
   const yamlAssets = assets
     .map((a) => `  - path: ${a.path}\n    type: ${a.type}\n    category: ${a.category}\n    tags: [x]\n    description: d`)
     .join('\n');
-  fs.writeFileSync(path.join(root, 'asset-registry.yml'), `version: 1.0.0\nassets:\n${yamlAssets}\n`);
+  fs.writeFileSync(path.join(root, 'asset-registry.yml'), `version: 1.0.0\nx-category-descriptions:\n  cat-a: Alpha things\n  cat-b: Beta things\nassets:\n${yamlAssets}\n`);
   return root;
 }
 
 const miniConfig = (extra = {}) => ({
   marketplace: { name: 'm', owner: { name: 'o' }, description: 'd' },
-  plugins: {
-    alpha: { description: 'a', categories: ['cat-a'] },
-    beta: { description: 'b', categories: ['cat-b'] },
-  },
-  canonicalRoots: { skill: ['skills/', '.agents/skills/'], command: ['commands/'], agent: ['agents/'], hook: ['hooks/'] },
+  canonicalRoots: { skill: ['skills/'], command: ['commands/', '.cursor/commands/'], agent: ['agents/'], hook: ['hooks/'] },
   hooks: {},
   externalReferences: { skill: {}, agent: {}, slash: {} },
   ...extra,
@@ -86,7 +83,10 @@ test('real repo: entry names equal manifest names, no version, relative sources'
     assert.equal('version' in manifest, false);
     assert.equal('version' in entry, false);
     assert.match(entry.source, /^\.\/plugins\/[a-z0-9-]+$/);
+    for (const dep of manifest.dependencies ?? []) assert.ok(mkt.plugins.some((p) => p.name === dep), `unknown dependency ${dep}`);
   }
+  const registry = JSON.parse(JSON.stringify(yaml.load(fs.readFileSync(path.join(repo, 'asset-registry.yml'), 'utf8'))));
+  for (const entry of mkt.plugins) assert.ok(entry.name in registry['x-category-descriptions'], `${entry.name} is not a registry category`);
 });
 
 test('real repo: hooks.json uses CLAUDE_PLUGIN_ROOT and never ships repo-specific hooks', () => {
@@ -159,7 +159,6 @@ test('references are rewritten through the name -> plugin mapping', () => {
       'skills/two/SKILL.md': 'x\n',
       'skills/three/scripts/x.sh': '#!/bin/sh\n',
       'skills/three/SKILL.md': 'y\n',
-      '.agents/skills/viaagents/SKILL.md': 'Path: .agents/skills/two/\n',
       'commands/push.md': 'p\n',
       'agents/helper.md': 'h\n',
     },
@@ -167,7 +166,6 @@ test('references are rewritten through the name -> plugin mapping', () => {
       { path: 'skills/one/', type: 'skill', category: 'cat-a' },
       { path: 'skills/two/', type: 'skill', category: 'cat-a' },
       { path: 'skills/three/', type: 'skill', category: 'cat-b' },
-      { path: '.agents/skills/viaagents/', type: 'skill', category: 'cat-a' },
       { path: 'commands/push.md', type: 'command', category: 'cat-a' },
       { path: 'agents/helper.md', type: 'agent', category: 'cat-b' },
     ],
@@ -175,14 +173,29 @@ test('references are rewritten through the name -> plugin mapping', () => {
   const out = tmp();
   const r = buildPlugins({ root, config: miniConfig(), out, write: true });
   assert.deepEqual(r.errors, []);
-  const one = fs.readFileSync(path.join(out, 'plugins/alpha/skills/one/SKILL.md'), 'utf8');
-  assert.match(one, /Same plugin: skills\/two\/ and skill `alpha:two` and \/alpha:push/);
-  assert.match(one, /skill `beta:three`, `beta:three` skill, beta:three\/scripts\/x\.sh, \[l\]\(beta:three\/SKILL\.md\)/);
-  assert.match(one, /agent `beta:helper`, subagent_type: beta:helper/);
+  const one = fs.readFileSync(path.join(out, 'plugins/cat-a/skills/one/SKILL.md'), 'utf8');
+  assert.match(one, /Same plugin: skills\/two\/ and skill `cat-a:two` and \/cat-a:push/);
+  assert.match(one, /skill `cat-b:three`, `cat-b:three` skill, cat-b:three\/scripts\/x\.sh, \[l\]\(cat-b:three\/SKILL\.md\)/);
+  assert.match(one, /agent `cat-b:helper`, subagent_type: cat-b:helper/);
   assert.match(one, /~\/\.agents\/skills\/three\//);
-  const via = fs.readFileSync(path.join(out, 'plugins/alpha/skills/viaagents/SKILL.md'), 'utf8');
-  assert.match(via, /Path: skills\/two\//);
-  assert.ok(r.plugins.get('alpha').deps.has('beta'));
+  assert.ok(r.plugins.get('cat-a').deps.has('cat-b'));
+});
+
+test('plugin = category and dependencies are generated from cross-plugin references', () => {
+  const root = fixture(
+    { 'skills/one/SKILL.md': 'See skill `two`.\n', 'skills/two/SKILL.md': 'See skill `one`.\n', 'skills/solo/SKILL.md': 'none\n' },
+    [
+      { path: 'skills/one/', type: 'skill', category: 'cat-a' },
+      { path: 'skills/two/', type: 'skill', category: 'cat-b' },
+      { path: 'skills/solo/', type: 'skill', category: 'cat-a' },
+    ],
+  );
+  const out = tmp();
+  const r = buildPlugins({ root, config: miniConfig(), out, write: true });
+  assert.deepEqual(r.errors, []);
+  const read = (p) => JSON.parse(fs.readFileSync(path.join(out, `plugins/${p}/.claude-plugin/plugin.json`), 'utf8'));
+  assert.deepEqual(read('cat-a'), { name: 'cat-a', description: 'Alpha things', author: { name: 'o' }, dependencies: ['cat-b'] });
+  assert.deepEqual(read('cat-b').dependencies, ['cat-a']);
 });
 
 test('hooks: repo-specific and cross-plugin hooks are excluded, generic ones wired', () => {
@@ -214,32 +227,32 @@ test('hooks: repo-specific and cross-plugin hooks are excluded, generic ones wir
   const out = tmp();
   const r = buildPlugins({ root, config, out, write: true });
   assert.deepEqual(r.errors, []);
-  const hj = JSON.parse(fs.readFileSync(path.join(out, 'plugins/alpha/hooks/hooks.json'), 'utf8'));
+  const hj = JSON.parse(fs.readFileSync(path.join(out, 'plugins/cat-a/hooks/hooks.json'), 'utf8'));
   assert.deepEqual(hj, {
     hooks: { Stop: [{ hooks: [{ type: 'command', command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/ok.sh"' }] }] },
   });
-  assert.ok(fs.existsSync(path.join(out, 'plugins/alpha/hooks/ok.sh')));
-  for (const n of ['uses-registry', 'crosses', 'unwired']) assert.ok(!fs.existsSync(path.join(out, `plugins/alpha/hooks/${n}.sh`)));
+  assert.ok(fs.existsSync(path.join(out, 'plugins/cat-a/hooks/ok.sh')));
+  for (const n of ['uses-registry', 'crosses', 'unwired']) assert.ok(!fs.existsSync(path.join(out, `plugins/cat-a/hooks/${n}.sh`)));
   assert.equal(r.report.filter((l) => /^ {2}(uses-registry|crosses|unwired):/.test(l)).length, 3);
 });
 
 test('drift is reported: missing path, duplicate, unregistered', () => {
   const root = fixture(
     {
-      'skills/dup/SKILL.md': 'canonical\n',
-      '.agents/skills/dup/SKILL.md': 'copy\n',
+      'commands/dup.md': 'canonical\n',
+      '.cursor/commands/dup.md': 'copy\n',
       'skills/orphan/SKILL.md': 'x\n',
     },
     [
-      { path: 'skills/dup/', type: 'skill', category: 'cat-a' },
-      { path: '.agents/skills/dup/', type: 'skill', category: 'cat-a' },
-      { path: '.agents/skills/gone/SKILL.md', type: 'skill', category: 'cat-a' },
+      { path: 'commands/dup.md', type: 'command', category: 'cat-a' },
+      { path: '.cursor/commands/dup.md', type: 'command', category: 'cat-a' },
+      { path: 'skills/gone/', type: 'skill', category: 'cat-a' },
     ],
   );
   const r = buildPlugins({ root, config: miniConfig(), out: tmp(), write: false });
   const text = r.report.join('\n');
   assert.match(text, /\[MISSING_PATH\] skill 'gone'/);
-  assert.match(text, /\[DUPLICATE_DROPPED\] skill 'dup'.*CONTENT DIFFERS/);
+  assert.match(text, /\[DUPLICATE_DROPPED\] command 'dup'.*CONTENT DIFFERS/);
   assert.match(text, /\[UNREGISTERED\] skill 'orphan'/);
   assert.equal(r.drift, 3);
 });
