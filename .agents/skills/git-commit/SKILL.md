@@ -1,5 +1,0 @@
----
-tags:
-  - git
----
-modified content
