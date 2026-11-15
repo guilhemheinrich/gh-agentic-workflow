@@ -35,15 +35,13 @@ export function buildPlugins({ root, config, out, write }) {
   const errors = [];
   const report = [];
 
-  // ---- grouping: category -> plugin ------------------------------------
-  const pluginOfCategory = new Map();
-  for (const [plugin, def] of Object.entries(config.plugins)) {
-    for (const c of def.categories) pluginOfCategory.set(c, plugin);
-  }
+  // ---- grouping: one plugin per registry category (purely mechanical) ----
+  const categoryDescriptions = registry['x-category-descriptions'] ?? {};
   for (const a of assets) {
-    a.plugin = pluginOfCategory.get(a.category);
-    if (!a.plugin) errors.push(`${a.type} '${a.name}': category '${a.category}' is not mapped to a plugin`);
+    a.plugin = a.category;
+    if (!categoryDescriptions[a.category]) errors.push(`${a.type} '${a.name}': category '${a.category}' has no x-category-descriptions entry`);
   }
+  const describePlugin = (p) => String(categoryDescriptions[p] ?? p).replace(/\s+/g, ' ').trim();
   const live = assets.filter((a) => a.plugin);
 
   // ---- hooks: decide inclusion -----------------------------------------
@@ -137,14 +135,16 @@ export function buildPlugins({ root, config, out, write }) {
   }
   const pluginNames = [...plugins.keys()].sort();
   for (const p of pluginNames) {
-    const manifest = { name: p, description: config.plugins[p].description, author: config.marketplace.owner };
+    const manifest = { name: p, description: describePlugin(p), author: config.marketplace.owner };
+    const dependencies = [...plugins.get(p).deps.keys()].sort();
+    if (dependencies.length) manifest.dependencies = dependencies;
     planOf(p).files.set('.claude-plugin/plugin.json', { buf: Buffer.from(json(manifest)), mode: 0o644 });
   }
   const marketplace = {
     name: config.marketplace.name,
     owner: config.marketplace.owner,
     description: config.marketplace.description,
-    plugins: pluginNames.map((p) => ({ name: p, source: `./plugins/${p}`, description: config.plugins[p].description })),
+    plugins: pluginNames.map((p) => ({ name: p, source: `./plugins/${p}`, description: describePlugin(p) })),
   };
 
   // ---- report ------------------------------------------------------------

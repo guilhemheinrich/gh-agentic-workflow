@@ -4,7 +4,7 @@
 // This module finds references between assets in four syntactic forms and
 // rewrites them through one mapping (name -> owning plugin):
 //
-//   path     skills/<name>[/...] and .agents/skills/<name>[/...]
+//   path     skills/<name>[/...]
 //   relative ../<name>/... between sibling skills (resolved from the file's depth)
 //   slash    /<name>  (known command or skill names; backticked unknown ones fail)
 //   skill    skill `<name>`  |  `<name>` skill
@@ -19,7 +19,7 @@ const CMD = String.raw`[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)*`;
 const RE = new RegExp(
   [
     // path: not preceded by ~/, $HOME/, another path segment or a word char
-    String.raw`(?<path>(?<![\w~/$}.-])(?<agentsdir>\.agents\/)?skills\/(?<pname>[^\s/\`'")\],;:]+)(?<prest>\/[^\s\`'")\]]*)?)`,
+    String.raw`(?<path>(?<![\w~/$}.-])skills\/(?<pname>[^\s/\`'")\],;:]+)(?<prest>\/[^\s\`'")\]]*)?)`,
     // relative sibling-skill link: ../<name>/ (only acted on when it lands in skills/)
     String.raw`(?<rel>(?<![\w./~$}-])(?<ups>(?:\.\.\/)+)(?<rname>[a-z0-9][a-z0-9-]*)(?=\/))`,
     // skill `x` | skills `x`

@@ -132,7 +132,6 @@ export function resolveAssets(root, registry, config) {
     }
   };
   scan('skill', 'skills', (e) => e.isDirectory(), (e) => e.name);
-  scan('skill', '.agents/skills', (e) => e.isDirectory(), (e) => e.name);
   scan('agent', 'agents', (e) => e.name.endsWith('.md'), (e) => e.name.replace(/\.md$/, ''));
   scan('command', 'commands', (e) => e.name.endsWith('.md'), (e) => e.name.replace(/\.md$/, ''));
   scan('hook', 'hooks', (e) => e.name.endsWith('.sh'), (e) => e.name.replace(/\.sh$/, ''));

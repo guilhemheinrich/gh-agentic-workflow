@@ -16,9 +16,9 @@ export function checkHook(name, source, hookConfig, skillsOfPlugin) {
   if (cfg.exclude) return { include: false, reason: cfg.exclude };
   if (/asset-registry\.yml/.test(source)) return { include: false, reason: 'reads asset-registry.yml (repo-specific)' };
   const missing = new Set();
-  for (const m of source.matchAll(/(?<![\w~$}.-])(?:\.agents\/)?skills\/([a-z0-9][a-z0-9-]*)/g)) {
+  for (const m of source.matchAll(/(?<![\w~$}.-])skills\/([a-z0-9][a-z0-9-]*)/g)) {
     // `$here/../skills/x/...` is preceded by '/', which the lookbehind lets through
-    // only for the relative-lookup idiom; absolute ~/.agents/skills paths are skipped.
+    // only for the relative-lookup idiom.
     if (!skillsOfPlugin.has(m[1])) missing.add(m[1]);
   }
   for (const m of source.matchAll(/\.\.\/skills\/([a-z0-9][a-z0-9-]*)/g)) {
