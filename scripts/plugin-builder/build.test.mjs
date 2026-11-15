@@ -203,10 +203,11 @@ test('hooks: repo-specific and cross-plugin hooks are excluded, generic ones wir
     {
       'skills/one/SKILL.md': 'x\n',
       'skills/other/SKILL.md': 'x\n',
-      'hooks/ok.sh': '#!/bin/bash\nexec "$(dirname "$0")/../skills/one/run.sh"\n',
-      'hooks/uses-registry.sh': '#!/bin/bash\ngrep x asset-registry.yml\n',
-      'hooks/crosses.sh': '#!/bin/bash\nsource "$(dirname "$0")/../skills/other/run.sh"\n',
+      'hooks/ok.sh': '#!/bin/bash\n# @hook claude Stop timeout=7\nexec "$(dirname "$0")/../skills/one/run.sh"\n',
+      'hooks/uses-registry.sh': '#!/bin/bash\n# @hook claude Stop\ngrep x asset-registry.yml\n',
+      'hooks/crosses.sh': '#!/bin/bash\n# @hook claude Stop\nsource "$(dirname "$0")/../skills/other/run.sh"\n',
       'hooks/unwired.sh': '#!/bin/bash\n',
+      'hooks/excluded.sh': '#!/bin/bash\n# @hook claude Stop\n# @plugin-exclude repo-specific\n',
     },
     [
       { path: 'skills/one/', type: 'skill', category: 'cat-a' },
@@ -215,25 +216,34 @@ test('hooks: repo-specific and cross-plugin hooks are excluded, generic ones wir
       { path: 'hooks/uses-registry.sh', type: 'hook', category: 'cat-a' },
       { path: 'hooks/crosses.sh', type: 'hook', category: 'cat-a' },
       { path: 'hooks/unwired.sh', type: 'hook', category: 'cat-a' },
+      { path: 'hooks/excluded.sh', type: 'hook', category: 'cat-a' },
     ],
   );
-  const config = miniConfig({
-    hooks: {
-      ok: { events: [{ event: 'Stop' }] },
-      'uses-registry': { events: [{ event: 'Stop' }] },
-      crosses: { events: [{ event: 'Stop' }] },
-    },
-  });
   const out = tmp();
-  const r = buildPlugins({ root, config, out, write: true });
+  const r = buildPlugins({ root, config: miniConfig(), out, write: true });
   assert.deepEqual(r.errors, []);
   const hj = JSON.parse(fs.readFileSync(path.join(out, 'plugins/cat-a/hooks/hooks.json'), 'utf8'));
   assert.deepEqual(hj, {
-    hooks: { Stop: [{ hooks: [{ type: 'command', command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/ok.sh"' }] }] },
+    hooks: { Stop: [{ hooks: [{ type: 'command', command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/ok.sh"', timeout: 7 }] }] },
   });
   assert.ok(fs.existsSync(path.join(out, 'plugins/cat-a/hooks/ok.sh')));
-  for (const n of ['uses-registry', 'crosses', 'unwired']) assert.ok(!fs.existsSync(path.join(out, `plugins/cat-a/hooks/${n}.sh`)));
-  assert.equal(r.report.filter((l) => /^ {2}(uses-registry|crosses|unwired):/.test(l)).length, 3);
+  for (const n of ['uses-registry', 'crosses', 'unwired', 'excluded']) assert.ok(!fs.existsSync(path.join(out, `plugins/cat-a/hooks/${n}.sh`)));
+  assert.equal(r.report.filter((l) => /^ {2}(uses-registry|crosses|unwired|excluded):/.test(l)).length, 4);
+});
+
+test('hook headers agree with the installer manifest scripts/hooktools/claude-code-hooks.json', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/hooktools/claude-code-hooks.json'), 'utf8'));
+  const fromManifest = [];
+  for (const [event, groups] of Object.entries(manifest.hooks)) {
+    for (const g of groups) for (const h of g.hooks) fromManifest.push(`${path.basename(h.command.match(/[\w-]+\.sh/)[0], '.sh')} ${event} ${g.matcher ?? ''}`);
+  }
+  const fromHeaders = [];
+  for (const name of fs.readdirSync(path.join(repo, 'hooks')).filter((f) => f.endsWith('.sh'))) {
+    for (const m of fs.readFileSync(path.join(repo, 'hooks', name), 'utf8').matchAll(/^# @hook claude (\S+)(?: matcher=(\S+))?/gm)) {
+      fromHeaders.push(`${name.replace(/\.sh$/, '')} ${m[1]} ${m[2] ?? ''}`);
+    }
+  }
+  for (const entry of fromManifest) assert.ok(fromHeaders.includes(entry), `manifest wiring '${entry}' missing from hook headers`);
 });
 
 test('drift is reported: missing path, duplicate, unregistered', () => {

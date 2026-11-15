@@ -55,8 +55,8 @@ export function buildPlugins({ root, config, out, write }) {
       continue;
     }
     const src = fs.readFileSync(path.join(root, a.rel), 'utf8');
-    const verdict = checkHook(a.name, src, config.hooks, skillsOf.get(a.plugin) ?? new Set());
-    if (verdict.include) builtAssets.push(a);
+    const verdict = checkHook(a.name, src, skillsOf.get(a.plugin) ?? new Set());
+    if (verdict.include) builtAssets.push({ ...a, events: verdict.events });
     else excludedHooks.push(`${a.name}: ${verdict.reason}`);
   }
 
@@ -129,9 +129,9 @@ export function buildPlugins({ root, config, out, write }) {
 
   // ---- manifests ---------------------------------------------------------
   const hooksOf = new Map();
-  for (const a of builtAssets) if (a.type === 'hook') (hooksOf.get(a.plugin) ?? hooksOf.set(a.plugin, []).get(a.plugin)).push(a.name);
+  for (const a of builtAssets) if (a.type === 'hook') (hooksOf.get(a.plugin) ?? hooksOf.set(a.plugin, []).get(a.plugin)).push({ name: a.name, events: a.events });
   for (const [p, names] of hooksOf) {
-    planOf(p).files.set('hooks/hooks.json', { buf: Buffer.from(json(buildHooksJson(names, config.hooks))), mode: 0o644 });
+    planOf(p).files.set('hooks/hooks.json', { buf: Buffer.from(json(buildHooksJson(names))), mode: 0o644 });
   }
   const pluginNames = [...plugins.keys()].sort();
   for (const p of pluginNames) {

@@ -104,8 +104,8 @@ most plugins drag in a few others until the categories are reworked.
 `hooks/hooks.json` is generated per plugin with commands of the form
 `bash "${CLAUDE_PLUGIN_ROOT}/hooks/<name>.sh"`. A hook is shipped only if all hold:
 
-1. ``config.json` `hooks.<name>` declares its events/matchers (registry entries carry no event, only prose comments in the scripts; wiring copied from the session-title skill doc);
-2. it has no `exclude` reason;
+1. its own header declares the wiring, one line per event: `# @hook claude <Event> [matcher=<regex>] [timeout=<seconds>]`. The hook file is the single source of truth, and another harness can add `# @hook <harness> ...` lines. A test checks the headers against the installer manifest `scripts/hooktools/claude-code-hooks.json`;
+2. it has no `# @plugin-exclude <reason>` line (repo-specific hooks carry one);
 3. its source never mentions `asset-registry.yml` (this repo's own file);
 4. every `skills/<x>` path it uses is built into the **same** plugin (hooks find skill scripts via `hooks/../skills/<x>/`, and plugins cannot see each other).
 
