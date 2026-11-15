@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude UserPromptSubmit timeout=5
 # hooks/conversation-focus-prompt.sh
 #
 # Claude Code UserPromptSubmit hook — the "before the reply" half of the

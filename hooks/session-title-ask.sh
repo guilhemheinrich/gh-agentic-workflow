@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude PreToolUse matcher=AskUserQuestion
 # hooks/session-title-ask.sh
 #
 # Claude Code PreToolUse hook, matcher "AskUserQuestion". An interactive

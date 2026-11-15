@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude UserPromptSubmit
 # hooks/session-title-close-kids.sh
 #
 # Claude Code UserPromptSubmit hook, for pilot sessions. A side session whose

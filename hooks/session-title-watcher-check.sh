@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude SessionStart
 # hooks/session-title-watcher-check.sh
 #
 # Claude Code SessionStart hook. Age dots ("🟡 🔀 To merge #12 · x") only move

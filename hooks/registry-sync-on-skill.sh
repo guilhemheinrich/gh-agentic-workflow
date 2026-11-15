@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# @hook claude PostToolUse matcher=Edit|Write timeout=30
+# @plugin-exclude repo-specific: reminds to update this repository's asset-registry.yml
 # hooks/registry-sync-on-skill.sh
 #
 # PostToolUse (Claude) / afterFileEdit (Cursor) hook.

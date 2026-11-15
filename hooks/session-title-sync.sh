@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude Stop
 # hooks/session-title-sync.sh
 #
 # Claude Code Stop hook. At the end of a turn, gathers the session's facts

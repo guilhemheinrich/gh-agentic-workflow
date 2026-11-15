@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# @hook claude SessionStart
+# @hook claude UserPromptSubmit
 # hooks/pilot-reminder.sh
 #
 # Claude Code hook (UserPromptSubmit and SessionStart) that re-injects a short
