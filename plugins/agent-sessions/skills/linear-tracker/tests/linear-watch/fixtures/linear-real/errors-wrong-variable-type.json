@@ -1,0 +1,18 @@
+{
+  "errors": [
+    {
+      "message": "Variable \"$k\" got invalid value 42; String cannot represent a non string value: 42",
+      "locations": [
+        {
+          "line": 1,
+          "column": 9
+        }
+      ],
+      "extensions": {
+        "code": "BAD_USER_INPUT",
+        "type": "graphql error",
+        "userError": true
+      }
+    }
+  ]
+}

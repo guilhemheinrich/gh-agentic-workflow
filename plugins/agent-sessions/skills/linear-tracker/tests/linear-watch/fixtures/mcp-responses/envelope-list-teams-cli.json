@@ -1,0 +1,29 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/agent/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/work",
+  "scratchpad_dir": "/tmp/scratchpad",
+  "prompt_id": "11111111-2222-4333-8444-555555555555",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__claude_ai_Linear__list_teams",
+  "tool_input": {
+    "query": "Agents",
+    "limit": 5
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "{\"teams\":[{\"id\":\"40d3324c-b30d-4e3a-8681-09f97efebabc\",\"key\":\"MDL\",\"parentId\":null,\"displayName\":\"Agents\",\"icon\":\"Megaphone\",\"name\":\"Agents\",\"visibility\":\"public\",\"createdAt\":\"2026-08-04T13:38:07.063Z\",\"updatedAt\":\"2026-11-12T07:01:02.022Z\"}],\"hasNextPage\":false}"
+    }
+  ],
+  "tool_use_id": "toolu_fixture00",
+  "duration_ms": 648,
+  "mcp_server": {
+    "name": "claude.ai Linear",
+    "source": "claudeai"
+  }
+}

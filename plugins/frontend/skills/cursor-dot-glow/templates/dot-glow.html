@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cursor dot-glow — reproduction</title>
+<style>
+  :root {
+    /* zo.computer primary terracotta */
+    --primary: 201 100 66;       /* rgb */
+    --bg: hsl(36 25% 92%);
+  }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    font-family: Georgia, "Times New Roman", serif;
+    overflow: hidden;
+  }
+  .stage { position: relative; width: 100%; height: 100vh; }
+
+  /* Always-on faint dot texture (CSS, like zo's base layer) */
+  .dot-base {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgb(var(--primary) / 1) 1px, transparent 1px);
+    background-size: 6px 6px;
+    opacity: 0.20;
+    pointer-events: none;
+  }
+  /* Canvas paints the brighter dots that glow around the cursor */
+  canvas.dot-glow {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .label {
+    position: relative; z-index: 2;
+    display: grid; place-items: center; height: 100vh;
+    color: #5a5a64; font-size: clamp(1.2rem, 4vw, 2rem);
+    text-align: center; padding: 1rem;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div class="dot-base"></div>
+    <canvas class="dot-glow"></canvas>
+    <div class="label">Move your mouse — the dot field lights up around the cursor.</div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.querySelector('canvas.dot-glow');
+  const ctx = canvas.getContext('2d');
+
+  // ---- tunables (measured from zo.computer) ----
+  const GRID   = 6;          // px between dots
+  const DOT    = 2;          // px dot size
+  const SIGMA  = 26;         // gaussian spread of the glow (px)
+  const PEAK   = 0.40;       // max alpha at the cursor centre
+  const RADIUS = SIGMA * 3;  // only paint dots within this radius (perf)
+  const EASE   = 0.12;       // cursor follow easing (trailing)
+  const COLOR  = '201, 100, 66';
+
+  let dpr = 1, w = 0, h = 0;
+  // pointer target + eased position
+  const target = { x: -9999, y: -9999 };
+  const pos    = { x: -9999, y: -9999 };
+  let hasPointer = false;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = canvas.clientWidth; h = canvas.clientHeight;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  window.addEventListener('pointermove', (e) => {
+    target.x = e.clientX; target.y = e.clientY; hasPointer = true;
+  });
+  window.addEventListener('pointerleave', () => { hasPointer = false; });
+
+  function frame() {
+    // ease the painted position toward the real cursor (smooth trail)
+    pos.x += (target.x - pos.x) * EASE;
+    pos.y += (target.y - pos.y) * EASE;
+
+    ctx.clearRect(0, 0, w, h);
+
+    if (hasPointer) {
+      ctx.fillStyle = `rgb(${COLOR})`;
+      const inv2s2 = 1 / (2 * SIGMA * SIGMA);
+      // snap the iteration window to the grid
+      const minX = Math.max(0, Math.floor((pos.x - RADIUS) / GRID) * GRID);
+      const maxX = Math.min(w, pos.x + RADIUS);
+      const minY = Math.max(0, Math.floor((pos.y - RADIUS) / GRID) * GRID);
+      const maxY = Math.min(h, pos.y + RADIUS);
+      for (let x = minX; x <= maxX; x += GRID) {
+        const dx = x - pos.x;
+        for (let y = minY; y <= maxY; y += GRID) {
+          const dy = y - pos.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 > RADIUS * RADIUS) continue;
+          const a = PEAK * Math.exp(-d2 * inv2s2);
+          if (a < 0.004) continue;
+          ctx.globalAlpha = a;
+          ctx.fillRect(x, y, DOT, DOT);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

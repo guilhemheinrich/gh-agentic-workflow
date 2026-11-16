@@ -1,0 +1,19 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/agent/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/work",
+  "permission_mode": "auto",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__0b0fa505-9003-4e08-9570-9316f3527103__save_comment",
+  "tool_input": {
+    "id": "7bf7220b-0000-4c84-8782-3a44eafa139c",
+    "body": "Fixture comment body."
+  },
+  "tool_response": [
+    {
+      "type": "text",
+      "text": "{\"id\":\"7bf7220b-0000-4c84-8782-3a44eafa139c\",\"body\":\"Fixture comment body.\",\"attachments\":[],\"createdAt\":\"2026-11-04T15:58:44.062Z\",\"updatedAt\":\"2026-11-04T15:58:55.986Z\",\"parentId\":null,\"resolvedAt\":null,\"quotedText\":null,\"author\":{\"id\":\"00000000-0000-4000-8000-000000000001\",\"name\":\"Jane Doe\"},\"onBehalfOf\":null}"
+    }
+  ],
+  "tool_use_id": "toolu_fixture02"
+}

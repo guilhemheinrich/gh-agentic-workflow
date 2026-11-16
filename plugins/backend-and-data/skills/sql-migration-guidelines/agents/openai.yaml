@@ -1,0 +1,4 @@
+interface:
+  display_name: "SQL Migration Guidelines"
+  short_description: "Design clean SQL migrations with or without ORMs"
+  default_prompt: "Use $sql-migration-guidelines to design database-first SQL migrations for this change."

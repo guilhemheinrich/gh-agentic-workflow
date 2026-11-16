@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# branch-policy-hook v1 — notice a new deploy-looking branch arriving by fetch.
+#
+# Git has no post-fetch hook. reference-transaction (git 2.28 and later) is the
+# event that fires when `git fetch` updates refs/remotes/*, so proactive
+# detection lives here.
+#
+# $1 is the transaction state: prepared | committed | aborted.
+# This hook acts only on `committed` and ALWAYS exits 0: a non-zero exit at
+# `prepared` aborts the whole ref transaction, which would break fetch itself.
+#
+# stdin: <old-value> SP <new-value> SP <ref-name>, one line per ref.
+set -u
+
+if [ "${1:-}" != "committed" ]; then
+  cat > /dev/null
+  exit 0
+fi
+
+CANDIDATE_RE='^(staging|develop|dev|preprod|pre-prod|integration|next|qa|uat|recette|sandbox|preview|testing|demo|acceptance)(-[a-z0-9._-]+)?$'
+
+hits=""
+while read -r old new ref; do
+  # Only a brand-new remote-tracking ref is interesting. Everything else is noise
+  # on a hook that also fires on every commit.
+  case "$ref" in refs/remotes/*) ;; *) continue ;; esac
+  # "All zeros" means absent. That is 40 characters on SHA-1 and 64 on SHA-256,
+  # so test the characters, never the length.
+  case "$old" in *[!0]*) continue ;; esac
+  case "$new" in *[!0]*) ;; *) continue ;; esac
+  full="${ref#refs/remotes/}"          # <remote>/<branch>
+  branch="${full#*/}"
+  printf '%s\n' "$branch" | grep -qE "$CANDIDATE_RE" || continue
+  hits="${hits}${hits:+ }$full"
+done
+
+[ -n "$hits" ] || exit 0
+
+INTEGRATION_BRANCH=""
+root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+
+# Parse, never source: this file travels with a clone, and sourcing it would run
+# whatever a repository author put in it.
+parse_policy() {
+  local line key val
+  while IFS= read -r line; do
+    case "$line" in \#*|"") continue ;; esac
+    key="${line%%=*}"; val="${line#*=}"
+    val="${val%\"}"; val="${val#\"}"
+    case "$val" in *[!A-Za-z0-9._/\ -]*) continue ;; esac
+    [ "$key" = INTEGRATION_BRANCH ] && INTEGRATION_BRANCH="$val"
+  done < "$1"
+}
+
+# Working tree, then HEAD, then the remote default branch. A checkout older than
+# the policy must not silence the notice.
+if [ -f "$root/.branch-policy" ]; then
+  parse_policy "$root/.branch-policy"
+else
+  tmp="$(mktemp)" || tmp=""
+  if [ -n "$tmp" ]; then
+    def="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+    def="${def#origin/}"; [ -n "$def" ] || def=main
+    for ref in HEAD "refs/remotes/origin/$def"; do
+      if git show "$ref:.branch-policy" > "$tmp" 2>/dev/null; then
+        parse_policy "$tmp"; break
+      fi
+    done
+    rm -f "$tmp"
+  fi
+fi
+
+stamp="$(git rev-parse --git-common-dir)/branch-policy-drift"
+
+for h in $hits; do
+  [ "${h#*/}" = "$INTEGRATION_BRANCH" ] && continue
+  printf '%s new remote branch %s (declared integration: %s)\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$h" "${INTEGRATION_BRANCH:-none}" >> "$stamp"
+  echo "" >&2
+  echo "  branch-policy: new remote branch '$h' looks like a deploy branch." >&2
+  if [ -n "$INTEGRATION_BRANCH" ]; then
+    echo "  The declared integration branch is '$INTEGRATION_BRANCH'. Run: branch-policy.sh drift" >&2
+  else
+    echo "  This repository has no policy yet. Run: branch-policy.sh detect" >&2
+  fi
+  echo "" >&2
+done
+
+exit 0

@@ -1,0 +1,10 @@
+# Reference Dockerfile for sitespeed.io
+# sitespeed.io has its own heavyweight Docker image optimized for performance analysis.
+# This Dockerfile serves as documentation only — it points to the official image.
+#
+# Use the official image directly:
+# docker run --rm -v "$(pwd)/results:/sitespeed.io" sitespeedio/sitespeed.io:latest https://example.com
+#
+# Do NOT build this Dockerfile. Instead, pull and run the official image above.
+
+FROM sitespeedio/sitespeed.io:latest

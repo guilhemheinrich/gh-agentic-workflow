@@ -1,0 +1,11 @@
+{
+  "name": "agent-sessions",
+  "description": "Run and steer agent sessions: pilot sessions, session titles, conversation focus hooks, PR and tracker watching, grievances, usage tracking.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0",
+  "dependencies": [
+    "docker-and-k8s"
+  ]
+}

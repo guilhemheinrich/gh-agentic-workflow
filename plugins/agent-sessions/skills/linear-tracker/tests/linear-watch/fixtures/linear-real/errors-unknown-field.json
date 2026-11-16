@@ -1,0 +1,22 @@
+{
+  "errors": [
+    {
+      "message": "Cannot query field \"nopeField\" on type \"Organization\".",
+      "locations": [
+        {
+          "line": 1,
+          "column": 25
+        }
+      ],
+      "extensions": {
+        "http": {
+          "status": 400,
+          "headers": {}
+        },
+        "code": "GRAPHQL_VALIDATION_FAILED",
+        "type": "graphql error",
+        "userError": true
+      }
+    }
+  ]
+}

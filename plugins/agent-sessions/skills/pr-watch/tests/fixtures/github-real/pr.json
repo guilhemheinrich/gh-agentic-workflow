@@ -1,0 +1,18 @@
+{
+  "number": 14858,
+  "state": "closed",
+  "merged": true,
+  "title": "Require confirmation before `gh repo delete` deletes private forks",
+  "html_url": "https://github.com/cli/cli/pull/14858",
+  "head": {
+    "sha": "b17c1554e635b794ff9dbb6607e15575bd9ea387",
+    "ref": "bagtoad/private-fork-deletion-guard"
+  },
+  "base": {
+    "sha": "f7a06a18a91eef5c0b218b549dab64b86f36f8b9",
+    "ref": "trunk"
+  },
+  "merge_commit_sha": "8553724d157cd73dd42c937c79c51787f86e814a",
+  "mergeable": true,
+  "mergeable_state": "clean"
+}

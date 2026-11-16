@@ -1,0 +1,10 @@
+# GitHub Actions job: the committed client must match the spec.
+generated-client-up-to-date:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    # Add actions/setup-node / actions/setup-go if your targets need them.
+    - name: Lint spec and regenerate clients
+      run: make generate-client   # runs Redocly lint first (or Spectral: npx @stoplight/spectral-cli@<pinned> lint openapi.yaml)
+    - name: Fail if generated code is stale
+      run: git diff --exit-code generated/

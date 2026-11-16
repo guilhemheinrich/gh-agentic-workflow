@@ -1,0 +1,12 @@
+{
+  "name": "review-and-projection",
+  "description": "Adversarial multi-model review and pre-implementation projections of a change onto files and data.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0",
+  "dependencies": [
+    "agent-sessions",
+    "agent-tooling"
+  ]
+}

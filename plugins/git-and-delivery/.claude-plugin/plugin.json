@@ -1,0 +1,11 @@
+{
+  "name": "git-and-delivery",
+  "description": "Git workflows and delivery pipelines: commits, merges, activity reports, CI/CD design, semantic-release, Makefile conventions, SonarQube, version surfaces.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0",
+  "dependencies": [
+    "agent-tooling"
+  ]
+}

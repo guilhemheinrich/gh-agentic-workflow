@@ -1,0 +1,20 @@
+# Add to the main compose.yml: the runner lives behind the `e2e` profile
+# (not started by default). Dockerfile: templates/Dockerfile.e2e.
+services:
+  playwright:
+    build:
+      context: .
+      dockerfile: .docker/e2e/Dockerfile
+    container_name: ${APP_SLUG}-playwright
+    volumes:
+      - ./apps/e2e:/app
+      - /app/node_modules
+    environment:
+      BASE_URL: http://frontend:3101
+    networks:
+      - app-network
+    depends_on:
+      - frontend
+      - backend
+    profiles:
+      - e2e

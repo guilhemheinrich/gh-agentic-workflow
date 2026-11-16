@@ -1,0 +1,13 @@
+# Keep the image tag equal to the @playwright/test version in package.json.
+FROM mcr.microsoft.com/playwright:v1.52.0-noble
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY playwright.config.ts ./
+COPY tests/ ./tests/
+COPY fixtures/ ./fixtures/
+
+CMD ["npx", "playwright", "test"]

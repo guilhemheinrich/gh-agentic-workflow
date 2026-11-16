@@ -1,0 +1,11 @@
+{
+  "name": "agent-tooling",
+  "description": "Tooling for building and maintaining agent setups: plugin release, static-validation hooks, LSP over MCP, ESLint standards for NestJS.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0",
+  "dependencies": [
+    "git-and-delivery"
+  ]
+}

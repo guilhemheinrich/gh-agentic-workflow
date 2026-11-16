@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cloud-word (clouds inside letters) — reproduction</title>
+<style>
+  :root {
+    /* iridescent "foil" gradient (from zo.computer, oklch) */
+    --foil: linear-gradient(118deg,
+      color-mix(in oklch, oklch(0.84 0.042 236) 78%, transparent) 0%,
+      color-mix(in oklch, oklch(0.82 0.048 312) 78%, transparent) 22%,
+      color-mix(in oklch, oklch(0.85 0.044 12)  72%, transparent) 42%,
+      color-mix(in oklch, oklch(0.92 0.036 96)  78%, transparent) 62%,
+      color-mix(in oklch, oklch(0.9  0.036 172) 78%, transparent) 82%,
+      color-mix(in oklch, oklch(0.84 0.042 236) 78%, transparent) 100%);
+  }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: hsl(36 25% 94%);
+    font-family: Georgia, "Times New Roman", serif;
+    display: grid; place-items: center; min-height: 100vh;
+  }
+  h1 {
+    font-size: 110px; line-height: 1.1; margin: 0;
+    color: #5b5b66; letter-spacing: 0.01em;
+    /* embossed chrome look on the plain words */
+    text-shadow: rgba(255,255,255,.5) 0 -1px 0, rgba(0,0,0,.28) 0 1px 1px, rgba(0,0,0,.12) 0 3px 6px;
+    text-align: center;
+  }
+
+  /* ---- the cloud word ---- */
+  .cloud-word {
+    position: relative;
+    display: inline-block;
+    isolation: isolate;            /* contain the blend modes */
+    width: 560px;                  /* must match the SVG text metrics */
+    height: 118px;
+    vertical-align: -0.18em;
+    text-decoration: none;
+    /* embossed edge so the clipped clouds read as 3D letters */
+    filter:
+      drop-shadow(rgba(255,255,255,.55) 0 -1px 0)
+      drop-shadow(rgba(0,0,0,.5) 0 1px 1px)
+      drop-shadow(rgba(0,0,0,.2) 0 3px 6px);
+    transition: filter .22s, transform .22s;
+  }
+  .cloud-word__layer {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    clip-path: url(#cloud-clip);    /* clip every layer to the glyphs */
+    pointer-events: none;
+  }
+  /* z0 — solid gradient fallback (shown if video/anim fails) */
+  .cloud-word__fallback {
+    z-index: 0;
+    background: linear-gradient(rgb(120,174,224), rgb(196,222,244) 52%, rgb(232,244,252));
+  }
+  /* z1 — the drifting clouds. Use a <video> in production; here an
+        animated multi-blob gradient stands in for clouds.mp4 */
+  .cloud-word__clouds {
+    z-index: 1;
+    filter: brightness(.86) saturate(.45) contrast(1.05) blur(2px);
+    background:
+      radial-gradient(60% 80% at 20% 30%, #fff 0%, rgba(255,255,255,0) 60%),
+      radial-gradient(50% 70% at 55% 65%, #fff 0%, rgba(255,255,255,0) 55%),
+      radial-gradient(70% 90% at 85% 25%, #f2f6ff 0%, rgba(242,246,255,0) 60%),
+      radial-gradient(45% 60% at 40% 90%, #eaf1ff 0%, rgba(234,241,255,0) 60%),
+      linear-gradient(180deg, #9cc0e6, #cfe2f6);
+    background-size: 200% 200%;
+    background-repeat: no-repeat;
+    animation: cloud-drift 18s linear infinite;
+  }
+  /* z1 (video variant) — uncomment and drop in your own clouds.mp4
+  .cloud-word__clouds--video { z-index:1; filter: brightness(.86) saturate(.25) contrast(1.05) blur(2px); }
+  */
+  /* z2 — iridescent foil + moving highlight sweep, blended over the clouds */
+  .cloud-word__shimmer {
+    z-index: 2;
+    background:
+      linear-gradient(120deg, transparent 24%, rgba(255,255,255,.5) 44%, rgba(255,255,255,.1) 53%, transparent 70%),
+      var(--foil);
+    background-size: 220% 100%, 100% 100%;
+    mix-blend-mode: overlay;
+    opacity: .65;
+    animation: shimmer-sweep 6s ease-in-out infinite;
+  }
+  .cloud-word:hover .cloud-word__clouds { filter: brightness(.9) saturate(1.1) contrast(1.05) blur(2px); }
+
+  @keyframes cloud-drift {
+    0%   { background-position: 0% 50%, 100% 50%, 50% 0%, 0% 100%, 0 0; }
+    50%  { background-position: 100% 40%, 0% 60%, 30% 100%, 80% 0%, 0 0; }
+    100% { background-position: 0% 50%, 100% 50%, 50% 0%, 0% 100%, 0 0; }
+  }
+  @keyframes shimmer-sweep {
+    0%, 100% { background-position: 120% 0, 0 0; }
+    50%      { background-position: -20% 0, 0 0; }
+  }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  }
+</style>
+</head>
+<body>
+  <h1>
+    Your AI<br>
+    <!-- the accented word -->
+    <a class="cloud-word" href="#" aria-label="companion">
+      <span class="cloud-word__layer cloud-word__fallback" aria-hidden="true"></span>
+      <span class="cloud-word__layer cloud-word__clouds"   aria-hidden="true"></span>
+      <span class="cloud-word__layer cloud-word__shimmer"  aria-hidden="true"></span>
+      <span class="sr-only">companion</span>
+    </a><br>
+    that gets things done
+  </h1>
+
+  <!-- The clip-path: live text turned into a glyph mask.
+       Production sites (zo) pre-bake the glyph outlines as <path> in
+       objectBoundingBox units so the clip is resolution-independent and
+       font-file-independent. Using <text> here keeps the demo self-contained. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <clipPath id="cloud-clip" clipPathUnits="userSpaceOnUse">
+        <text x="0" y="90"
+              font-family="Georgia, 'Times New Roman', serif"
+              font-size="110" font-weight="400" letter-spacing="1">companion</text>
+      </clipPath>
+    </defs>
+  </svg>
+</body>
+</html>

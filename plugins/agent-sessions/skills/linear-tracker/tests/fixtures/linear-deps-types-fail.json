@@ -1,0 +1,23 @@
+{
+ "project": {"name": "Invitations lot, broken (made up)"},
+ "issues": [
+  {"identifier": "INV-1", "title": "Invitation API", "state": "started", "parent": null,
+   "labels": [{"name": "Feature", "group": "Type"}]},
+  {"identifier": "INV-3", "title": "Invite e-mail arrives on staging", "state": "unstarted", "parent": null,
+   "labels": [{"name": "Proof", "group": "Type"}]},
+  {"identifier": "INV-4", "title": "Accept link works on staging", "state": "unstarted", "parent": null,
+   "labels": [{"name": "Proof", "group": "Type"}]},
+  {"identifier": "INV-5", "title": "Which sender address do we use?", "state": "started", "parent": null,
+   "labels": [{"name": "Question", "group": "Type"}]},
+  {"identifier": "INV-6", "title": "Old proof, done", "state": "completed", "parent": null,
+   "labels": [{"name": "Proof", "group": "Type"}]},
+  {"identifier": "INV-7", "title": "Resend works on staging", "state": "unstarted", "parent": null,
+   "labels": [{"name": "Proof", "group": "Type"}]}
+ ],
+ "relations": [
+  {"type": "blocks", "from": "INV-1", "to": "INV-3"},
+  {"type": "blocks", "from": "INV-5", "to": "INV-4"},
+  {"type": "blocks", "from": "OUT-1", "to": "INV-7"}
+ ],
+ "external": {"OUT-1": "Outside issue without labels"}
+}

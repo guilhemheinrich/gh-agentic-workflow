@@ -1,0 +1,14 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/agent/.claude/projects/-work/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/work",
+  "permission_mode": "auto",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "mcp__0b0fa505-9003-4e08-9570-9316f3527103__save_issue",
+  "tool_input": {
+    "id": "TT-2290",
+    "state": "Todo"
+  },
+  "tool_response": "Error: Error: Could not find labels \"Question\" for addLabels.",
+  "tool_use_id": "toolu_fixture08"
+}

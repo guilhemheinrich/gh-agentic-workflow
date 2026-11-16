@@ -1,0 +1,16 @@
+# Stage 1: install dependencies (copy manifests only, for layer caching)
+FROM <base-image> AS deps
+WORKDIR /build
+COPY package.json <lock-file> ./
+COPY apps/<service-name>/package.json ./apps/<service-name>/
+COPY packages/shared/package.json ./packages/shared/
+RUN <package-manager> install
+
+# Stage 2: runtime, keeps the dependency cache at /deps/node_modules
+FROM <runtime-image>
+COPY --from=deps /build/node_modules /deps/node_modules
+WORKDIR /app
+COPY .docker/scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["<package-manager>", "run", "dev"]

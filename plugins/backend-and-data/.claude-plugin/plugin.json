@@ -1,0 +1,8 @@
+{
+  "name": "backend-and-data",
+  "description": "Backend and data practices: SQL migrations, pg-boss with Drizzle, data-first philosophy, OpenAPI client generation, API collection conversion, MCP spec templates.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0"
+}

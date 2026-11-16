@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# branch-policy-hook v1 — refuse a push that lands on a protected branch.
+#
+# stdin: <local ref> SP <local sha> SP <remote ref> SP <remote sha>, one per ref.
+# argv: $1 = remote name, $2 = remote URL.
+# Bypass: BRANCH_POLICY_ALLOW=1 git push ...   (or git push --no-verify)
+# Strict: BRANCH_POLICY_STRICT=1 turns the wrong-base warning into a refusal.
+set -u
+
+POLICY_REL=.branch-policy
+REMOTE_NAME="${1:-origin}"
+
+INTEGRATION_BRANCH=""; PROTECTED_BRANCHES=""; EXCEPTION_PREFIXES=""
+
+# Parse, never source. A `.branch-policy` arrives with a clone, and sourcing it
+# would run whatever a repository author put in it, on every push.
+parse_policy() {
+  local line key val
+  while IFS= read -r line; do
+    case "$line" in \#*|"") continue ;; esac
+    key="${line%%=*}"; val="${line#*=}"
+    val="${val%\"}"; val="${val#\"}"
+    case "$val" in *[!A-Za-z0-9._/\ -]*) continue ;; esac
+    case "$key" in
+      INTEGRATION_BRANCH) INTEGRATION_BRANCH="$val" ;;
+      PROTECTED_BRANCHES) PROTECTED_BRANCHES="$val" ;;
+      EXCEPTION_PREFIXES) EXCEPTION_PREFIXES="$val" ;;
+    esac
+  done < "$1"
+}
+
+# Resolve the policy from the working tree, then from HEAD, then from every
+# long-lived branch that might carry it. Reading only the working tree would
+# disarm the hook on the branches most likely to be wrong — the old ones.
+# The deploy names in the list below are guesses for one case only: the real
+# integration branch is unknown until the policy has been found.
+load_policy() {
+  local root tmp ref def
+  root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+  if [ -f "$root/$POLICY_REL" ]; then
+    parse_policy "$root/$POLICY_REL"
+    [ -n "$PROTECTED_BRANCHES" ] && return 0
+  fi
+  def="$(git symbolic-ref --quiet --short "refs/remotes/$REMOTE_NAME/HEAD" 2>/dev/null || true)"
+  def="${def#"$REMOTE_NAME"/}"
+  tmp="$(mktemp)" || return 1
+  for ref in HEAD \
+    "refs/remotes/$REMOTE_NAME/${def:-main}" \
+    "refs/remotes/$REMOTE_NAME/main" "refs/remotes/$REMOTE_NAME/master" \
+    "refs/remotes/$REMOTE_NAME/staging" "refs/remotes/$REMOTE_NAME/develop" \
+    "refs/heads/${def:-main}" refs/heads/main refs/heads/master
+  do
+    if git show "$ref:$POLICY_REL" > "$tmp" 2>/dev/null; then
+      parse_policy "$tmp"
+      if [ -n "$PROTECTED_BRANCHES" ]; then rm -f "$tmp"; return 0; fi
+    fi
+  done
+  rm -f "$tmp"
+  return 1
+}
+
+# Enforce against the repository this policy describes, not against a personal
+# fork that happens to have a branch called main.
+same_repo_as_origin() {
+  [ "$REMOTE_NAME" = origin ] && return 0
+  local a b
+  a="$(git remote get-url "$REMOTE_NAME" 2>/dev/null || true)"
+  b="$(git remote get-url origin 2>/dev/null || true)"
+  [ -n "$a" ] && [ "$a" = "$b" ]
+}
+
+load_policy || true
+
+if [ -z "$PROTECTED_BRANCHES" ] || [ "${BRANCH_POLICY_ALLOW:-0}" = "1" ] || ! same_repo_as_origin; then
+  cat > /dev/null
+  exit 0
+fi
+
+status=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${remote_ref:-}" ] || continue
+
+  # Branches only. A tag has no base branch, and merge-base on a tag object fails.
+  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
+  target="${remote_ref#refs/heads/}"
+
+  for p in $PROTECTED_BRANCHES; do
+    if [ "$target" = "$p" ]; then
+      echo "" >&2
+      echo "  BLOCKED: direct push to protected branch '$p' on remote '$REMOTE_NAME'." >&2
+      echo "  CI deploys from '${INTEGRATION_BRANCH:-<unset: see .branch-policy>}'. Open a pull request against it instead." >&2
+      echo "" >&2
+      echo "    git push -u $REMOTE_NAME \$(git rev-parse --abbrev-ref HEAD)" >&2
+      echo "    gh pr create --base ${INTEGRATION_BRANCH:-<integration branch>}" >&2
+      echo "" >&2
+      echo "  Deliberate exception (release promotion, hotfix): BRANCH_POLICY_ALLOW=1 git push ..." >&2
+      echo "" >&2
+      status=1
+    fi
+  done
+  [ "$status" = 0 ] || continue
+
+  # Branch deletion: nothing to compare. A zero OID is 40 or 64 zeros depending
+  # on the repository's object format, so test for "zeros only", not for a length.
+  case "$local_sha" in *[!0]*) ;; *) continue ;; esac
+  [ -n "$INTEGRATION_BRANCH" ] || continue
+  [ "$target" = "$INTEGRATION_BRANCH" ] && continue
+  for p in $EXCEPTION_PREFIXES; do
+    case "$target" in "$p"*) continue 2 ;; esac
+  done
+
+  # Which base was this branch cut from? In a healthy repository the deploy
+  # branch contains production, so comparing merge bases cannot tell "cut from
+  # main" apart from "cut from staging". One fact does: the branch point sits
+  # exactly on production's tip, while the deploy branch has moved past it.
+  integ="refs/remotes/$REMOTE_NAME/$INTEGRATION_BRANCH"
+  git show-ref --verify --quiet "$integ" || continue
+  mb_integ="$(git merge-base "$local_sha" "$integ" 2>/dev/null || true)"
+  [ -n "$mb_integ" ] || continue
+  for p in $PROTECTED_BRANCHES; do
+    prod="refs/remotes/$REMOTE_NAME/$p"
+    git show-ref --verify --quiet "$prod" || continue
+    prod_sha="$(git rev-parse "$prod" 2>/dev/null || true)"
+    [ "$mb_integ" = "$prod_sha" ] || continue
+    # Silent when the deploy branch has nothing production lacks: the two bases
+    # are then the same commit and the branch is not mis-based.
+    [ "$(git rev-list --count "$prod..$integ" 2>/dev/null || echo 0)" -gt 0 ] || continue
+    behind="$(git rev-list --count "$local_sha..$integ" 2>/dev/null || echo 0)"
+    echo "" >&2
+    echo "  WRONG BASE: '$target' starts exactly at $REMOTE_NAME/$p, and is $behind commit(s) behind $REMOTE_NAME/$INTEGRATION_BRANCH." >&2
+    echo "              It was cut from production, not from the deploy branch." >&2
+    echo "              git rebase --onto $REMOTE_NAME/$INTEGRATION_BRANCH $prod_sha $target" >&2
+    echo "" >&2
+    [ "${BRANCH_POLICY_STRICT:-0}" = "1" ] && status=1
+    break
+  done
+done
+
+exit $status

@@ -1,0 +1,125 @@
+{
+  "format": "ticket-semantics/1",
+  "_comment": "JSON, not YAML: linear_deps.py is standard-library only and runs in python:alpine, which has no YAML parser. Prose version: ticket-types.md. Checker: `linear_deps.py verify`.",
+
+  "generic": {
+    "_comment": "Tool-agnostic project-management vocabulary. Nothing here names Linear: an attribute is a single-choice tag, a lot is whatever groups issues that ship together, a body section is a heading in the ticket text.",
+
+    "attributes": {
+      "type": {"definition": "What kind of work the ticket is. Single choice, exactly one per ticket."},
+      "addressee": {"definition": "Who must answer or act. Single choice, only on tickets that wait on someone outside the team."}
+    },
+
+    "groupings": {
+      "lot": {"definition": "The set of tickets that ship together and are proved together (one delivery per lot and per environment)."}
+    },
+
+    "types": [
+      {"id": "Bug", "roles": ["change"],
+       "definition": "Something delivered fails to do what was promised, and the promise can be cited.",
+       "test": "Can you fill « Expected » by citing a source: a spec, an API contract, a doc, or the behaviour before?",
+       "required_sections": ["In plain words, with an example", "Recommended proof"]},
+      {"id": "Blocker", "roles": ["waiting"],
+       "definition": "Someone outside the team must do something: grant an access, deliver a piece of work, intervene.",
+       "test": "Can you name who must act, what, and who waits?",
+       "required_attributes": ["addressee"],
+       "required_sections": ["In plain words, with an example"]},
+      {"id": "Question", "roles": ["waiting"],
+       "definition": "Someone must tell us something: a decision or an information.",
+       "test": "Can you write it in one sentence and name who decides?",
+       "required_attributes": ["addressee"],
+       "required_sections": ["In plain words, with an example"]},
+      {"id": "Research", "roles": [],
+       "definition": "We do not know yet what to do, it is ours to find out, within a time-box; the deliverable is a written decision or a proof of concept, never shipped code.",
+       "test": "Is the deliverable a written decision or a proof of concept?",
+       "required_sections": ["In plain words, with an example"]},
+      {"id": "Feature", "roles": ["change"],
+       "definition": "A user or a client gets a capability they did not have.",
+       "test": "Can you write « As a role, I can action »?",
+       "required_sections": ["In plain words, with an example", "Recommended proof"]},
+      {"id": "Improvement", "roles": ["change"],
+       "definition": "A user or a client sees something they already have change for the better.",
+       "test": "Could the user already do it before?",
+       "required_sections": ["In plain words, with an example", "Recommended proof"]},
+      {"id": "Proof", "roles": ["evidence"],
+       "definition": "Show that one thing works on one environment, by running something and looking at the result, with no code to write.",
+       "test": "Is the work to run something and look at the result?",
+       "required_sections": ["In plain words, with an example"]},
+      {"id": "Technical task", "roles": ["change"],
+       "definition": "Work that ends in a merge and brings no visible change: a slice of a feature, an upgrade, debt, tooling, infra, a data migration.",
+       "test": "Does it end in a merge, with nothing a user notices?",
+       "required_sections": ["In plain words, with an example", "Recommended proof"]}
+    ],
+
+    "decision_order": ["Bug", "Blocker", "Question", "Research", "Feature", "Improvement", "Proof", "Technical task"],
+
+    "roles": {
+      "change": "A ticket that ends in a merge: Bug, Feature, Improvement, Technical task. Also called a code ticket or a dev issue.",
+      "waiting": "A ticket that waits on someone outside the team: Question, Blocker.",
+      "evidence": "A ticket whose work is to observe and report: Proof."
+    },
+
+    "relations": {
+      "blocks": {"directed": true, "inverse": "blocked-by",
+                 "meaning": "A blocks B: B cannot be closed before A is. It says what stops the work; the ticket type never does."},
+      "related": {"directed": false, "meaning": "A and B concern the same thing; no ordering."},
+      "parent": {"directed": true, "meaning": "A is a sub-issue of B (a Technical task split out of a Feature)."}
+    },
+
+    "rules": [
+      {"id": "one-type", "rule": "attribute-cardinality", "attribute": "type", "min": 1, "max": 1,
+       "source": "ticket-types.md#labels", "text": "Every issue carries exactly one Type."},
+      {"id": "one-addressee-at-most", "rule": "attribute-cardinality", "attribute": "addressee", "min": 0, "max": 1,
+       "source": "ticket-types.md#labels", "text": "The Addressee is a single choice."},
+      {"id": "addressee-on-waiting", "rule": "attribute-required", "subject": "@waiting", "attribute": "addressee",
+       "source": "ticket-types.md#addressee-who-must-answer-or-act", "text": "A Question or a Blocker names who must answer or act."},
+      {"id": "addressee-only-on-waiting", "rule": "attribute-only-on", "attribute": "addressee", "types": "@waiting",
+       "source": "ticket-types.md#labels", "text": "Addressee is used on Question and Blocker only."},
+      {"id": "waiting-in-addressee-team", "rule": "owned-by-addressee", "subject": "@waiting",
+       "source": "ticket-types.md#addressee-who-must-answer-or-act", "text": "A Question or a Blocker is created in the team that must answer or act."},
+      {"id": "proof-blocked-by-change", "rule": "blocked-by-any", "subject": "Proof", "objects": "@change",
+       "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A Proof is blocked by at least one dev issue."},
+      {"id": "proof-blocked-by-whole-lot", "rule": "blocked-by-all-in-grouping", "subject": "Proof", "objects": "@change", "grouping": "lot",
+       "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "Each Proof is blocked by every dev issue of its lot."},
+      {"id": "change-recommends-proof", "rule": "linked-or-waived", "subject": "@change", "relations": ["blocks", "related"], "object": "Proof",
+       "source": "ticket-types.md#technical-task-or-proof-a-merge-or-an-observation", "text": "Every code ticket links a recommended Proof, or says « none » and why."},
+      {"id": "required-sections", "rule": "requires-sections", "subject": "*",
+       "source": "ticket-types.md#every-ticket-opens-with-an-example-in-plain-words", "text": "A ticket body has the sections its type requires, « In plain words » first."}
+    ]
+  },
+
+  "binding": {
+    "_comment": "Linear specifics: label groups, template names, state names. Replace this block to bind the generic model to another tracker.",
+    "tracker": "linear",
+
+    "attributes": {
+      "type": {"label_group": "Type", "scope": "workspace",
+               "values": ["Bug", "Blocker", "Question", "Research", "Feature", "Improvement", "Proof", "Technical task"]},
+      "addressee": {"label_group": "Addressee", "scope": "workspace",
+                    "values": ["Product", "Technical", "Security / legal", "External", "Organisation"],
+                    "team_keys": {}}
+    },
+
+    "groupings": {
+      "lot": {"linear": "project milestone", "node_field": "milestone"}
+    },
+
+    "templates": {
+      "Bug": {"workspace_template": "Bug", "file": "templates/tickets/bug.md"},
+      "Blocker": {"workspace_template": "Blocker", "file": "templates/tickets/blocker.md"},
+      "Question": {"workspace_template": "Question", "file": "templates/tickets/question.md"},
+      "Research": {"workspace_template": "Research", "file": "templates/tickets/research.md"},
+      "Feature": {"workspace_template": "Feature", "file": "templates/tickets/feature.md"},
+      "Improvement": {"workspace_template": "Improvement", "file": "templates/tickets/improvement.md"},
+      "Proof": {"workspace_template": "Proof", "file": "templates/tickets/proof.md"},
+      "Technical task": {"workspace_template": "Technical task", "file": "templates/tickets/technical-task.md"}
+    },
+
+    "states": {
+      "done_kinds": ["completed"],
+      "ignored_kinds": ["canceled"],
+      "done_name": "Done",
+      "_comment": "Kinds are Linear's state types, as exported in node.state."
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "frontend",
+  "description": "Frontend building blocks: Lit web components, cursor glow canvas effect, text clip effects, live Web Component demos in Starlight.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0"
+}

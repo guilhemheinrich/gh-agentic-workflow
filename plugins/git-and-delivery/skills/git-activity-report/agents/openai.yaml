@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git Activity Report"
+  short_description: "Summarize Git changes with PR/MR context"
+  default_prompt: "Use $git-activity-report to collect recent branch commits and PRs, then draft a sourced Markdown activity report."

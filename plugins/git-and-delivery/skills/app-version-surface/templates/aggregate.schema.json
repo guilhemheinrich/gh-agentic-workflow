@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/version-aggregate.schema.json",
+  "title": "Aggregated application version",
+  "type": "object",
+  "required": ["application", "displayVersion", "components"],
+  "additionalProperties": false,
+  "properties": {
+    "application": { "type": "string" },
+    "displayVersion": { "type": "string", "description": "Usually the displayVersion of the primary component." },
+    "components": { "type": "array", "minItems": 1, "items": { "$ref": "version.schema.json" } }
+  }
+}

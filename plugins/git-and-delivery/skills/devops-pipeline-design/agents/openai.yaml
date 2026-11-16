@@ -1,0 +1,4 @@
+interface:
+  display_name: "DevOps Pipeline Design"
+  short_description: "Design CI/CD pipelines for cloud deploys"
+  default_prompt: "Use $devops-pipeline-design to design a GitHub Actions pipeline for AWS with dev, staging, and production environments."

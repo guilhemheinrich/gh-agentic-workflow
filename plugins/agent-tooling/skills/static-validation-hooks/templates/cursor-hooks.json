@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "command": ".agents/hooks/validate-on-edit.sh",
+        "matcher": "Write",
+        "timeout": 15
+      }
+    ]
+  }
+}

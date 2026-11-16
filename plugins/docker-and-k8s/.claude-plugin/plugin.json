@@ -1,0 +1,8 @@
+{
+  "name": "docker-and-k8s",
+  "description": "Containers and clusters: Dockerfile patterns, hot-reload volumes, Compose port management, Kubernetes troubleshooting, private npm registries in images.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "testing-and-debugging",
+  "description": "Testing and investigation: Playwright end-to-end suites, auth fixtures, per-environment test targeting, web analysis, scraping, debugging.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0"
+}

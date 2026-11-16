@@ -1,0 +1,12 @@
+{
+  "name": "speckit",
+  "description": "Spec-driven development on top of GitHub Spec Kit (requires spec-kit installed): orchestration agents, specify/plan/tasks pipeline, spec indexing, E2E specs, Notion sync.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.1.0",
+  "dependencies": [
+    "git-and-delivery",
+    "testing-and-debugging"
+  ]
+}

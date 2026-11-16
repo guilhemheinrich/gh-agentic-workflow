@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- linear-watch daemon. Installed by `lw daemon start`; the placeholders are
+     filled with absolute, XML-escaped paths at install time. launchd starts it
+     with an empty environment: lw reads the Linear key from
+     ~/.config/linear/env itself (never from here), and LW_LINEAR_BIN names the
+     linear binary measured by `lw daemon start`, since launchd's PATH lacks
+     /opt/homebrew/bin. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.linear-watch.daemon</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@PYTHON@</string>
+    <string>@LW@</string>
+    <string>daemon</string>
+    <string>run</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>@HOME@</string>
+    <key>LW_STATE_DIR</key>
+    <string>@STATE@</string>
+    <key>LW_LINEAR_BIN</key>
+    <string>@LINEAR_BIN@</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>StandardOutPath</key>
+  <string>@STATE@/daemon.out</string>
+  <key>StandardErrorPath</key>
+  <string>@STATE@/daemon.out</string>
+</dict>
+</plist>

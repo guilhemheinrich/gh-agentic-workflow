@@ -1,0 +1,4 @@
+# One `collection-slug|request-name-regex` line per collection (grep -E on the request name).
+# Select only requests that do not write: runtime-check.sh sends everything it selects.
+# Request 2 of 01-demo-items is a POST, so the plan keeps request 1 only.
+01-demo-items|^1\.

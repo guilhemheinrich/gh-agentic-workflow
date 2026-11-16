@@ -1,0 +1,24 @@
+# Copy to ~/.config/llm-ask/aliases (or point LLM_ALIAS_FILE at it).
+#
+# Format: name = provider/slug — one per line, # starts a comment, trailing
+# comments are stripped from the value.
+#
+# THIS FILE IS OPTIONAL, and increasingly unnecessary: `-m @top` picks the
+# best-scored model straight from the catalogue, and `--top 5` shows you the
+# ranking. Aliases are for pinning a deliberate choice — "always review with this
+# one, so results stay comparable across weeks" — not for remembering slugs.
+#
+# No prices here on purpose: they move (three models changed rate within an hour
+# during development). Ask the catalogue instead:
+#
+#   llm-ask.sh --top 5 --by coding
+#   llm-ask.sh --list-models kimi
+#
+# The slugs below were live on 2026-08-18. Verify before trusting them.
+
+# A stable pair for comparable week-to-week reviews.
+reviewer   = openai/gpt-5.6-sol
+reviewer-2 = moonshotai/kimi-k3
+
+# Cheap runs, for iterating on the prompt rather than on the answer.
+cheap      = openai/gpt-5.6-luna

@@ -1,0 +1,158 @@
+{
+ "project": {
+  "name": "Semantics pass (made up)",
+  "milestones": [
+   "Staging: invitations",
+   "Next lot"
+  ]
+ },
+ "issues": [
+  {
+   "identifier": "INV-1",
+   "title": "Feature INV-1",
+   "state": "completed",
+   "parent": null,
+   "milestone": "Staging: invitations",
+   "labels": [
+    {
+     "name": "Feature",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nOne Proof links it.\n"
+  },
+  {
+   "identifier": "INV-2",
+   "title": "Technical task INV-2",
+   "state": "completed",
+   "parent": null,
+   "milestone": "Staging: invitations",
+   "labels": [
+    {
+     "name": "Technical task",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nOne Proof links it.\n"
+  },
+  {
+   "identifier": "INV-3",
+   "title": "Proof INV-3",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Staging: invitations",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-4",
+   "title": "Proof INV-4",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Staging: invitations",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-5",
+   "title": "Question INV-5",
+   "state": "started",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Question",
+     "group": "Type"
+    },
+    {
+     "name": "Product",
+     "group": "Addressee"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-6",
+   "title": "Bug INV-6",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Next lot",
+   "labels": [
+    {
+     "name": "Bug",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\n« none », a private refactor nobody can see.\n"
+  },
+  {
+   "identifier": "INV-7",
+   "title": "Blocker INV-7",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Blocker",
+     "group": "Type"
+    },
+    {
+     "name": "Technical",
+     "group": "Addressee"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-8",
+   "title": "Technical task INV-8",
+   "state": "canceled",
+   "parent": null,
+   "milestone": "Staging: invitations",
+   "labels": [
+    {
+     "name": "Technical task",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nLink to the Proof.\n"
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "INV-1",
+   "to": "INV-3"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-1",
+   "to": "INV-4"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-2",
+   "to": "INV-3"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-2",
+   "to": "INV-4"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-7",
+   "to": "INV-6"
+  }
+ ]
+}

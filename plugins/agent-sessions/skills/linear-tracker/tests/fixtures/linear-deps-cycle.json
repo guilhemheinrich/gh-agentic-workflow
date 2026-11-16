@@ -1,0 +1,67 @@
+{
+ "project": {
+  "name": "Cycle test (made up)"
+ },
+ "issues": [
+  {
+   "identifier": "X-1",
+   "title": "Made-up issue 1",
+   "state": "started",
+   "parent": null
+  },
+  {
+   "identifier": "X-2",
+   "title": "Made-up issue 2",
+   "state": "unstarted",
+   "parent": null
+  },
+  {
+   "identifier": "X-3",
+   "title": "Made-up issue 3",
+   "state": "unstarted",
+   "parent": null
+  },
+  {
+   "identifier": "X-4",
+   "title": "Made-up issue 4",
+   "state": "completed",
+   "parent": null
+  },
+  {
+   "identifier": "X-5",
+   "title": "Made-up issue 5",
+   "state": "unstarted",
+   "parent": null
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "X-1",
+   "to": "X-2"
+  },
+  {
+   "type": "blocks",
+   "from": "X-2",
+   "to": "X-3"
+  },
+  {
+   "type": "blocks",
+   "from": "X-3",
+   "to": "X-1"
+  },
+  {
+   "type": "blocks",
+   "from": "X-4",
+   "to": "X-2"
+  },
+  {
+   "type": "blocks",
+   "from": "X-9",
+   "to": "X-4"
+  }
+ ],
+ "external": {
+  "X-9": "Made-up issue outside the project"
+ }
+}
