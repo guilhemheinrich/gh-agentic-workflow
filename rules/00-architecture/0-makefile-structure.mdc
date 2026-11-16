@@ -37,7 +37,7 @@ A project root **Makefile** MUST expose a consistent interface for local develop
 
 ## Skill References
 
-- Full templates and example recipes: [makefile-conventions](../../skills/makefile-conventions/SKILL.md) (Task variant: [taskfile.md](../../skills/makefile-conventions/taskfile.md))
+- Full templates and example recipes: [makefile-conventions](../../skills/makefile-conventions/SKILL.md) (Task variant: [Taskfile.yml](../../skills/makefile-conventions/templates/Taskfile.yml))
 
 ## Enforcement
 

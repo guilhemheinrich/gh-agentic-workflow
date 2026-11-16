@@ -1,0 +1,102 @@
+# Single driver for local development: `task --list` is the inventory.
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  COMPOSE: docker compose
+  EXEC_BACKEND: docker compose exec -T backend
+  RUN_BACKEND: docker compose run --rm backend
+  APP_URL: http://localhost:${APP_PORT:-3000}
+  API_URL: http://localhost:${API_PORT:-8080}
+
+tasks:
+  default:
+    desc: List available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  setup:
+    desc: Prepare the local environment (idempotent)
+    cmds:
+      - test -f .env || cp .env.example .env
+      - '{{.COMPOSE}} build'
+
+  up:
+    desc: Start the stack and print the exposed resources
+    cmds:
+      - '{{.COMPOSE}} up -d --build --remove-orphans --wait'
+      - task: resources
+
+  resources:
+    desc: Print the URLs of the exposed services
+    silent: true
+    cmds:
+      - |
+        line="\033[90m--------------------------------------------------\033[0m"
+        printf "\n$line\n\033[1;32m  Stack is up\033[0m\n$line\n"
+        printf "  \033[36m%-18s\033[0m %s\n" "App" "{{.APP_URL}}"
+        printf "  \033[36m%-18s\033[0m %s\n" "API" "{{.API_URL}}"
+        printf "  \033[36m%-18s\033[0m %s\n" "API Docs" "{{.API_URL}}/api"
+        printf "$line\n  \033[33mLogs\033[0m  task logs     \033[33mStop\033[0m  task down\n\n"
+
+  down:
+    desc: Stop all services
+    cmds:
+      - '{{.COMPOSE}} down --remove-orphans'
+
+  destroy:
+    desc: Stop the stack and delete the volumes
+    prompt: Delete all local data?
+    cmds:
+      - '{{.COMPOSE}} down -v --remove-orphans'
+
+  logs:
+    desc: 'Follow logs (e.g. task logs -- backend)'
+    cmds:
+      - '{{.COMPOSE}} logs -f {{.CLI_ARGS}}'
+
+  shell:
+    desc: 'Shell into a service (default: backend)'
+    interactive: true
+    cmds:
+      - '{{.COMPOSE}} exec {{.CLI_ARGS | default "backend"}} sh'
+
+  copy-vendors:
+    desc: Copy node_modules from the containers to the host (IDE)
+    cmds:
+      - rm -rf ./node_modules
+      - '{{.COMPOSE}} cp backend:/app/node_modules ./node_modules'
+
+  lock:
+    desc: Regenerate the lockfile in the image (development stage) and copy it to the host
+    cmds:
+      - '{{.COMPOSE}} build backend'
+      - '{{.COMPOSE}} up -d backend'
+      - '{{.COMPOSE}} cp backend:/app/pnpm-lock.yaml ./pnpm-lock.yaml'
+
+  test:
+    desc: Unit tests
+    cmds:
+      - '{{.EXEC_BACKEND}} pnpm test'
+
+  test-e2e:
+    desc: 'Playwright E2E tests (e.g. task test-e2e -- --grep @smoke)'
+    vars:
+      E2E: '{{.COMPOSE}} -f compose.yml -f compose.e2e.yml'
+    cmds:
+      - '{{.E2E}} --profile e2e up -d --build --wait'
+      - |
+        e2e_exit=0
+        {{.E2E}} --profile e2e run --rm playwright npx playwright test {{.CLI_ARGS}} || e2e_exit=$?
+        rm -rf playwright-report
+        cp -r apps/e2e/playwright-report playwright-report 2>/dev/null || true
+        printf "\nE2E report: playwright-report/index.html\n"
+        exit $e2e_exit
+
+  db:migrate:
+    desc: Apply the migrations
+    cmds:
+      - '{{.COMPOSE}} up -d --wait db'
+      - '{{.RUN_BACKEND}} pnpm db:migrate'

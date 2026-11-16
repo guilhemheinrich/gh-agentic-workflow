@@ -9,10 +9,10 @@ Three realistic examples with anonymized `kubectl` output. Use as a reference fo
 # DevOps Report — Deployment Blocked by Missing Secret
 
 **Date**: 2026-04-28 09:41
-**Namespace**: modelo-management-pprod
+**Namespace**: acme-app-preprod
 **Affected resource**: deployment/api-gateway
 **Priority**: RED Critical
-**Cluster**: modelo-pprod
+**Cluster**: acme-preprod
 
 ## 1. Observed Problem
 
@@ -50,14 +50,14 @@ The Deployment references a TLS volume or a variable resolved via a Secret named
 
 ## 4. Requested Action
 
-Create the `svc-api-gateway-tls` Secret in `modelo-management-pprod`, or fix the references in the Helm chart / manifests to point to an existing Secret.
+Create the `svc-api-gateway-tls` Secret in `acme-app-preprod`, or fix the references in the Helm chart / manifests to point to an existing Secret.
 
 **Suggested command(s)** (if applicable):
 
 ```bash
-kubectl get secret svc-api-gateway-tls -n modelo-management-pprod
+kubectl get secret svc-api-gateway-tls -n acme-app-preprod
 # If absent after validating the exact name in the Deployment:
-kubectl create secret tls svc-api-gateway-tls --cert=file.crt --key=file.key -n modelo-management-pprod
+kubectl create secret tls svc-api-gateway-tls --cert=file.crt --key=file.key -n acme-app-preprod
 ```
 
 (adaptation required based on the team's certificate strategy)
@@ -77,10 +77,10 @@ API service unavailable; mobile clients and dependent backends receive 502/504 e
 # DevOps Report — Insufficient Pod Memory (OOMKill)
 
 **Date**: 2026-04-27 22:06
-**Namespace**: modelo-management-pprod
+**Namespace**: acme-app-preprod
 **Affected resource**: pod/search-indexer-847b7d6f6d-m7kqz
 **Priority**: ORANGE High
-**Cluster**: modelo-pprod
+**Cluster**: acme-preprod
 
 ## 1. Observed Problem
 
@@ -155,10 +155,10 @@ Stale search index, very high user search latency, internal SLA risk for busines
 # DevOps Report — Inter-service Dependency Unreachable (DNS or NetworkPolicy)
 
 **Date**: 2026-04-26 11:17
-**Namespace**: modelo-management-pprod
-**Affected resource**: deployment/meet-notification-worker + internal service `catalog-api`
+**Namespace**: acme-app-preprod
+**Affected resource**: deployment/notification-worker + internal service `catalog-api`
 **Priority**: YELLOW Medium
-**Cluster**: modelo-pprod
+**Cluster**: acme-preprod
 
 ## 1. Observed Problem
 
@@ -183,17 +183,17 @@ Caused by: java.net.UnknownHostException: catalog-api
 
 ```
 Service/catalog-api exists, ClusterIP 10.x.y.z, Ports 8080/TCP -> Endpoints: 3 IPs
-pod/meet-notification-worker: env CATALOG_HOST=catalog-api (correct short DNS)
+pod/notification-worker: env CATALOG_HOST=catalog-api (correct short DNS)
 NetworkPolicy/catalog-ingress present (Ingress allowed from namespace ingress-nginx only for other pods — not yet verified for East-West)
 ```
 
 ### Test via exec (diagnosis)
 
 ```
-$ kubectl exec -it meet-notification-worker-aaaa-bbbb -- wget -qO- http://catalog-api.modelo-management-pprod.svc.cluster.local:8080/v1/health --timeout=2
+$ kubectl exec -it notification-worker-aaaa-bbbb -- wget -qO- http://catalog-api.acme-app-preprod.svc.cluster.local:8080/v1/health --timeout=2
 wget: can't connect to remote host (10.x.y.z): Connection timed out
 
-$ kubectl exec -it meet-notification-worker-aaaa-bbbb -- nslookup catalog-api
+$ kubectl exec -it notification-worker-aaaa-bbbb -- nslookup catalog-api
 ;; connection timed out; no servers could be reached
 ```
 
@@ -203,13 +203,13 @@ DNS resolution or east-west traffic prevents the worker from reaching the CoreDN
 
 ## 4. Requested Action
 
-Check **NetworkPolicy** rules between `meet-notification-worker` and the `catalog-api` Service; allow TCP 8080 traffic within the namespace or adjust `dnsPolicy`/`dnsConfig` on the pod if the cluster enforces a custom resolver.
+Check **NetworkPolicy** rules between `notification-worker` and the `catalog-api` Service; allow TCP 8080 traffic within the namespace or adjust `dnsPolicy`/`dnsConfig` on the pod if the cluster enforces a custom resolver.
 
 **Suggested command(s)** (if applicable):
 
 ```bash
-kubectl get networkpolicy -n modelo-management-pprod -o wide
-kubectl describe networkpolicy <name> -n modelo-management-pprod
+kubectl get networkpolicy -n acme-app-preprod -o wide
+kubectl describe networkpolicy <name> -n acme-app-preprod
 # Then apply a policy allowing egress to the catalog deployment's label
 ```
 

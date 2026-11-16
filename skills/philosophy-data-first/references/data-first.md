@@ -1,78 +1,76 @@
-# Data-First & State Transitions — contenu à insérer dans PHILOSOPHY.md
+# Data-First & State Transitions — content to insert into PHILOSOPHY.md
 
-> Bloc à insérer dans `PHILOSOPHY.md` via le skill `project-philosophy`.
-> Remplacer les `à choisir` par les décisions prises avec l'humain.
+> Insert this block into `PHILOSOPHY.md` (see the skill's "PHILOSOPHY.md
+> procedure"). Replace each "to be decided" with the decision taken with the
+> human.
 
-## Philosophies adoptées
+## Adopted philosophies
 
-- **Data-First & State Transitions** — la donnée pilote la fonctionnalité :
-  toute feature est une transition d'état transactionnelle et vérifiable en
-  base de données, jamais un simple « formulaire » ou « endpoint ».
+- **Data-First & State Transitions** — data drives the feature: every feature
+  is a transactional, database-verifiable state transition, never a mere
+  "form" or "endpoint".
 
-## 1. Principes
+## 1. Principles
 
-1. **La base est la source de vérité de l'état ; le code est l'auteur des
-   transitions.** Les invariants critiques sont garantis par la base
-   (contraintes, clés étrangères, `CHECK`, unicité), pas seulement par le code.
-   Le code calcule et transforme ; toute logique métier aboutit à une
-   transition d'état explicite et vérifiable.
-2. **Un use case = une transaction atomique.** Il est défini par un
-   déclencheur, un état initial (préconditions) et un état final committé. Si
-   les préconditions ne sont pas remplies, rien n'est écrit.
-3. **Pas d'I/O externe dans une transaction.** Tout effet asynchrone ou
-   externe (appel d'API, email, webhook sortant) passe par un **job mis en file
-   dans la même transaction** que la donnée métier, via l'orchestrateur choisi
-   (§3). Chaque job est lui-même un use case, avec son déclencheur, son état
-   initial et son état final (ex. `email_status : PENDING → SENT | FAILED`).
-4. **L'état final est toujours un état committé ; les sorties en sont des
-   conséquences :**
-   - réponse synchrone (HTTP / callback) → lue depuis l'état committé ;
-   - effet externe sortant → job mis en file, puis use case du job ;
-   - mutation interne seule → commit de la transaction.
-5. **Les webhooks entrants sont d'abord persistés**, puis traités par un job.
-6. **Les jobs sont idempotents** (livraison *au moins une fois*) ; les appels
-   sortants portent une clé d'idempotence.
-7. **La concurrence est explicite** : chaque transition déclare sa protection
-   (`SELECT … FOR UPDATE`, colonne de version, contrainte d'unicité).
-8. **Les valeurs dérivées stockées sont qualifiées** : *photo figée* (ex. prix
-   au moment de la commande) ou *valeur recalculable* (projection).
-9. **Les lectures ne sont pas des use cases de mutation** : ce sont des
-   projections de l'état.
-10. **L'accès aux données exploite le modèle physique.** L'ORM / query builder
-    doit exposer le schéma réel (types, contraintes, enums, index,
-    transactions) plutôt que de le masquer ; ce qu'il ne sait pas exprimer est
-    écrit en SQL dans la migration, jamais abandonné.
+1. **The database is the source of truth of state; code is the author of
+   transitions.** Critical invariants are guaranteed by the database
+   (constraints, foreign keys, `CHECK`, uniqueness), not only by code. Code
+   computes and transforms; every piece of business logic ends in an explicit,
+   verifiable state transition.
+2. **One use case = one atomic transaction.** It is defined by a trigger, an
+   initial state (preconditions) and a committed final state. If the
+   preconditions are not met, nothing is written.
+3. **No external I/O inside a transaction.** Every async or external effect
+   (API call, email, outgoing webhook) goes through a **job enqueued in the
+   same transaction** as the business data, via the chosen orchestrator (§3).
+   Each job is itself a use case with its own trigger, initial state and final
+   state (e.g. `email_status: PENDING → SENT | FAILED`).
+4. **The final state is always a committed state; outputs are consequences:**
+   - synchronous response (HTTP / callback) → read from the committed state;
+   - outgoing external effect → enqueued job, then the job's use case;
+   - internal mutation only → transaction commit.
+5. **Incoming webhooks are persisted first**, then processed by a job.
+6. **Jobs are idempotent** (at-least-once delivery); outgoing calls carry an
+   idempotency key.
+7. **Concurrency is explicit:** each transition declares its protection
+   (`SELECT … FOR UPDATE`, version column, unique constraint).
+8. **Stored derived values are qualified:** *frozen snapshot* (e.g. price at
+   order time) or *recomputable value* (projection).
+9. **Reads are not mutation use cases:** they are projections of the state.
+10. **Data access exploits the physical model.** The ORM / query builder must
+    expose the real schema (types, constraints, enums, indexes, transactions)
+    rather than hide it; whatever it cannot express is written in SQL in the
+    migration, never dropped.
 
-## 2. Formats obligatoires
+## 2. Mandatory formats
 
-Toute spec de feature, issue ou prompt majeur décrit chaque use case ainsi.
-Les mutations sont décrites conceptuellement (`table.champ : A → B`), pas en
-SQL.
+Every feature spec, issue or major prompt describes each use case this way.
+Mutations are described conceptually (`table.field: A → B`), not in SQL.
 
-### Template de use case (transition d'état)
+### Use case template (state transition)
 
-- **Nom :** `verbe_entite` (ex. `valider_panier`)
-- **Déclencheur :** action utilisateur | cron | webhook entrant | job
-- **Préconditions (état initial) :**
-  - `paniers.status` = `PENDING`
-  - l'utilisateur possède une relation active dans `abonnements`
-- **Transitions (mutations) :**
-  - `paniers.status` : `PENDING → CONFIRMED`
-  - `commandes` : création d'une ligne (`panier_id`, `montant_total` = photo figée)
-- **Invariants garantis après commit :** <contraintes qui doivent tenir>
-- **Jobs mis en file (même transaction) :** `envoyer_confirmation` —
-  payload `{ commande_id }`, clé d'idempotence `commande_id`
-- **Sortie synchrone :** <réponse HTTP / callback, lue depuis l'état committé>
-- **Échecs :** <précondition non remplie → erreur renvoyée, aucun changement d'état>
-- **Concurrence :** <verrou / version / contrainte>
-- **Exemple :**
-  - *État avant (JSON ou mock BDD) :* …
-  - *Action :* …
-  - *État après (JSON ou mock BDD) :* …
+- **Name:** `verb_entity` (e.g. `confirm_cart`)
+- **Trigger:** user action | cron | incoming webhook | job
+- **Preconditions (initial state):**
+  - `carts.status` = `PENDING`
+  - the user has an active row in `subscriptions`
+- **Transitions (mutations):**
+  - `carts.status`: `PENDING → CONFIRMED`
+  - `orders`: one row created (`cart_id`, `total_amount` = frozen snapshot)
+- **Invariants guaranteed after commit:** <constraints that must hold>
+- **Jobs enqueued (same transaction):** `send_confirmation` —
+  payload `{ order_id }`, idempotency key `order_id`
+- **Synchronous output:** <HTTP response / callback, read from committed state>
+- **Failures:** <unmet precondition → error returned, no state change>
+- **Concurrency:** <lock / version / constraint>
+- **Example:**
+  - *State before (JSON or DB mock):* …
+  - *Action:* …
+  - *State after (JSON or DB mock):* …
 
-## 3. Décisions d'implémentation
+## 3. Implementation decisions
 
-| Décision | Choix | Critère | Date |
+| Decision | Choice | Criterion | Date |
 |---|---|---|---|
-| Orchestrateur de jobs | à choisir | La mise en file doit pouvoir partager la transaction métier ; sinon table outbox obligatoire | |
-| ORM / query builder | à choisir | Expose le modèle physique (contraintes, enums, index, transactions typées) et produit des migrations SQL lisibles | |
+| Job orchestrator | to be decided | Enqueue must share the business transaction; otherwise an outbox table is mandatory | |
+| ORM / query builder | to be decided | Exposes the physical model (constraints, enums, indexes, typed transactions) and yields readable SQL migrations | |

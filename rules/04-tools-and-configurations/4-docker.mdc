@@ -9,7 +9,7 @@ Docker Compose v2:
 - File: `compose.yml` (not `docker-compose.yml`)
 - No `version:` field (deprecated)
 - Use `depends_on` with `condition: service_healthy` when available
-- Use named networks (`modelo-network`)
+- Use named networks (`acme-network`)
 
 Dockerfile Patterns:
 
@@ -27,7 +27,7 @@ Services:
 - PostgreSQL 18 (pgvector/pgvector:pg18): primary database + vector extension
 - Redis 8: sessions, cache, pub/sub (event bus streams)
 - auth-api (3000), hub-shell (3001), app-registry (3002), entitlements (3003), feature-flags (3004)
-- All Hub services route through Traefik on `*.modelo.dev`
+- All services route through Traefik on `*.acme.test`
 
 Makefile Targets:
 
@@ -35,7 +35,7 @@ Makefile Targets:
 - `make up-build` to rebuild and start
 - `make logs` / `make logs-{service}` for logging
 - `make shell-{service}` for shell access (auth, registry, entitlements, flags, ai, docs, hub, postgres, redis)
-- `make certs` for mkcert TLS certificates (`*.modelo.dev`)
+- `make certs` for mkcert TLS certificates (`*.acme.test`)
 - `make setup` for full local setup (DNS check, certs, port check)
 - `make check-dns` / `make check-ports` for diagnostics
 - `make sync-keycloak-client` for Keycloak client alignment
@@ -43,6 +43,6 @@ Makefile Targets:
 Anti-Patterns:
 
 - NEVER run node/bun/npm/pip directly on host — use containers
-- NEVER write a configuration value or secret in `compose.yml`, not even as a default (`${VAR:-value}`) or in an example: use `${VAR:?message}`, real values in the unversioned `.env`, fake ones (`changeme`) in `.env.example` — see the `docker-compose-orchestration` skill
+- NEVER write a configuration value or secret in `compose.yml`, not even as a default (`${VAR:-value}`) or in an example: use `${VAR:?message}`, real values in the unversioned `.env`, fake ones (`changeme`) in `.env.example` — see [4-compose-secrets.mdc](4-compose-secrets.mdc)
 - Avoid exposing service ports directly — route through Traefik
 - Avoid hardcoded container names in code — use Docker DNS

@@ -77,7 +77,7 @@ En tant que développeur, je veux que toutes les commandes kubectl soient exécu
 - **FR-007**: Le rapport DevOps DOIT contenir : description du problème, logs/events concrets, action demandée, justification technique.
 - **FR-008**: Le système DOIT fournir un skill Cursor décrivant le kubeconfig et les opérations kubectl autorisées.
 - **FR-009**: Le système DOIT fournir une commande Cursor (`/k8s-troubleshoot`) orchestrant le diagnostic.
-- **FR-010**: Le système DOIT fetch et intégrer la documentation du dashboard admin (https://modelo-dashboard-k8s-preprod.septeo.fr/docs) comme référence dans le skill.
+- **FR-010**: Le système DOIT fetch et intégrer la documentation du dashboard admin (https://<DASHBOARD_HOST>/docs) comme référence dans le skill.
 - **FR-011**: Le système DOIT valider la connectivité au cluster avant d'exécuter des opérations.
 
 ### Non-Functional Requirements
@@ -120,11 +120,11 @@ En tant que développeur, je veux que toutes les commandes kubectl soient exécu
 - **SC-002**: Un ConfigMap peut être modifié et appliqué (rollout restart) en une seule session de commande.
 - **SC-003**: 100% des commandes kubectl sont exécutées dans Docker, 0 exécution sur le host.
 - **SC-004**: Le rapport DevOps contient systématiquement des logs/events concrets et une recommandation claire.
-- **SC-005**: Le skill est réutilisable sur n'importe quel projet Modelo ayant un kubeconfig du même format.
+- **SC-005**: Le skill est réutilisable sur n'importe quel projet ayant un kubeconfig du même format.
 
 ## Assumptions
 
 - Le kubeconfig est téléchargé manuellement depuis le dashboard admin et placé dans le projet.
-- Le service account `modelo-debug-only` a les permissions de lecture sur la plupart des ressources et d'écriture sur les ConfigMaps.
+- Le service account `debug-only` a les permissions de lecture sur la plupart des ressources et d'écriture sur les ConfigMaps.
 - Docker est installé et fonctionnel sur le host du développeur.
-- Le dashboard admin (https://modelo-dashboard-k8s-preprod.septeo.fr) peut être accessible depuis le conteneur Docker si le réseau le permet.
+- Le dashboard admin (https://<DASHBOARD_HOST>) peut être accessible depuis le conteneur Docker si le réseau le permet.

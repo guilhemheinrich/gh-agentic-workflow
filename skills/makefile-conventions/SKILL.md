@@ -1,302 +1,76 @@
 ---
 name: makefile-conventions
 description: >-
-  Write the project-root task runner — a Makefile or a Taskfile.yml (Task) —
-  with Docker-first execution, .env-driven configuration, and standardized
-  targets (up, down, test, lock, copy-vendors, db-*). Use when authoring or
-  debugging Makefiles or Taskfiles, adding make targets or Task tasks,
-  converting a Makefile to Task, configuring docker compose orchestration, or
-  when the user mentions "Makefile", "Taskfile", "make up", "task up",
-  "make test", or "docker compose" workflow.
+  Write the project-root task runner (a Makefile or a Taskfile.yml) with
+  Docker-first execution, .env-driven configuration, and standardized targets
+  (up, down, test, lock, copy-vendors, test-e2e). Ships a Makefile and a
+  Taskfile.yml template. Use when authoring or debugging Makefiles or
+  Taskfiles, adding make targets or Task tasks, converting a Makefile to Task,
+  or when the user mentions "Makefile", "Taskfile", "make up", "task up" or a
+  docker compose workflow.
 ---
 
-# Makefile / Taskfile — conventions et templates
+# Makefile / Taskfile conventions
 
-Deux pilotes sont couverts, avec les mêmes principes et les mêmes targets :
+Two drivers, same principles and same target names. A project picks **one** (two interfaces always diverge).
 
-| Pilote | Fichier | Référence |
+| Driver | File | Template |
 |---|---|---|
-| **Make** | `Makefile` | ce fichier (templates ci-dessous) + [examples.md](examples.md) |
-| **Task** | `Taskfile.yml` (v3) | [taskfile.md](taskfile.md) : correspondance Make → Task, template complet, anti-patterns |
+| Make | `Makefile` | [templates/Makefile](templates/Makefile) |
+| Task (v3) | `Taskfile.yml` | [templates/Taskfile.yml](templates/Taskfile.yml) |
 
-Un projet choisit **un seul pilote** (souvent imposé par son `CLAUDE.md` /
-`AGENTS.md`). Task est à privilégier quand le projet veut un fichier
-déclaratif (YAML), `task --list` comme aide, des arguments nommés
-(`task logs -- api`) et un shell identique sur tous les OS. Les targets
-obligatoires ci-dessous existent sous le même nom dans les deux pilotes
-(`help` devient la tâche `default`, `locks` / `copy-lock` devient `lock`).
+Prefer Task when the project wants a declarative file, `task --list` as help, named arguments (`task logs -- api`) and an identical shell on every OS. `help` becomes the `default` task; `copy-lock` / `locks` becomes `lock`.
 
-## Principes fondamentaux
+## Principles
 
-1. **Docker-first** : toutes les commandes s'exécutent dans des conteneurs, jamais sur l'hôte.
-2. **Configuration par `.env`** : tous les ports, URLs, images sont lus depuis `.env` avec des fallbacks `?=`.
-3. **Sortie exploitable** : après un `make up`, les URLs/ports sont affichés et cliquables dans le terminal. Après des tests, le chemin vers le rapport est indiqué.
-4. **`.PHONY`** : tous les targets non-fichier sont déclarés PHONY.
+1. **Docker-first**: every command runs in a container, never on the host (documented exceptions only, e.g. native mobile builds grouped under a `mobile:*` prefix).
+2. **`.env`-driven**: ports, URLs and images come from `.env` with fallbacks identical to `.env.example`. Make: `-include .env` (leading dash: silent when absent) + `export` + `?=`. Task: `dotenv: ['.env']` + `${VAR:-default}`.
+3. **Useful output**: after `up`, print every exposed URL (ports from variables, never hard-coded); after tests, print the report path, even on failure, while still propagating the exit code.
+4. **Make only**: declare every non-file target `.PHONY`, set `.DEFAULT_GOAL := help`, `help` is generated from `## comment`.
 
----
+Mandatory targets: `help`, `up`, `down`, `copy-vendors` (container `node_modules` to host for the IDE/LSP; delete the old directory first to avoid symlink conflicts; one `cp` per package in a monorepo), `lock` (regenerate the lockfile in the container and copy it to the host; a missing lockfile is a warning), `test`; plus `test-e2e` (dedicated `compose.e2e.yml` + `e2e` profile, wait for health, propagate Playwright's exit code, copy the report to a known path, restore the normal stack) and `test-api` when relevant.
 
-## Structure du fichier
+## Make to Task
 
-```makefile
-# ──── Configuration ───────────────────────────────────────────
--include .env
-export
+| Makefile | Taskfile.yml |
+|---|---|
+| `-include .env` + `export` | `dotenv: ['.env']` (absent file tolerated; does not override variables already in the environment) |
+| `APP_PORT ?= 3000` | `${APP_PORT:-3000}` in commands, or `{{.APP_PORT \| default "3000"}}` in `vars:` |
+| `.PHONY` | not needed |
+| `help` + `## comment` | `desc:` on every task + `default` task running `task --list` |
+| `$(call print_resource,...)` | a `resources` task (`silent: true`) with `printf` |
+| `$(MAKE) copy-lock` | `- task: copy-lock` |
+| `make test-e2e TAGS=a,b` | `task test-e2e -- a,b` via `{{.CLI_ARGS}}` |
+| `@` | `silent: true` |
+| `cd apps/x && ...` | `dir: apps/x` |
+| manual confirmation | `prompt: "Delete volumes?"` |
+| interactive `exec ... sh` | `interactive: true` |
+| file targets | `sources:` / `generates:` |
+| `$$` to escape `$` | plain `$`; `{{ }}` is reserved for Task templates |
 
-# Fallbacks (valeurs .env.example)
-APP_PORT     ?= 3000
-API_PORT     ?= 8080
+Task gotchas:
 
-# ──── Variables dérivées ──────────────────────────────────────
-COMPOSE      = docker compose
-EXEC_BACKEND = $(COMPOSE) exec -T backend
-RUN_BACKEND  = $(COMPOSE) run --rm backend
-
-APP_URL      ?= http://localhost:$(APP_PORT)
-API_URL      ?= http://localhost:$(API_PORT)
-
-# ──── Helpers (affichage) ─────────────────────────────────────
-BOLD   = \033[1m
-CYAN   = \033[36m
-GREEN  = \033[32m
-YELLOW = \033[33m
-RESET  = \033[0m
-LINE   = \033[90m──────────────────────────────────────────────────\033[0m
-
-define print_resource
-	@printf "  $(CYAN)%-18s$(RESET) %s\n" "$(1)" "$(2)"
-endef
-
-# ──── PHONY ───────────────────────────────────────────────────
-.PHONY: help up down copy-vendors locks test test-e2e test-api
-.DEFAULT_GOAL := help
-```
-
-> **Champs awk notés `$$(N)` et non `$$N`** dans la recette ci-dessus : les deux
-> formes sont équivalentes (awk accepte une expression parenthésée comme numéro de
-> champ), mais un `$` suivi directement d'un chiffre dans un SKILL.md est remplacé
-> par le Nième argument lorsque le skill est invoqué en slash command. La forme sans
-> parenthèses se rendait avec un mot de l'utilisateur à la place du numéro de champ,
-> cassant silencieusement la recette copiée.
-
-> **`-include .env`** (avec le tiret) empêche une erreur si `.env` n'existe pas encore.
-
----
-
-## Targets obligatoires
-
-### `help` — affiche les targets disponibles
-
-```makefile
-help: ## Affiche les targets disponibles
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
-		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$(1), $$(2)}'
-```
-
-### `up` — démarrage de la stack
-
-Démarre tous les services et affiche les ressources exposées (URLs cliquables).
-
-```makefile
-up: ## Démarre la stack complète
-	@printf "\n$(BOLD)Starting services...$(RESET)\n"
-	@$(COMPOSE) up -d --build --remove-orphans
-	@printf "\n$(LINE)\n"
-	@printf "$(BOLD)$(GREEN)  Stack is up$(RESET)\n"
-	@printf "$(LINE)\n"
-	$(call print_resource,App,$(APP_URL))
-	$(call print_resource,API,$(API_URL))
-	$(call print_resource,API Docs,$(API_URL)/api)
-	@printf "$(LINE)\n"
-	@printf "  $(YELLOW)Logs$(RESET)  make logs     $(YELLOW)Stop$(RESET)  make down\n\n"
-```
-
-**Règles** :
-- Chaque service avec un port exposé doit apparaître dans la sortie.
-- Utiliser `$(call print_resource,Label,URL)` pour un formatage cohérent.
-- Les ports viennent de variables `?=`, jamais en dur.
-
-### `down` — arrêt de la stack
-
-```makefile
-down: ## Arrête tous les services
-	@$(COMPOSE) down
-```
-
-### `copy-vendors` — sync des dépendances pour le LSP hôte
-
-Copie les `node_modules` (ou équivalent) du conteneur vers l'hôte pour que le LSP et le linter de l'IDE fonctionnent.
-
-```makefile
-copy-vendors: ## Copie node_modules des conteneurs vers l'hôte (IDE)
-	@printf "\n$(BOLD)Syncing node_modules to host...$(RESET)\n"
-	rm -rf ./node_modules
-	$(COMPOSE) cp backend:/app/node_modules ./node_modules
-	@printf "$(GREEN)  node_modules synced. IDE linter should resolve deps.$(RESET)\n\n"
-```
-
-**Règles** :
-- Toujours `rm -rf` l'ancien dossier avant la copie (évite les conflits de symlinks).
-- Adapter le nombre de `cp` au nombre de packages/apps du monorepo.
-
-### `locks` — copie des lockfiles
-
-Copie le lockfile généré dans le conteneur vers l'hôte (pour le versionning et la CI).
-
-```makefile
-locks: ## Copie les lockfiles du conteneur vers l'hôte
-	@printf "\n$(BOLD)Exporting lockfiles...$(RESET)\n"
-	@$(COMPOSE) cp backend:/build-lock/bun.lock ./bun.lock 2>/dev/null \
-		&& printf "$(GREEN)  bun.lock copied.$(RESET)\n" \
-		|| printf "$(YELLOW)  bun.lock not found (rebuild with make up).$(RESET)\n"
-```
-
-### `test` — tests unitaires
-
-```makefile
-test: ## Tests unitaires
-	@printf "\n$(BOLD)Running unit tests...$(RESET)\n"
-	$(EXEC_BACKEND) npm run test
-	@printf "$(GREEN)  Tests passed.$(RESET)\n\n"
-```
-
-### `test-e2e` — tests end-to-end (Playwright)
-
-Utilise un `compose.e2e.yml` dédié. La sortie affiche le chemin du rapport.
-
-```makefile
-test-e2e: ## Tests E2E (Playwright, compose.e2e.yml)
-	$(COMPOSE) -f compose.yml -f compose.e2e.yml --profile e2e up -d --build
-	@printf "⏳ Waiting for services...\n"
-	@for i in $$(seq 1 20); do \
-		$(COMPOSE) -f compose.yml -f compose.e2e.yml exec -T backend \
-			sh -c 'wget -qO /dev/null http://localhost:$${PORT:-3000}/health 2>/dev/null' \
-			&& break; \
-		sleep 2; \
-	done
-	@e2e_exit=0; \
-	$(COMPOSE) -f compose.yml -f compose.e2e.yml --profile e2e \
-		run --rm playwright npx playwright test || e2e_exit=$$?; \
-	rm -rf playwright-report && \
-		cp -r apps/e2e/playwright-report playwright-report 2>/dev/null || true; \
-	printf "\n📊 Rapport E2E : playwright-report/index.html\n"; \
-	printf "   Ouvrir     : open playwright-report/index.html\n\n"; \
-	exit $$e2e_exit
-```
-
-**Règles** :
-- Toujours copier le rapport vers un emplacement connu et l'indiquer en sortie.
-- Restaurer la stack normale après les tests si le profil E2E modifie des services.
-- Le code de sortie de Playwright doit être propagé (`exit $$e2e_exit`).
-
-### `test-api` — tests d'API (le cas échéant)
-
-```makefile
-test-api: ## Tests d'API (integration)
-	@printf "\n$(BOLD)Running API tests...$(RESET)\n"
-	$(EXEC_BACKEND) npm run test:api
-	@printf "$(GREEN)  API tests passed.$(RESET)\n\n"
-```
-
----
-
-## Bonnes pratiques
-
-### Variables `.env` avec fallback
-
-```makefile
--include .env
-export
-
-BACKEND_PORT ?= 3000
-FRONTEND_PORT ?= 3001
-DB_PORT ?= 5432
-```
-
-- Utiliser `-include` (silencieux si absent).
-- Toujours définir un fallback `?=` cohérent avec `.env.example`.
-- Exposer via `export` pour que les subshells héritent.
-
-### Sortie des ressources créées
-
-Quand un target produit un artefact (rapport de test, fichier généré), **toujours** afficher le chemin :
-
-```makefile
-	@printf "\n📊 Report: ./coverage/lcov-report/index.html\n"
-	@printf "   Open: open ./coverage/lcov-report/index.html\n"
-```
-
-### Affichage des URLs dans `up`
-
-Utiliser la macro `print_resource` pour un alignement propre et des URLs cliquables :
-
-```makefile
-define print_resource
-	@printf "  $(CYAN)%-18s$(RESET) %s\n" "$(1)" "$(2)"
-endef
-
-# Usage :
-$(call print_resource,App,http://localhost:$(APP_PORT))
-$(call print_resource,API Docs,http://localhost:$(API_PORT)/api)
-$(call print_resource,DB Studio,http://localhost:$(DB_STUDIO_PORT))
-```
-
-### Healthcheck avant action
-
-Quand un target dépend d'un service prêt (E2E, seed), boucler sur un healthcheck :
-
-```makefile
-@for i in $$(seq 1 20); do \
-    $(COMPOSE) exec -T backend \
-        sh -c 'wget -qO /dev/null http://localhost:$${PORT}/health 2>/dev/null' \
-        && break; \
-    sleep 2; \
-done
-```
-
-### Monorepo : adapter les commandes par service
-
-```makefile
-EXEC_BACKEND  = $(COMPOSE) exec -T backend
-EXEC_FRONTEND = $(COMPOSE) exec -T frontend
-EXEC_WORKER   = $(COMPOSE) exec -T worker
-
-test:
-	$(EXEC_BACKEND) npm run test
-	$(EXEC_FRONTEND) npm run test
-	$(EXEC_WORKER) npm run test
-```
-
----
+- Commands run in a built-in POSIX interpreter (`mvdan/sh`): no bashisms (`[[ ]]`, arrays); write POSIX or call `bash -c` explicitly.
+- `docker compose up --wait` replaces the Makefile health-check loop, provided every service declares a `healthcheck`.
+- Quote YAML strings containing `{{ }}` or `:`.
+- A multi-line `|` block runs in one shell: that is where local variables and exit-code propagation go.
+- Every task needs a `desc:` (otherwise invisible in `task --list`); name tasks in kebab-case, group by domain with `:` (`db:migrate`).
+- Install: <https://taskfile.dev/installation/>; GitHub Actions: `arduino/setup-task@v2` (`version: 3.x`).
 
 ## Anti-patterns
 
-| Anti-pattern | Correction |
+| Anti-pattern | Fix |
 |---|---|
-| Port hardcodé (`localhost:3000`) | `http://localhost:$(APP_PORT)` |
-| Commande directe sur l'hôte (`npm test`) | `$(EXEC_BACKEND) npm test` |
-| Pas de `.PHONY` | Déclarer tous les targets |
-| `include .env` sans `-` | `-include .env` (silencieux si absent) |
-| Test E2E sans rapport de sortie | Toujours afficher le chemin du rapport |
-| `make up` muet | Toujours lister les ressources exposées |
+| Hard-coded port (`localhost:3000`) | `http://localhost:$(APP_PORT)` |
+| Command on the host (`npm test`, `pnpm install`) | `$(EXEC_BACKEND) npm test` / `{{.RUN_BACKEND}} pnpm ...` |
+| `include .env` without the dash | `-include .env` |
+| E2E without a printed report path | always print it |
+| Silent `up` | list the exposed resources |
+| `compose up -d` then immediate action, no wait | `--wait` + healthchecks, or a health loop |
+| Makefile and Taskfile side by side | keep one |
 
----
+Awk fields in the help recipe are written `$$(1)` / `$$(2)`: equivalent to `$$1`, and safe when a SKILL.md is invoked as a slash command (a bare `$` followed by a digit gets replaced by an argument).
 
-## Ressources complémentaires
+## See also
 
-- Pour des exemples complets de Makefiles réels, voir [examples.md](examples.md)
-- Pour la variante Task (`Taskfile.yml`), voir [taskfile.md](taskfile.md)
-
----
-
-## See also — Static validation on edit
-
-Per-file linting driven by an editor-agent hook does **not** go through the
-Makefile (or Taskfile). See [static-validation-hooks](../static-validation-hooks/SKILL.md):
-the routing table lives in the hook itself, so there is no `make lint FILE=…`
-target to write and no second file to keep in sync.
-
-That skill documents:
-- The runner ↔ routing-table split inside `.agents/hooks/validate-on-edit.sh`.
-- Routing tables for python (ruff), typescript (eslint/biome) and nestjs.
-- Why whole-project checkers (`tsc --noEmit`, `phpstan`, `mypy`) must stay in CI.
-- Degraded behaviour, the retry brake, and the Bash-tool coverage gap.
+Per-file linting on edit does not go through the Makefile or Taskfile: see [static-validation-hooks](../static-validation-hooks/SKILL.md) (the routing table lives in the hook, so there is no `make lint FILE=...` target to write).

@@ -3,7 +3,7 @@
 Measured on **2026-11-12** on macOS (Darwin 25.5, Apple silicon) with
 `linear 3.1.0` (`schpet/linear-cli`, installed by
 `brew install schpet/tap/linear` → `/opt/homebrew/bin/linear`), workspace
-`septeo-proptech`. Read-only GraphQL only. Real payloads:
+`acme`. Read-only GraphQL only. Real payloads:
 [`tests/linear-watch/fixtures/linear-real/`](../tests/linear-watch/fixtures/linear-real/README.md).
 
 In every transcript below the API key is loaded with
@@ -45,19 +45,19 @@ system-keyring path, the default without `--plaintext`, was **not** tested):
 
 ```console
 $ ( . ~/.config/linear/env; printf '%s' "$LINEAR_API_KEY" ) | env -u LINEAR_API_KEY linear auth login --plaintext
-Logged in to workspace: Septeo Proptech (septeo-proptech)
+Logged in to workspace: Acme Proptech (acme)
   User: <redacted> <<email>>
   Set as default workspace
 $ cat ~/.config/linear/credentials.toml
-default = "septeo-proptech"
-septeo-proptech = "<key>"
+default = "acme"
+acme = "<key>"
 ```
 
 | Case | Stored credential | Environment | Exit | Output |
 |---|---|---|---|---|
-| A | real | unset | 0 | stdout `{"data":{"organization":{"urlKey":"septeo-proptech"}}}` |
+| A | real | unset | 0 | stdout `{"data":{"organization":{"urlKey":"acme"}}}` |
 | B | real | `LINEAR_API_KEY=<bogus>` | **4** | stderr `{"errors":[{"message":"Authentication required, not authenticated",…"statusCode":401…}]}` |
-| C | real | `LINEAR_API_KEY=<bogus>` + `--workspace septeo-proptech` | **2** | stderr `✗ API request failed: Cannot use --workspace while LINEAR_API_KEY is set` / `Unset LINEAR_API_KEY or remove the --workspace flag.` |
+| C | real | `LINEAR_API_KEY=<bogus>` + `--workspace acme` | **2** | stderr `✗ API request failed: Cannot use --workspace while LINEAR_API_KEY is set` / `Unset LINEAR_API_KEY or remove the --workspace flag.` |
 | D | real | `LINEAR_API_KEY=` (empty) | 0 | stdout data — empty counts as unset |
 | E0 | bogus (edited into `credentials.toml`) | unset | 4 | stderr 401 body |
 | E | bogus | `LINEAR_API_KEY=<real>` | **0** | stdout data |
@@ -80,8 +80,8 @@ cwd .linear.toml bogus, env real                         → exit 0
 that an environment key always wins, plus a fixed working directory (launchd
 starts jobs in `/`).
 
-The machine was left as found: `linear auth logout --workspace septeo-proptech --yes`
-(`✓ Removed credentials for workspace septeo-proptech`) emptied
+The machine was left as found: `linear auth logout --workspace acme --yes`
+(`✓ Removed credentials for workspace acme`) emptied
 `~/.config/linear/credentials.toml`, which did not exist before and was then
 deleted. The key file `~/.config/linear/env` was only read.
 

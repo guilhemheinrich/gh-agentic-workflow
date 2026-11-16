@@ -2,7 +2,7 @@
 
 **Date**: [YYYY-MM-DD HH:MM]
 **Namespace**: [namespace]
-**Affected resource**: [type/name, e.g., deployment/modelo-meet-api]
+**Affected resource**: [type/name, e.g., deployment/acme-api]
 **Priority**: [RED Critical / ORANGE High / YELLOW Medium]
 **Cluster**: [cluster name]
 

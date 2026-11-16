@@ -45,10 +45,6 @@ export function lineTotal(unitPrice, quantity) {
 }
 ```
 
-## Skill References
-
-- Use project `tsconfig` strict settings together with this rule. For fp-ts-heavy code style patterns, see [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md).
-
 ## Enforcement
 
 - **Detect**: Exported functions in `/domain` without explicit `: ReturnType` or with `any` / implicit parameters.

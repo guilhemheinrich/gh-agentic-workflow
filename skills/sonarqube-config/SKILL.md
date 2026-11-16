@@ -174,13 +174,13 @@ What runs, in order:
 Real output, 2026-09-10, on a throwaway repository (token redacted):
 
 ```text
-bind sonarctl-selftest → https://sonarqube.icare.ddnsgeek.com
+bind sonarctl-selftest → https://sonarqube.example.com
   ok   project created: sonarctl-selftest (public)
   ok   token generated: 'Analyze "sonarctl-selftest"' (PROJECT_ANALYSIS_TOKEN, owner admin)
   ok   wrote /…/selftest/.sonar-config (0600)
   ok   .sonar-config is ignored by git
 
-next: sonarctl.sh scan        dashboard: https://sonarqube.icare.ddnsgeek.com/dashboard?id=sonarctl-selftest
+next: sonarctl.sh scan        dashboard: https://sonarqube.example.com/dashboard?id=sonarctl-selftest
 ```
 
 A second `bind` on the same repository answered `already bound … nothing to do`.
@@ -188,7 +188,7 @@ A second `bind` on the same repository answered `already bound … nothing to do
 The written file (see `templates/sonar-config.example`):
 
 ```dotenv
-SONAR_HOST_URL=https://sonarqube.icare.ddnsgeek.com
+SONAR_HOST_URL=https://sonarqube.example.com
 SONAR_PROJECT_KEY=sonarctl-selftest
 SONAR_TOKEN=sqp_…
 ```
@@ -506,7 +506,7 @@ sonar.coverage.exclusions=**/Migrations/**,**/Tests/**
 sonar.cs.opencover.reportsPaths=**/coverage.opencover.xml
 ```
 
-### Real-world example (modelo-calendar)
+### Example: monorepo with generated API client
 
 ```properties
 # Orval emits TypeScript under packages/api-client/src/generated/ from the OpenAPI spec.

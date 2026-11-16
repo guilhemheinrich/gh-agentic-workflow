@@ -29,14 +29,14 @@ before the backend answers. The template therefore:
   for every target, and fails with "run `make up` first" locally or "check the
   URL and your network access" remotely.
 
-bill-e's `PLAYWRIGHT_SKIP_STACK=1` and `withStack` branch disappear: there is
+A `PLAYWRIGHT_SKIP_STACK=1` flag and a `withStack` branch disappear: there is
 no stack to skip inside the runner.
 
 **`projects`** encode categories (`api`, `e2e`) and nothing else. A
 `staging` project would duplicate each lane and diverge on demo data; the
 environment is not a project. A lane is not a project either: Playwright
 ANDs a project-level `grep` with the CLI `--grep`, so a project pinned to
-`/@fast/`, as in `modelo-calendar/apps/e2e/playwright.config.ts`, drops every
+`/@fast/`, as in a repo whose `apps/e2e/playwright.config.ts` does this, drops every
 spec without that tag from `make test-e2e`, including a `@prod-safe` smoke.
 Lanes are `make test-e2e LANE=fast`; the Makefile composes the `--grep` and
 ANDs it with `@prod-safe` on prod through lookaheads.
@@ -102,7 +102,7 @@ and pipelines share it. The `@business` tests that create data therefore:
   e2e project's `baseURL`, the frontend; build an API context explicitly:
   `const api = await playwright.request.newContext({ baseURL: env.API_BASE_URL })`;
 - run through `make test-e2e-business`, which passes `--grep @business
-  --workers=1` and refuses `ENV=prod`, as bill-e does with `E2E_BUSINESS_GREP`;
+  --workers=1` and refuses `ENV=prod`, as a dedicated `E2E_BUSINESS_GREP` script can do;
 - own their identity: one demo account per parallel file when files run in
   parallel, which is the `e2e-playwright` skill's provisioning pattern.
 

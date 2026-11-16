@@ -1,0 +1,43 @@
+{
+  "family": "my-app-api-dev",
+  "requiresCompatibilities": ["FARGATE"],
+  "networkMode": "awsvpc",
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::<account-id>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<account-id>:role/my-app-task-role",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "placeholder",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "hostPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "APP_ENV", "value": "dev" },
+        { "name": "LOG_LEVEL", "value": "debug" },
+        { "name": "CORS_ALLOWED_ORIGINS", "value": "https://app.dev.example.com" }
+      ],
+      "secrets": [
+        {
+          "name": "DATABASE_URL",
+          "valueFrom": "arn:aws:secretsmanager:eu-west-3:<account-id>:secret:my-app:DATABASE_URL_DEV::"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/my-app-api-dev",
+          "awslogs-region": "eu-west-3",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

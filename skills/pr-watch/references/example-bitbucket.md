@@ -35,7 +35,7 @@ Counts come from the `origin` remotes of the repositories under `~/code` and
 | Daemon | launchd label `com.bitbucket-pr-watch.daemon`, runs `/bin/bash ~/.agents/skills/bitbucket-pr-watch/scripts/bbw daemon run` |
 | Credential | `~/.config/bitbucket-pr-watch/env` (0600): `BITBUCKET_WATCH_USER`, `BITBUCKET_WATCH_TOKEN`, sourced from `.zshenv` because the desktop app runs its shell as `zsh -c` |
 | Hooks | four scripts in `~/.agents/hooks/`, three commands in `~/.claude/settings.json` |
-| Subscription | `septeo-immobilier/modelo-workspace#38`, status `open` |
+| Subscription | `acme/acme-workspace#38`, status `open` |
 | `doctor` | `ok` on deps, credential (`accepted by Bitbucket (scoped token)`), env mode 600, daemon, subscriptions, hooks |
 
 `prw migrate` carries all of it onto the generic names; every step asks first
@@ -61,7 +61,7 @@ and a state directory that already exists is never overwritten.
 ## Wake lines, as the session receives them
 
 ```
-modelo-bill-e#229 pipeline "PR analysis" INPROGRESS→FAILED · https://bitbucket.org/septeo-immobilier/modelo-bill-e/pull-requests/229
-modelo-bill-e#229 comment by Julien Boutet on src/cockpit/filters.ts:42 (id 4521)
-modelo-bill-e#229 after merge into staging @1a2b3c4: "Pipeline staging" FAILED · https://bitbucket.org/…/pipelines/results/812
+billing-app#229 pipeline "PR analysis" INPROGRESS→FAILED · https://bitbucket.org/acme/billing-app/pull-requests/229
+billing-app#229 comment by Alex Martin on src/cockpit/filters.ts:42 (id 4521)
+billing-app#229 after merge into staging @1a2b3c4: "Pipeline staging" FAILED · https://bitbucket.org/…/pipelines/results/812
 ```

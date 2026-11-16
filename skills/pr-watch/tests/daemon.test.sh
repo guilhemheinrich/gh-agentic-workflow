@@ -15,14 +15,14 @@ fx_default
 "$PRW" subscribe "$FX_REPO" 229 --session s1 --head ownhead000 >/dev/null
 cycle "$T0"
 check "baseline cycle releases nothing" '[ "$(unread s1)" = 0 ]'
-check "baseline cycle writes the snapshot" '[ -f "$PRW_STATE_DIR/snapshots/septeo-immobilier__modelo-bill-e__229.json" ]'
+check "baseline cycle writes the snapshot" '[ -f "$PRW_STATE_DIR/snapshots/acme__billing-app__229.json" ]'
 check "cycle writes the heartbeat" '[ "$(cat "$PRW_STATE_DIR/heartbeat")" = "$T0" ]'
 
-fx_comments "[$(fx_comment 4521 'Julien Boutet' src/a.ts 42)]"
+fx_comments "[$(fx_comment 4521 'Alex Martin' src/a.ts 42)]"
 cycle $((T0 + 10))
 fx_statuses abc123 '[{"key":"pr-analysis","name":"PR analysis","state":"SUCCESSFUL"}]'
 cycle $((T0 + 20))
-fx_pr OPEN abc123 def456 "[$(fx_participant acc-1 'Julien Boutet' true approved)]"
+fx_pr OPEN abc123 def456 "[$(fx_participant acc-1 'Alex Martin' true approved)]"
 cycle $((T0 + 30))
 cycle $((T0 + 59))
 check "nothing released inside the settle window" '[ "$(unread s1)" = 0 ]'
@@ -42,13 +42,13 @@ check "the running pipeline is logged" 'grep -q "INPROGRESS" "$PRW_STATE_DIR/dae
 
 "$PRW" subscribe "$FX_REPO" 229 --session s2 >/dev/null
 : >"$FAKE_CURL_LOG"
-fx_pr MERGED abc123 def456 "[$(fx_participant acc-1 'Julien Boutet' true approved)]" mrg999
+fx_pr MERGED abc123 def456 "[$(fx_participant acc-1 'Alex Martin' true approved)]" mrg999
 fx_statuses mrg999 '[{"key":"branch","name":"Pipeline staging","state":"INPROGRESS"}]'
 cycle $((T0 + 90))
 check "two sessions on one PR share one fetch" '[ "$(grep -c "pullrequests/229$" "$FAKE_CURL_LOG")" = 1 ]' "$(cat "$FAKE_CURL_LOG")"
 check "two sessions on one merge commit share one fetch" '[ "$(grep -c "commit/mrg999/statuses" "$FAKE_CURL_LOG")" = 1 ]' "$(cat "$FAKE_CURL_LOG")"
-check "merge is released at once to s1" 'lib "events_unread s1" | grep -q "modelo-bill-e#229 merged"'
-check "merge is released at once to s2" 'lib "events_unread s2" | grep -q "modelo-bill-e#229 merged"'
+check "merge is released at once to s1" 'lib "events_unread s1" | grep -q "billing-app#229 merged"'
+check "merge is released at once to s2" 'lib "events_unread s2" | grep -q "billing-app#229 merged"'
 check "merge moves both subscriptions to the build phase" '[ "$(jq "[.[] | select(.status == \"build\" and .commit == \"mrg999\")] | length" "$SUBS")" = 2 ]' "$(cat "$SUBS")"
 lib 'events_ack s1 1'; lib 'events_ack s2 1'
 fx_statuses mrg999 '[{"key":"branch","name":"Pipeline staging","state":"SUCCESSFUL"}]'
@@ -61,7 +61,7 @@ cycle $((T0 + 100))
 check "closed subscriptions are not polled" '[ ! -s "$FAKE_CURL_LOG" ]'
 
 # Pending subscription resolved by the daemon, then given up after 24 h.
-q='repositories/septeo-immobilier/modelo-bill-e/pullrequests?q=source.branch.name%3D%22feat%2Fx%22%20AND%20state%3D%22OPEN%22'
+q='repositories/acme/billing-app/pullrequests?q=source.branch.name%3D%22feat%2Fx%22%20AND%20state%3D%22OPEN%22'
 fx_put "$q" '{"values":[]}'
 PRW_NOW=$((T0 + 100)) "$PRW" subscribe --branch feat/x --repo "$FX_REPO" --session s3 >/dev/null
 fx_put "$q" '{"values":[{"id":229}]}'

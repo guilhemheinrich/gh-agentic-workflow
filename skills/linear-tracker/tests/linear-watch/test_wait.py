@@ -37,8 +37,8 @@ lw = load_lw()
 
 POLL = "0.05"
 OLD = "2020-01-01T00:00:00Z"
-LINE_1 = "Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/septeo-proptech/issue/TT-2287"
-LINE_2 = "Linear · TT-2290 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-2290"
+LINE_1 = "Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/acme/issue/TT-2287"
+LINE_2 = "Linear · TT-2290 Blocked → Todo · https://linear.app/acme/issue/TT-2290"
 
 
 class WaitTestCase(unittest.TestCase):

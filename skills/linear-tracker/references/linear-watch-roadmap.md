@@ -26,10 +26,10 @@ come back when `lw` runs as a server (see LW-9).
   hand delivers real Linear changes to a session that armed `lw wait`. LW-7 and
   LW-8 make it permanent and automatic.
 
-## Facts measured before writing this (2026-11-12, workspace Septeo Proptech)
+## Facts measured before writing this (2026-11-12, workspace Acme Proptech)
 
 Measured with read-only GraphQL calls on project
-`broker-pa-run-and-evolutions-courant-5842ed0c2bcd` (slugId `5842ed0c2bcd`).
+`example-project-run-5842ed0c2bcd` (slugId `5842ed0c2bcd`).
 
 | Fact | Evidence | Consequence |
 |---|---|---|
@@ -65,8 +65,8 @@ Linear GraphQL ◀── linear api (every 300 s) ── lw daemon (launchd) ─
   third-party text, the agent reads them through the MCP as untrusted data):
 
   ```
-  Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/septeo-proptech/issue/TT-2287
-  Linear · TT-2290 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-2290
+  Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/acme/issue/TT-2287
+  Linear · TT-2290 Blocked → Todo · https://linear.app/acme/issue/TT-2290
   ```
 
   (the second line is a made-up example of the shape)

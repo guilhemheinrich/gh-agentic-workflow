@@ -42,10 +42,6 @@ export function attachUserToInvoice(userId: UserId, billing: BillingPort) {
 import { calculateTax } from '../../billing/domain/tax.logic';
 ```
 
-## Skill References
-
-- Backend module boundaries and `ReaderTaskEither` for ports: [fp-ts backend skill](../../skills/fp-ts-backend/SKILL.md).
-
 ## Enforcement
 
 - **Detect**: Import paths crossing `modules/<name>/domain` of another feature; relative imports that hop more than one module without going through `shared/` or a declared public API.

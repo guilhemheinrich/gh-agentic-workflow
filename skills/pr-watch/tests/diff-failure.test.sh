@@ -7,7 +7,7 @@
 FX="$WORK/fx"; mkdir -p "$FX"; use_fixture "$FX"
 export PRW_SETTLE_SECONDS=0
 T0=1793372000
-SNAP="$PRW_STATE_DIR/snapshots/septeo-immobilier__modelo-bill-e__229.json"
+SNAP="$PRW_STATE_DIR/snapshots/acme__billing-app__229.json"
 lib() { bash -c "for l in '$SKILL_DIR'/scripts/lib/*.sh; do . \"\$l\"; done; $1"; }
 unread() { lib "events_unread $1" | wc -l | tr -d ' '; }
 
@@ -17,7 +17,7 @@ mkdir -p "$BROKEN"
 cp -R "$SKILL_DIR/scripts" "$SKILL_DIR/adapters" "$SKILL_DIR/templates" "$BROKEN/"
 cat >"$BROKEN/scripts/lib/zz-broken-diff.sh" <<'EOF'
 diff_snapshots() {
-  echo 'jq: error (at <unknown>): string ("modelo-bill-e#") and object ({"kind":"comment"}) cannot be added' >&2
+  echo 'jq: error (at <unknown>): string ("billing-app#") and object ({"kind":"comment"}) cannot be added' >&2
   return 5
 }
 EOF
@@ -27,19 +27,19 @@ fx_default
 PRW_NOW="$T0" "$PRW" daemon once
 cp "$SNAP" "$WORK/baseline.json"
 
-fx_comments "[$(fx_comment 4521 'Julien Boutet' src/a.ts 42)]"
+fx_comments "[$(fx_comment 4521 'Alex Martin' src/a.ts 42)]"
 fx_statuses abc123 '[{"key":"pr-analysis","name":"PR analysis","state":"SUCCESSFUL"}]'
 PRW_NOW=$((T0 + 60)) "$BROKEN/scripts/prw" daemon once
 check "a failed diff wakes nobody" '[ "$(unread s1)" = 0 ]'
 check "a failed diff keeps the old snapshot" 'cmp -s "$SNAP" "$WORK/baseline.json"'
 check "a failed diff leaves no temp file" '[ ! -f "$SNAP.new" ] && [ ! -f "$SNAP.lines" ]'
-check "a failed diff is logged with jq's message" 'grep -q "diff error septeo-immobilier/modelo-bill-e#229 .*cannot be added" "$PRW_STATE_DIR/daemon.log"' "$(tail -3 "$PRW_STATE_DIR/daemon.log")"
+check "a failed diff is logged with jq's message" 'grep -q "diff error acme/billing-app#229 .*cannot be added" "$PRW_STATE_DIR/daemon.log"' "$(tail -3 "$PRW_STATE_DIR/daemon.log")"
 check "a failed diff is counted for doctor" '[ "$(jq .count "$SNAP.differr")" = 1 ]'
 out="$(PRW_LIB="$BROKEN/scripts/lib" lib daemon_health)"
 check "doctor reports the held-back change" 'printf "%s" "$out" | grep -q "229: 1 failed diff(s), changes held back"' "$out"
 
 PRW_NOW=$((T0 + 120)) "$PRW" daemon once
-check "the fixed diff delivers the comment" 'lib "events_unread s1" | grep -q "comment by Julien Boutet on src/a.ts:42"' "$(lib "events_unread s1")"
+check "the fixed diff delivers the comment" 'lib "events_unread s1" | grep -q "comment by Alex Martin on src/a.ts:42"' "$(lib "events_unread s1")"
 check "the fixed diff delivers the pipeline end" 'lib "events_unread s1" | grep -q "INPROGRESS→SUCCESSFUL\|new→SUCCESSFUL"' "$(lib "events_unread s1")"
 check "the fixed diff clears the counter" '[ ! -f "$SNAP.differr" ]'
 check "the fixed diff advances the snapshot" '! cmp -s "$SNAP" "$WORK/baseline.json"'

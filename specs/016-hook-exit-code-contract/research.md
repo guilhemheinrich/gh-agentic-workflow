@@ -101,13 +101,13 @@ The label stays useful as a hint. The identity test must rest on the mount for t
 ## 3b. Asking Compose is cheaper than imitating it — measured
 
 ```
-docker compose config --format json  ->  .name = "broker-pa"        103 ms
+docker compose config --format json  ->  .name = "billing"        103 ms
 docker compose ls --format json      ->  ConfigFiles = the files it read   169 ms
-compose.yml:4                        ->  name: broker-pa
-directory basename                   ->  modelo-broker-pa
+compose.yml:4                        ->  name: billing
+directory basename                   ->  acme-billing
 ```
 
-Run in `modelo-broker-pa` on 2026-09-17. Compose answers with the name the containers actually carry, and names the files it read, so the four-source precedence and the override file need no reimplementation.
+Run in `acme-billing` on 2026-09-17. Compose answers with the name the containers actually carry, and names the files it read, so the four-source precedence and the override file need no reimplementation.
 
 103 ms is far too expensive per edit and unremarkable once per service, which is why this call belongs on the resolution path only.
 
@@ -118,10 +118,10 @@ Run in `modelo-broker-pa` on 2026-09-17. Compose answers with the name the conta
 ## 3c. Mount inventory of a live container — measured
 
 ```
-com.docker.compose.project.working_dir  /Users/…/modelo-broker-pa
-mounts                                  /Users/…/modelo-broker-pa/apps/backend  -> /app
-                                        /Users/…/modelo-broker-pa/apps/frontend -> /frontend
-                                        /Users/…/modelo-broker-pa/specs         -> /specs
+com.docker.compose.project.working_dir  /Users/…/acme-billing
+mounts                                  /Users/…/acme-billing/apps/backend  -> /app
+                                        /Users/…/acme-billing/apps/frontend -> /frontend
+                                        /Users/…/acme-billing/specs         -> /specs
 inspect cost                            33 ms
 ```
 

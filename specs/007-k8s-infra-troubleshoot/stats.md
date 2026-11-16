@@ -32,7 +32,7 @@
 | Tasks Generated | 9 |
 | Status | ✅ Success |
 
-**Notes**: Documentation du dashboard admin inaccessible (503) depuis l'extérieur — intégrée comme placeholder à fetch depuis Docker. Scope permissions déduit du kubeconfig (service account modelo-debug-only) et des règles K8s du projet.
+**Notes**: Documentation du dashboard admin inaccessible (503) depuis l'extérieur — intégrée comme placeholder à fetch depuis Docker. Scope permissions déduit du kubeconfig (service account debug-only) et des règles K8s du projet.
 
 ## Per-Command Aggregation
 

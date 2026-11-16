@@ -46,10 +46,6 @@ export const sumLines =
   lines.reduce((acc, line) => acc + line.qty * line.unit, zero);
 ```
 
-## Skill References
-
-- Practical balance of `pipe`, `flow`, and readability: [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md).
-
 ## Enforcement
 
 - **Detect**: Nested `=>` beyond one level in domain files; `pipe` chains without intermediate names when logic is non-trivial.

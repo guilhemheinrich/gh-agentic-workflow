@@ -14,198 +14,48 @@ tags:
   - security
 ---
 
-# Web Analysis — Deterministic Audit Tools via Docker
+# Web analysis: audit tools via Docker
 
-Toolkit for deterministic web analysis. Each tool runs inside a Docker container, produces a machine-readable report (JSON/HTML), and requires no installation on the host machine. Detailed usage (flags, advanced examples, output interpretation) lives in the respective `resources/` files referenced below.
+Each tool runs in a container and produces a machine-readable report
+(JSON/HTML); nothing is installed on the host. Flags, advanced examples and
+output interpretation live in `resources/`.
 
-## Prerequisites
+Prerequisites: Docker, and network access to the target URL.
 
-1. **Docker** installed and running.
-2. **Network access** to the target URL.
-
-## Docker Setup
-
-### Multi-tool image (bundled)
+## Bundled image
 
 ```bash
 docker build -t web-analysis <path-to-this-skill-directory>/
-```
-
-Contains: Lighthouse, pa11y, axe-core CLI, broken-link-checker, html-validate, curl, jq on Node.js 22 Alpine + Chromium + ChromeDriver. The bundled image also copies `pa11y.json` into `/work` so pa11y can launch Chromium safely in Docker.
-
-Run bundled tools directly:
-
-```bash
 docker run --rm web-analysis pa11y https://example.com
-docker run --rm web-analysis axe https://example.com --chromedriver-path /usr/bin/chromedriver --chrome-path /usr/bin/chromium-browser --chrome-options="no-sandbox,disable-dev-shm-usage"
+docker run --rm web-analysis axe https://example.com \
+  --chromedriver-path /usr/bin/chromedriver --chrome-path /usr/bin/chromium-browser \
+  --chrome-options="no-sandbox,disable-dev-shm-usage"
 docker run --rm web-analysis lighthouse https://example.com --chrome-flags="--headless --no-sandbox"
 ```
 
-### Official images (standalone)
+The `Dockerfile` bundles Lighthouse, pa11y, axe-core CLI, broken-link-checker,
+html-validate, curl and jq on Node 22 Alpine with Chromium and ChromeDriver,
+and copies `pa11y.json` (no-sandbox launch args) into `/work`.
+`Dockerfile.sitespeed` only documents the official sitespeed.io image: do not
+build it, pull and run that image instead.
 
-Each tool can also run via its official image (documented in the respective resources).
+## Tools
 
----
+| Question | Tool | Image | Reference |
+|---|---|---|---|
+| Fast enough? Scores for performance, SEO, a11y, PWA | Lighthouse | `femtopixel/google-lighthouse` | `resources/lighthouse.md` |
+| Real-world metrics, waterfalls, throttled networks, multi-run | sitespeed.io | `sitespeedio/sitespeed.io` | `resources/sitespeed.md` |
+| WCAG 2.1 A/AA/AAA violations with selectors | pa11y | bundled | `resources/pa11y.md` |
+| Contrast, ARIA, landmarks; CI gate on violations | axe-core CLI | bundled | `resources/axe-core-cli.md` |
+| Dead links (404, timeout, DNS) | broken-link-checker | bundled | `resources/broken-link-checker.md` |
+| CSP, HSTS, X-Frame-Options, ... | curl + jq | `alpine` | `resources/security-headers.md` |
+| Frameworks, CMS, CDN, analytics in use | Wappalyzer CLI | `node:22-alpine` | `resources/wappalyzer.md` |
+| HTML validity (W3C rules) | html-validate | bundled | `resources/html-validate.md` |
 
-## Tool Catalog
+Pin image tags instead of `latest` when results must be reproducible in CI.
 
-### A. Google Lighthouse — Performance, SEO, Accessibility, PWA
+## Combined analysis
 
-Full audit in a single pass: Core Web Vitals scores (LCP, CLS, TBT), technical SEO, accessibility compliance, and PWA criteria. Produces a JSON or HTML report with 0-100 scores per category.
-
-**Use cases**: Validate that a site meets performance thresholds before going to production; compare scores before/after optimization.
-
-| | |
-|---|---|
-| Docker Image | `femtopixel/google-lighthouse:latest` |
-| Documentation | https://developer.chrome.com/docs/lighthouse |
-| Output | JSON, HTML |
-| Detailed reference | [`resources/lighthouse.md`](resources/lighthouse.md) |
-
----
-
-### B. pa11y — WCAG 2.1 Accessibility
-
-Tests WCAG 2.1 A/AA/AAA. Returns each violation with its code, severity, the offending CSS selector, and an explanatory message. Can run both HTML_CodeSniffer and axe runners.
-
-**Use cases**: Pre-delivery accessibility audit; CI integration to block WCAG regressions.
-
-| | |
-|---|---|
-| Docker Image | `node:22-alpine` + `pa11y` (npm) or bundled image |
-| Documentation | https://pa11y.org/ — https://github.com/pa11y/pa11y |
-| Output | JSON, CSV, CLI |
-| Detailed reference | [`resources/pa11y.md`](resources/pa11y.md) |
-
----
-
-### C. axe-core CLI — Accessibility Rules Engine
-
-Runs the open-source axe-core accessibility engine from the command line against one or more rendered pages. Detects WCAG A/AA/AAA issues including color contrast, labels, ARIA, landmarks, keyboard-related semantics, and document structure. Produces JSON for CI and can fail builds on violations.
-
-**Use cases**: Fast local accessibility checks; CI gate for color contrast and WCAG regressions; focused rule checks such as `color-contrast`.
-
-| | |
-|---|---|
-| Docker Image | bundled image (`@axe-core/cli` + Chromium + ChromeDriver) |
-| Documentation | https://github.com/dequelabs/axe-core — https://www.npmjs.com/package/@axe-core/cli |
-| Output | JSON, CLI |
-| Detailed reference | [`resources/axe-core-cli.md`](resources/axe-core-cli.md) |
-
----
-
-### D. sitespeed.io — Real User Metrics + Dashboard
-
-Detailed performance profiling with video captures, loading waterfalls, and multi-run analysis for statistical stability. Measures TTFB, FCP, LCP, CLS, TBT, SpeedIndex.
-
-**Use cases**: Performance benchmark under network constraints (3G, 4G); regression tracking across multiple iterations.
-
-| | |
-|---|---|
-| Docker Image | `sitespeedio/sitespeed.io:latest` |
-| Documentation | https://www.sitespeed.io/ |
-| Output | HTML dashboard, JSON |
-| Detailed reference | [`resources/sitespeed.md`](resources/sitespeed.md) |
-
----
-
-### E. broken-link-checker — Link Integrity
-
-Recursive crawl detecting all broken links (404, timeout, DNS failure) on a site. Traverses internal pages and verifies external links.
-
-**Use cases**: Verify that a documentation site has no dead links; audit before domain migration.
-
-| | |
-|---|---|
-| Docker Image | `node:22-alpine` + `broken-link-checker` (npm) or bundled image |
-| Documentation | https://github.com/stevenvachon/broken-link-checker |
-| Output | JSON, stdout |
-| Detailed reference | [`resources/broken-link-checker.md`](resources/broken-link-checker.md) |
-
----
-
-### F. Security Headers — HTTP Security Analysis
-
-Checks the presence and configuration of HTTP security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy.
-
-**Use cases**: Pre-deployment security audit; OWASP Secure Headers compliance verification.
-
-| | |
-|---|---|
-| Docker Image | `alpine:latest` + curl + jq |
-| Documentation | https://owasp.org/www-project-secure-headers/ — https://securityheaders.com/ |
-| Output | JSON, text |
-| Detailed reference | [`resources/security-headers.md`](resources/security-headers.md) |
-
----
-
-### G. Wappalyzer — Technology Detection
-
-Identifies frameworks, CMS, CDN, JS libraries, servers, and analytics services used by a site. Detects 2000+ technologies with confidence scores.
-
-**Use cases**: Competitive analysis (what stack does this site use?); technology inventory before migration.
-
-| | |
-|---|---|
-| Docker Image | `node:22-alpine` + `wappalyzer-cli` (npm) |
-| Documentation | https://www.wappalyzer.com/ — https://github.com/AliasIO/wappalyzer |
-| Output | JSON, CSV |
-| Detailed reference | [`resources/wappalyzer.md`](resources/wappalyzer.md) |
-
----
-
-### H. html-validate — W3C HTML Validation
-
-Checks HTML validity against W3C specifications: void elements, heading hierarchy, misplaced attributes, unclosed tags, incorrect semantics.
-
-**Use cases**: Verify HTML quality generated by a component; block markup errors in CI.
-
-| | |
-|---|---|
-| Docker Image | `node:22-alpine` + `html-validate` (npm) or bundled image |
-| Documentation | https://html-validate.org/ |
-| Output | JSON, stylish, codeframe |
-| Detailed reference | [`resources/html-validate.md`](resources/html-validate.md) |
-
----
-
-## Tool Selection Guide
-
-| Question | Recommended tool(s) |
-|----------|---------------------|
-| Is my site fast enough? | Lighthouse, sitespeed.io |
-| Is my site accessible (WCAG)? | pa11y, axe-core CLI, Lighthouse |
-| Does rendered text have enough contrast? | axe-core CLI (`color-contrast`), pa11y |
-| Do all links work? | broken-link-checker |
-| Are security headers correct? | Security Headers |
-| What stack does this site use? | Wappalyzer |
-| Is my HTML valid? | html-validate |
-| Full multi-criteria audit? | All (via bundled Dockerfile or sequential script) |
-
----
-
-## Combined Analysis
-
-A `run-all-analysis.sh` script or a `docker-compose.yml` allows running all tools sequentially against a URL and aggregating results into a single directory. See [`resources/combined-analysis.md`](resources/combined-analysis.md) for complete examples.
-
-```bash
-./run-all-analysis.sh https://example.com
-# → ./web-analysis-results/{lighthouse,pa11y,links,html,security,tech}/
-```
-
----
-
-## Reference
-
-| Resource | Role |
-|----------|------|
-| [`resources/lighthouse.md`](resources/lighthouse.md) | Flags, scoring, batch runs, interpretation |
-| [`resources/pa11y.md`](resources/pa11y.md) | WCAG AA/AAA standards, custom rules, batch |
-| [`resources/axe-core-cli.md`](resources/axe-core-cli.md) | axe-core CLI, color contrast, CI gating |
-| [`resources/sitespeed.md`](resources/sitespeed.md) | Network profiles, video, multi-run, budgets |
-| [`resources/broken-link-checker.md`](resources/broken-link-checker.md) | Recursion, auth, large sites |
-| [`resources/security-headers.md`](resources/security-headers.md) | CSP, HSTS, scoring, best practices |
-| [`resources/wappalyzer.md`](resources/wappalyzer.md) | Tech catalog, categories, confidence |
-| [`resources/html-validate.md`](resources/html-validate.md) | 50+ rules, custom config, HTML semantics |
-| `Dockerfile` | Multi-tool image (Lighthouse, pa11y, axe-core CLI, blc, html-validate) |
-| `Dockerfile.sitespeed` | Official sitespeed.io image reference |
+`resources/combined-analysis.md` has a `run-all-analysis.sh` and a compose
+example that run every tool against one URL and aggregate results under
+`./web-analysis-results/{lighthouse,pa11y,links,html,security,tech}/`.

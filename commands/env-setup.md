@@ -12,7 +12,7 @@ tags:
 
 # `/env-setup` — Dual-Mode Environment Manager
 
-This command manages the **Hub / hubless** environment duality for projects that can run either standalone (S2S static secrets) or embedded in the **Modelo Hub** (JWKS RS256 JWT + session bridge).
+This command manages the **Hub / hubless** environment duality for projects that can run either standalone (S2S static secrets) or embedded in the **Hub** (JWKS RS256 JWT + session bridge).
 
 ## Usage
 
@@ -115,12 +115,12 @@ Read the current `.env` file (if it exists) and determine if it corresponds to H
 
 **Hub mode indicators:**
 - `HUB_ENABLED=true`
-- `HUB_BASE_URL` is non-empty and points to a real Hub URL (e.g. `https://hub.modelo.dev`)
+- `HUB_BASE_URL` is non-empty and points to a real Hub URL (e.g. `https://hub.example.com`)
 - `HUB_SERVICE_AUTH_ISSUER` is non-empty
 - `HUB_AUTH_INTERNAL_URL` is non-empty (e.g. `http://auth-api:3000`)
 - `VITE_HUB_MODE=auto` or `VITE_HUB_MODE=embedded`
 - `JWT_COOKIE_SECURE=true`
-- `JWT_COOKIE_DOMAIN` is set (e.g. `.modelo.dev`)
+- `JWT_COOKIE_DOMAIN` is set (e.g. `.example.com`)
 
 **Hubless mode indicators:**
 - `HUB_ENABLED=false` or absent
@@ -139,8 +139,8 @@ Report the detected mode:
 Current .env mode: HUB
   Evidence:
     - HUB_ENABLED=true
-    - HUB_BASE_URL=https://hub.modelo.dev
-    - HUB_SERVICE_AUTH_ISSUER=https://auth.modelo.dev/api/auth
+    - HUB_BASE_URL=https://hub.example.com
+    - HUB_SERVICE_AUTH_ISSUER=https://auth.example.com/api/auth
 ```
 
 **IF ambiguous** (mixed signals — some Hub indicators, some hubless), **ASK the user**:
@@ -251,14 +251,14 @@ In the hubless file (`.env.example` and `.env.hubless`):
 In the Hub file (`.env.hub.example` and `.env.hub`):
 
 - `HUB_ENABLED` → `true` (if the variable exists)
-- `HUB_BASE_URL` → `https://hub.modelo.dev`
-- `HUB_SERVICE_AUTH_ISSUER` → `https://auth.modelo.dev/api/auth` (or project-specific)
+- `HUB_BASE_URL` → `https://hub.example.com`
+- `HUB_SERVICE_AUTH_ISSUER` → `https://auth.example.com/api/auth` (or project-specific)
 - `HUB_SERVICE_AUTH_JWKS_URL` → `http://auth-api:3000/api/auth/.well-known/jwks.json` (or project-specific)
-- `VITE_HUB_URL` / `VITE_HUB_BASE_URL` → `https://hub.modelo.dev`
+- `VITE_HUB_URL` / `VITE_HUB_BASE_URL` → `https://hub.example.com`
 - `VITE_HUB_MODE` → `auto` (if the variable exists)
 - `JWT_COOKIE_SECURE` → `true` (if the variable exists)
-- `JWT_COOKIE_DOMAIN` → `.modelo.dev` (if the variable exists)
-- `CORS_ALLOWED_ORIGINS` → `https://<app-slug>.modelo.dev` (if the variable exists)
+- `JWT_COOKIE_DOMAIN` → `.example.com` (if the variable exists)
+- `CORS_ALLOWED_ORIGINS` → `https://<app-slug>.example.com` (if the variable exists)
 - `APP_API_KEY` → `change-me` in `.example`, real Hub-generated key in `.env.hub`
 
 ### 4.5 Cross-project key alignment

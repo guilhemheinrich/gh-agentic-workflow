@@ -5,8 +5,8 @@
 # declared name."
 #
 # This is the second defect of the feature, in its original shape: measured in
-# `modelo-broker-pa`, whose `compose.yml` declares `name: broker-pa` while the
-# checkout directory is `modelo-broker-pa`. The runner read two of Compose's
+# `acme-billing`, whose `compose.yml` declares `name: billing` while the
+# checkout directory is `acme-billing`. The runner read two of Compose's
 # four sources, matched no container, warned once, and went silent for the rest
 # of the session — a permanent, invisible loss of validation.
 #

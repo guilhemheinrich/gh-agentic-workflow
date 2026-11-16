@@ -44,7 +44,7 @@ Function & Method Documentation:
  * ```typescript
  * const session = await loginUseCase.execute({
  *   code: 'abc123',
- *   redirectUri: 'https://hub.modelo.fr/callback',
+ *   redirectUri: 'https://hub.example.com/callback',
  * });
  * ```
  *

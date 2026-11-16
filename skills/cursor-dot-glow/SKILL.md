@@ -68,7 +68,7 @@ exactly — a linear or quadratic falloff looks wrong. Colour is set once with
 
 ## Template
 
-[`references/dot-glow.html`](references/dot-glow.html) is a complete, self-contained,
+[`templates/dot-glow.html`](templates/dot-glow.html) is a complete, self-contained,
 browser-verified reproduction. Copy it and tune the constants block at the top of the
 script (`GRID`, `DOT`, `SIGMA`, `PEAK`, `EASE`, `COLOR`).
 

@@ -1,5 +1,5 @@
 ---
-description: Bitbucket Pipelines CI/CD conventions for Septeo projects. Load when editing bitbucket-pipelines.yml, CI/CD configuration, or Docker build steps.
+description: Bitbucket Pipelines CI/CD conventions for projects on Bitbucket. Load when editing bitbucket-pipelines.yml, CI/CD configuration, or Docker build steps.
 globs:
   - bitbucket-pipelines.yml
 alwaysApply: false
@@ -33,7 +33,7 @@ Instead:
 
 - Pass `VITE_*` variables as `--build-arg` from repository variables with defaults:
   ```yaml
-  --build-arg VITE_HUB_URL="${VITE_HUB_URL:-https://hub.modelo.dev}"
+  --build-arg VITE_HUB_URL="${VITE_HUB_URL:-https://hub.example.com}"
   ```
 - Secrets use `--secret` (never `--build-arg`): `--secret id=npm_token,env=NPM_TOKEN`
 - Defaults in Dockerfile `ARG` lines are the development fallback

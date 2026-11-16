@@ -57,7 +57,7 @@
 **Purpose**: Nettoyer les rules d'outils et workflows.
 
 - [ ] T018 [P] Nettoyer `rules/04-tools-and-configurations/4-npm-private-registry.mdc` — garder les conventions déclaratives (token flow, sécurité), déplacer les étapes step-by-step vers le skill existant `skills/npm-private-registry/SKILL.md`.
-- [ ] T019 [P] Nettoyer `rules/05-workflows-and-processes/5-spec-driven-dev.mdc` — supprimer les références au roadmap Modelo (phases 0-5), garder uniquement le workflow SpecKit agnostique.
+- [ ] T019 [P] Nettoyer `rules/05-workflows-and-processes/5-spec-driven-dev.mdc` — supprimer les références au roadmap interne (phases 0-5), garder uniquement le workflow SpecKit agnostique.
 - [ ] T020 [P] Mettre à jour `rules/04-tools-and-configurations/4-specify-rules.mdc` — simplifier le meta-pointeur, retirer les refs NestJS spécifiques.
 
 **Checkpoint**: Les rules 04-* et 05-* sont agnostiques.

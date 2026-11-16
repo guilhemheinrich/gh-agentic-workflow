@@ -6,20 +6,20 @@ FX="$WORK/fx"; mkdir -p "$FX"; use_fixture "$FX"
 lib() { bash -c ". '$SKILL_DIR/scripts/lib/config.sh'; . '$SKILL_DIR/scripts/lib/api.sh'; . '$SKILL_DIR/scripts/lib/provider.sh'; . '$SKILL_DIR/scripts/lib/bitbucket.sh'; . '$SKILL_DIR/scripts/lib/github.sh'; $1"; }
 
 export PRW_NOW=1793372646
-fx_pr OPEN abc123 def456 "[$(fx_participant acc-1 'Julien Boutet' true approved), $(fx_participant acc-2 'Bot' false '')]"
+fx_pr OPEN abc123 def456 "[$(fx_participant acc-1 'Alex Martin' true approved), $(fx_participant acc-2 'Bot' false '')]"
 fx_statuses abc123 '[{"key":"pr-analysis","name":"PR analysis","state":"INPROGRESS"}]'
-fx_comments "[$(fx_comment 4521 'Julien Boutet' src/a.ts 42), $(fx_comment 4522 'Guilhem Heinrich' '' '' true)]"
+fx_comments "[$(fx_comment 4521 'Alex Martin' src/a.ts 42), $(fx_comment 4522 'Sam Taylor' '' '' true)]"
 fx_diffstat true
 
 lib "snapshot_fetch $FX_REPO $FX_PR" >"$WORK/snap.json"; rc=$?
 check "snapshot_fetch succeeds" '[ "$rc" = 0 ]' "rc=$rc"
-expected='{"repo":"septeo-immobilier/modelo-bill-e","pr":229,"state":"OPEN","head":"abc123","dest_head":"def456",
+expected='{"repo":"acme/billing-app","pr":229,"state":"OPEN","head":"abc123","dest_head":"def456",
  "dest_branch":"staging","merge_commit":null,
- "title":"Cockpit cascade filters","url":"https://bitbucket.org/septeo-immobilier/modelo-bill-e/pull-requests/229",
- "participants":{"acc-1":{"name":"Julien Boutet","state":"approved"}},
+ "title":"Cockpit cascade filters","url":"https://bitbucket.org/acme/billing-app/pull-requests/229",
+ "participants":{"acc-1":{"name":"Alex Martin","state":"approved"}},
  "statuses":{"pr-analysis":{"name":"PR analysis","state":"INPROGRESS","updated":null}},
- "comments":{"4521":{"author":"Julien Boutet","path":"src/a.ts","line":42,"deleted":false},
-             "4522":{"author":"Guilhem Heinrich","path":null,"line":null,"deleted":true}},
+ "comments":{"4521":{"author":"Alex Martin","path":"src/a.ts","line":42,"deleted":false},
+             "4522":{"author":"Sam Taylor","path":null,"line":null,"deleted":true}},
  "conflict":true}'
 check "snapshot has the normalised shape" '[ "$(jq -S "del(.fetched_at)" "$WORK/snap.json")" = "$(printf "%s" "$expected" | jq -S .)" ]' "$(cat "$WORK/snap.json")"
 check "fetched_at is ISO UTC" 'jq -e ".fetched_at | test(\"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:]{8}Z$\")" "$WORK/snap.json" >/dev/null'

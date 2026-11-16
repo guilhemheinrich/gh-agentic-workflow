@@ -1,4 +1,5 @@
 {
+  "version": "0.1.0",
   "marketplace": {
     "name": "gh-agentic-workflow",
     "description": "Skills, agents, commands and hooks for AI-assisted development, split into focused plugins.",
@@ -47,20 +48,15 @@
       "http-endpoint-or-filesystem-path": [
         "api",
         "app",
-        "authorize",
-        "bootstrap",
         "credits",
         "health",
         "healthz",
-        "info",
         "items",
-        "logo.abcd1234.png",
+        "local",
         "logout",
-        "metadata",
-        "metrics",
         "models",
         "providers",
-        "ready",
+        "published",
         "service-token",
         "tmp",
         "user",
@@ -73,7 +69,11 @@
         "plugin",
         "reload-plugins"
       ],
-      "spec-kit-project-command-not-shipped-here": [
+      "command-defined-by-the-user-project-or-a-skill-workflow": [
+        "kubify",
+        "review-implemented"
+      ],
+      "provided-by-the-spec-kit-installation-not-shipped-in-the-speckit-plugin": [
         "dev-it",
         "implement",
         "index",
@@ -87,16 +87,6 @@
         "speckit.specify",
         "speckit.tasks",
         "tasks"
-      ],
-      "command-defined-by-the-user-project-or-a-skill-workflow": [
-        "deploy",
-        "kubify",
-        "reflect",
-        "reflect-skills",
-        "review-implemented"
-      ],
-      "repo-command-not-in-registry-so-not-built": [
-        "debug"
       ]
     }
   }

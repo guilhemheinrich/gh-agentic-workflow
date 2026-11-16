@@ -17,7 +17,7 @@ from typing import Any
 
 INDEXED_DIR_RE = re.compile(r"^(?P<index>\d{3})-(?P<slug>.+)$")
 DEFAULT_DATABASE_NAME = "Specs"
-DEFAULT_NOTION_ROOT = "sentinel-sync"
+DEFAULT_NOTION_ROOT = "spec-sync"
 DEFAULT_BLOCK_CHARS = 1800
 DEFAULT_PAGE_ICON = "\U0001F4C4"
 DEFAULT_PROJECT_ICON = "\U0001F4C1"

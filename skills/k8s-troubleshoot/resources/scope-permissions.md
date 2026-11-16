@@ -1,4 +1,4 @@
-# Scope Matrix — `modelo-debug-only` service account
+# Scope Matrix — `debug-only` service account
 
 This document summarizes what the service account delivered via the dashboard kubeconfig **can** and **cannot** do. Out-of-scope actions must be escalated via a **DevOps report** (see the report template in this skill's `templates/` directory).
 

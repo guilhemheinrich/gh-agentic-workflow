@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/version.schema.json",
+  "title": "Component version",
+  "description": "Payload of a component's version endpoint (or of one entry of an aggregated manifest).",
+  "type": "object",
+  "required": ["component", "displayVersion", "version", "gitCommit", "buildTime", "environment"],
+  "additionalProperties": false,
+  "properties": {
+    "component": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "examples": ["frontend-web", "backend-api", "worker-billing"] },
+    "displayVersion": { "type": "string", "description": "<version>+<gitCommit>", "examples": ["2.4.1+5f2c9ab"] },
+    "version": { "type": "string", "pattern": "^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z.-]+)?$" },
+    "gitCommit": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "buildTime": { "type": "string", "format": "date-time", "description": "ISO-8601 UTC" },
+    "environment": { "enum": ["local", "dev", "test", "staging", "production"] },
+    "releaseTag": { "type": "string" },
+    "repository": { "type": "string" },
+    "branch": { "type": "string" },
+    "deploymentId": { "type": "string" },
+    "apiCompatibility": { "type": "string" },
+    "statusEndpoint": { "type": "string", "format": "uri" }
+  }
+}

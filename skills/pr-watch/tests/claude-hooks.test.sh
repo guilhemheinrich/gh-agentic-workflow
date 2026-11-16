@@ -12,9 +12,9 @@ REPO="$WORK/repo"
 git init -q -b feat/cascade "$REPO"
 git -C "$REPO" config user.email t@example.test; git -C "$REPO" config user.name t
 git -C "$REPO" commit -q --allow-empty -m init
-git -C "$REPO" remote add origin git@bitbucket.org:septeo-immobilier/modelo-bill-e.git
+git -C "$REPO" remote add origin git@bitbucket.org:acme/billing-app.git
 HEAD_SHA="$(git -C "$REPO" rev-parse HEAD)"
-fx_put 'repositories/septeo-immobilier/modelo-bill-e/pullrequests?q=source.branch.name%3D%22feat%2Fcascade%22%20AND%20state%3D%22OPEN%22' '{"values":[{"id":229}]}'
+fx_put 'repositories/acme/billing-app/pullrequests?q=source.branch.name%3D%22feat%2Fcascade%22%20AND%20state%3D%22OPEN%22' '{"values":[{"id":229}]}'
 
 payload() { # COMMAND
   jq -cn --arg c "$1" --arg cwd "$REPO" '{session_id:"sess-1", cwd:$cwd, hook_event_name:"PostToolUse",
@@ -25,7 +25,7 @@ out="$(payload 'git push -u origin feat/cascade' | bash "$AD/push-hook.sh")"; rc
 check "push hook exits 0" '[ "$rc" = 0 ]'
 check "push hook answers in the PostToolUse JSON shape" 'printf "%s" "$out" | jq -e ".hookSpecificOutput.hookEventName == \"PostToolUse\"" >/dev/null' "$out"
 ctx="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext')"
-check "context names the subscribed PR" 'printf "%s" "$ctx" | grep -q "subscribed septeo-immobilier/modelo-bill-e#229"' "$ctx"
+check "context names the subscribed PR" 'printf "%s" "$ctx" | grep -q "subscribed acme/billing-app#229"' "$ctx"
 check "context tells the agent to start the wait" 'printf "%s" "$ctx" | grep -q "prw wait --session sess-1" && printf "%s" "$ctx" | grep -q run_in_background' "$ctx"
 check "the pushed head is recorded as own" '[ "$(jq -r ".[0].own_heads[0]" "$SUBS")" = "$HEAD_SHA" ]' "$(cat "$SUBS")"
 
@@ -37,7 +37,7 @@ check "push hook exits 0 silently when prw is missing" '[ "$rc" = 0 ] && [ -z "$
 # Own comment through the Bitbucket MCP tool.
 cpayload="$(jq -cn --arg cwd "$REPO" '{session_id:"sess-1", cwd:$cwd, hook_event_name:"PostToolUse",
   tool_name:"mcp__bitbucket__add_pull_request_comment",
-  tool_input:{repository_name:"modelo-bill-e", pull_request_id:"229", content:"done"},
+  tool_input:{repository_name:"billing-app", pull_request_id:"229", content:"done"},
   tool_response:[{type:"text", text:"{\"id\": 4999, \"content\": {\"raw\": \"done\"}}"}]}')"
 out="$(printf '%s' "$cpayload" | bash "$AD/comment-hook.sh")"; rc=$?
 check "comment hook is silent and exits 0" '[ "$rc" = 0 ] && [ -z "$out" ]' "rc=$rc $out"
@@ -47,7 +47,7 @@ check "own comment id is ignored" '[ "$(jq -c ".[0].ignored_comments" "$SUBS")" 
 spayload() { jq -cn --arg s "$1" --arg cwd "$REPO" '{session_id:$s, cwd:$cwd, hook_event_name:"SessionStart", source:"resume"}'; }
 out="$(spayload sess-1 | bash "$AD/session-start-hook.sh")"; rc=$?
 ctx="$(printf '%s' "$out" | jq -r '.hookSpecificOutput.additionalContext' 2>/dev/null)"
-check "session start re-arms a subscribed session" '[ "$rc" = 0 ] && printf "%s" "$ctx" | grep -q "septeo-immobilier/modelo-bill-e#229" && printf "%s" "$ctx" | grep -q "prw wait --session sess-1"' "rc=$rc $out"
+check "session start re-arms a subscribed session" '[ "$rc" = 0 ] && printf "%s" "$ctx" | grep -q "acme/billing-app#229" && printf "%s" "$ctx" | grep -q "prw wait --session sess-1"' "rc=$rc $out"
 out="$(spayload other | bash "$AD/session-start-hook.sh")"
 check "session start is silent for an unsubscribed session" '[ -z "$out" ]' "$out"
 

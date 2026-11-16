@@ -129,11 +129,11 @@ git commit -m "docs(bitbucket-pr-watch): record background-wake measurements"
 - Produces: `snapshot_fetch WORKSPACE/REPO PR [PREV_SNAPSHOT_FILE]` → JSON on stdout:
 
 ```json
-{"repo":"septeo-immobilier/modelo-bill-e","pr":229,"state":"OPEN",
+{"repo":"acme/billing-app","pr":229,"state":"OPEN",
  "head":"abc123","dest_head":"def456","title":"…","url":"https://bitbucket.org/…/pull-requests/229",
- "participants":{"<account_id>":{"name":"Julien Boutet","state":"approved"}},
+ "participants":{"<account_id>":{"name":"Jane Doe","state":"approved"}},
  "statuses":{"<key>":{"name":"PR analysis","state":"INPROGRESS"}},
- "comments":{"4521":{"author":"Julien Boutet","path":"src/a.ts","line":42,"deleted":false}},
+ "comments":{"4521":{"author":"Jane Doe","path":"src/a.ts","line":42,"deleted":false}},
  "conflict":false,"fetched_at":"2026-10-30T15:04:06Z"}
 ```
 
@@ -157,7 +157,7 @@ git commit -m "docs(bitbucket-pr-watch): record background-wake measurements"
 - Produces: `bbw unsubscribe WS/REPO PR --session ID`; `bbw list [--session ID]` (one line `WS/REPO#PR status session`); `bbw ignore-comment WS/REPO PR COMMENT_ID --session ID`.
 - Produces: `store_subscriptions_jq FILTER` (read under lock), `store_update_jq FILTER [ARGS…]` (atomic write under lock), `events_append SESSION JSONL_LINES`, `events_unread SESSION` (lines after cursor), `events_ack SESSION N`.
 
-- [ ] **Step 1: Failing tests:** subscribe twice with different `--head` → one entry, `own_heads` length 2; `--branch` with no open PR fixture → `pending …`; remote URL `git@bitbucket.org:septeo-immobilier/modelo-bill-e.git` resolves `septeo-immobilier/modelo-bill-e`; 20 concurrent `bbw subscribe` (backgrounded) with distinct PRs → 20 entries; `events_unread` after `events_ack` returns nothing.
+- [ ] **Step 1: Failing tests:** subscribe twice with different `--head` → one entry, `own_heads` length 2; `--branch` with no open PR fixture → `pending …`; remote URL `git@bitbucket.org:acme/billing-app.git` resolves `acme/billing-app`; 20 concurrent `bbw subscribe` (backgrounded) with distinct PRs → 20 entries; `events_unread` after `events_ack` returns nothing.
 - [ ] **Step 2:** Run, FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run `run-in-docker.sh store.test.sh`. PASS.
@@ -183,7 +183,7 @@ git commit -m "docs(bitbucket-pr-watch): record background-wake measurements"
 | `head` new head not in `own_heads` | true | false | `REPO#PR new commit HEAD7 pushed outside this session` |
 | `state` → MERGED/DECLINED/SUPERSEDED | true | false | `REPO#PR merged` / `declined` / `superseded` |
 
-  `REPO` is the repo slug without workspace (`modelo-bill-e#229`).
+  `REPO` is the repo slug without workspace (`billing-app#229`).
 
 - [ ] **Step 1: Failing tests:** one fixture pair per row asserting the exact `text` and flags; comment in `ignored_comments` → no line; head in `own_heads` → no line; missing OLD → empty output; comment edit (same id, same fields) → no line.
 - [ ] **Step 2:** Run, FAIL.
@@ -240,7 +240,7 @@ git commit -m "docs(bitbucket-pr-watch): record background-wake measurements"
 - Produces: `session-start-hook.sh` (SessionStart): `bbw doctor --quiet || bbw daemon start` (silent); if `bbw list --session "$session_id"` is non-empty, outputs SessionStart `additionalContext` `bitbucket-pr-watch: this session watches REPO#PR…; start `bbw wait --session ID` with run_in_background.` If Task 0 found the `session_id` changes on resume, re-key subscriptions whose repo and branch match the cwd before listing.
 - Produces: `settings-snippet.json` with the three hook registrations pointing at `~/.agents/hooks/bitbucket-pr-watch-{push,comment,session-start}.sh`. `bbw setup --claude` copies the hooks there, shows the snippet diff against `~/.claude/settings.json`, and merges it with `jq` only after a `y` answer; `bbw uninstall --claude` removes both. `doctor` reports `ok claude hooks` when the three commands are registered.
 
-- [ ] **Step 1: Failing tests:** push payload with `git push origin feat` and a fixture open PR → JSON output with `additionalContext` containing `subscribed modelo-bill-e#229` and the session id; payload `git status` → empty output; comment payload → comment id present in `ignored_comments`; session-start with a subscribed session → `additionalContext` naming the PR; every hook exits 0 even with `bbw` missing; `setup --claude` answered `n` leaves `settings.json` byte-identical.
+- [ ] **Step 1: Failing tests:** push payload with `git push origin feat` and a fixture open PR → JSON output with `additionalContext` containing `subscribed billing-app#229` and the session id; payload `git status` → empty output; comment payload → comment id present in `ignored_comments`; session-start with a subscribed session → `additionalContext` naming the PR; every hook exits 0 even with `bbw` missing; `setup --claude` answered `n` leaves `settings.json` byte-identical.
 - [ ] **Step 2:** Run, FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run `run-in-docker.sh claude-hooks.test.sh`. PASS.

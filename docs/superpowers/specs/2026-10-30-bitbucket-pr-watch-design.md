@@ -130,9 +130,9 @@ The snapshot keeps only fields whose change justifies a wake:
 Each transition becomes one compact line, for example:
 
 ```
-modelo-bill-e#229 pipeline "PR analysis" INPROGRESS→FAILED · https://bitbucket.org/…/pull-requests/229
-modelo-bill-e#229 comment by Julien Boutet on src/cockpit/filters.ts:42 (id 4521)
-modelo-bill-e#228 merged by Julien Boutet
+billing-app#229 pipeline "PR analysis" INPROGRESS→FAILED · https://bitbucket.org/…/pull-requests/229
+billing-app#229 comment by Jane Doe on src/cockpit/filters.ts:42 (id 4521)
+billing-app#228 merged by Jane Doe
 ```
 
 Comment bodies are **not** included: they are third-party text and the agent
@@ -271,7 +271,7 @@ detail.
   when the command contains `git push` (or when a Bitbucket MCP
   `create_pull_request` call succeeds). It runs `bbw subscribe` with the
   `session_id` from the hook payload, then returns two lines of
-  `additionalContext`: "Subscribed modelo-bill-e#229. Run `bbw wait --session <id>`
+  `additionalContext`: "Subscribed billing-app#229. Run `bbw wait --session <id>`
   with run_in_background now." Claude's background Bash re-invokes the session
   when the command exits: that is the wake.
 - `hooks/bitbucket-pr-watch-session-start.sh`, SessionStart: ensures the daemon;

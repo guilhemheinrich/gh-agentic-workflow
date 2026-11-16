@@ -1,6 +1,6 @@
 # Ticket 001 — Reorganize skills into thematic plugins before the first publication
 
-Status: proposed (not started). Owner decision needed on the open questions at the end.
+Status: executed on branch feat/registry-plugin-grouping (strict list applied; see the README "Public naming contract" for the final names).
 
 ## Why now
 

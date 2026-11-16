@@ -87,7 +87,7 @@ docker run --rm -v "$PWD:/repo" -w /repo/skills/change-projection/scripts python
    `check` fails while it is empty.
 6. **Chat-safe rendering.** No ANSI colour, no OSC 8 hyperlink, no Nerd Font
    icon. Each of those is a terminal feature that reaches a chat transcript as
-   literal garbage. Same constraint as the `eza-file-overview` skill, same
+   literal garbage. Same constraint as `scripts/git-impacted.sh --md` below, same
    reason.
 7. **Bookkeeping separated** from the files carrying logic, so the reader is not
    counting `PROGRESS.md` as part of the change.
@@ -334,6 +334,20 @@ The translated line carries its own size hint: the overlay drops the English
 A human handed only the projection answers three questions without opening
 another file: how big is this change, where does it land, and what does it
 leave alone.
+
+## 10. Listing what a change actually touched
+
+`scripts/git-impacted.sh` turns any git range, or the working tree, into a
+directory-grouped list where each path is a clickable markdown link carrying its
+status and `+added/-removed` tail. Use it for the after-shot summary in a chat.
+
+```bash
+bash skills/change-projection/scripts/git-impacted.sh main...HEAD --md
+```
+
+Omit the range to report staged, unstaged and untracked files. `--md` is the
+chat-safe rendering (no ANSI, no icons); `--term` needs `eza` and is for a
+shell. `--heat`, `--limit N`, `--no-stat` and `-C DIR` are listed by `--help`.
 
 ## Implementation Status
 

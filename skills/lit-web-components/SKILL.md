@@ -1,7 +1,7 @@
 ---
 description: >-
-  Lit 3 web components: base class, reactivity, lifecycle, templates, events,
-  overlay patterns, and anti-patterns. Use when building or debugging Lit WCs.
+  Lit 3 web components: update lifecycle order, scrolling and overlay pitfalls,
+  child-element readiness, and anti-patterns. Use when building or debugging Lit WCs.
 tags:
   - lit
   - web-components
@@ -9,58 +9,34 @@ tags:
 
 # Lit web components — practical guide
 
-## Context
+Invariants for Lit usage are summarized in `rules/03-frameworks-and-libraries/3-lit.mdc`.
+Baseline Lit knowledge (`LitElement`, `@property`, `@state`, `html`, `css`, events) is assumed.
 
-The **invariants** for Lit usage in this repo are summarized in `rules/03-frameworks-and-libraries/3-lit.mdc`. This skill holds the **procedural** detail and Lit-specific examples.
+## Lifecycle
 
-## Base component
+- `connectedCallback()` / `disconnectedCallback()` are custom-element callbacks, **not** part of the update cycle. Use them to add/remove global listeners and timers.
+- Each update runs in this order: `willUpdate(changed)` -> `render()` -> `firstUpdated()` (first update only) -> `updated(changed)`.
+- Compute derived state in `willUpdate()`; do focus/scroll work in `updated()`.
 
-- Extend `LitElement`, import from `lit`.
-- `render()` returns a `TemplateResult` via `` html`...` ``.
-- Styles via `` static styles = css`...` `` (scoped to shadow DOM).
-- Registration via `@customElement('prefix-component-name')` (use your project’s tag prefix).
+## Nested custom elements
 
-## Reactive properties
+- A parent's `updateComplete` does **not** guarantee a child custom element is defined and finished rendering.
+- Before calling a method on a child: `await customElements.whenDefined('tag-name')`, then `await child.updateComplete`.
 
-- `@property()` for public props (reflected as attributes when configured).
-- `@state()` for internal state (no attribute).
-- Use `{ type: Number }`, `{ type: Boolean }`, `{ type: Array }` for attribute → property conversion.
-- Use `{ reflect: true }` only if the attribute must be readable from outside the shadow root.
+## Scrolling and overlays
 
-## Lifecycle (order)
-
-1. `connectedCallback()` — setup (global listeners, timers).
-2. `disconnectedCallback()` — cleanup.
-3. `willUpdate(changed)` — derived state before render.
-4. `updated(changed)` — post-render (focus, scroll).
-5. `firstUpdated()` — one-time work after the first render.
-
-## Templates
-
-- Bindings: `.prop=${val}`, `@event=${handler}`, `?bool=${flag}`.
-- Lists: map items to templates; use `repeat()` when you need stable keys.
-- Conditionals: ternary with `html` or `nothing` from `lit`.
-- Slots: named slots for composition: `<slot name="header"></slot>`.
-
-## Events
-
-- Dispatch with `CustomEvent`, typically `{ detail, bubbles: true, composed: true }` so events cross shadow boundaries.
-- Use a consistent `prefix-action` event naming policy for your design system.
-
-## Overlays and nested custom elements
-
-- A parent’s `updateComplete` does **not** guarantee a child custom element is defined and finished rendering.
-- Before calling a method on a child: `await customElements.whenDefined('tag-name')` then `await child.updateComplete`.
-- A host with `overflow: hidden` can clip `position: fixed` children in shadow DOM; toggle `overflow: visible` (for example via an attribute) while an overlay is open.
+- Set `:host { display: block }`. Avoid `100vh` or fixed heights inside shadow DOM; the page/app root owns the single scroll.
+- For a nested scroller: `min-height: 0` on the flex parent plus `overscroll-behavior: contain` (add `scrollbar-gutter: stable` when layout shift matters).
+- `overflow: hidden` does not clip `position: fixed` descendants. Clipping happens only when an ancestor has `transform`, `filter`, `contain` or `will-change`, which makes it the containing block.
+- For menus and dropdowns, prefer `popover` / the top layer over relative-positioning tricks.
 
 ## Avoid
 
-- `innerHTML` for templates — use `` html`...` ``.
-- `querySelector` inside `render()` — prefer `@query` decorators.
-- Heavy work in `render()` — precompute in `willUpdate()`.
-- Mutating reactive properties in `render()` (risk of update loops).
-- Calling methods on a child before `whenDefined` + `updateComplete`.
+- `innerHTML` for templates; use `` html`...` ``.
+- `querySelector` inside `render()`; prefer `@query`.
+- Heavy work in `render()`; precompute in `willUpdate()`.
+- Mutating reactive properties in `render()` (update loops).
 
-## Related rules
+## Related
 
 - Live docs playground: [wc-live-demos-starlight](../wc-live-demos-starlight/SKILL.md)

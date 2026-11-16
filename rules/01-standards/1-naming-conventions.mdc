@@ -1,5 +1,5 @@
 ---
-description: Apply naming conventions for the Modelo Hub monorepo. Use for all TypeScript files.
+description: Apply naming conventions for a TypeScript monorepo. Use for all TypeScript files.
 globs: **/*.ts,**/*.tsx
 alwaysApply: false
 ---

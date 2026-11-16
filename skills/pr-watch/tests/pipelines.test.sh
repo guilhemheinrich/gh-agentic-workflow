@@ -22,10 +22,10 @@ cycle "$T0"
 fx_pr MERGED abc123 def456 '[]' mrg111
 fx_statuses mrg111 '[]'
 cycle $((T0 + 10))
-check "merge wakes with the merged line" 'unread s1 | grep -q "modelo-bill-e#229 merged"'
+check "merge wakes with the merged line" 'unread s1 | grep -q "billing-app#229 merged"'
 out="$("$PRW" wait --session s1 --timeout 1)"
-check "wait delivering merged reminds to re-arm while the build is followed" 'grep -q "modelo-bill-e#229 merged" <<<"$out" && grep -q "prw wait --session s1. again" <<<"$out"' "$out"
-check "the subscription follows the merge commit" 'grep -q "modelo-bill-e#229 build staging@mrg111 s1" <<<"$("$PRW" list --session s1)"' "$("$PRW" list --session s1)"
+check "wait delivering merged reminds to re-arm while the build is followed" 'grep -q "billing-app#229 merged" <<<"$out" && grep -q "prw wait --session s1. again" <<<"$out"' "$out"
+check "the subscription follows the merge commit" 'grep -q "billing-app#229 build staging@mrg111 s1" <<<"$("$PRW" list --session s1)"' "$("$PRW" list --session s1)"
 out="$("$PRW" wait --session s1 --timeout 1)"; rc=$?
 check "wait keeps waiting during the build phase (exit 2, not 3)" '[ "$rc" = 2 ]' "rc=$rc $out"
 check "the merge is logged with its commit and branch" 'grep -q "MERGED — following merge commit mrg111 on staging" "$PRW_STATE_DIR/daemon.log"'
@@ -34,12 +34,12 @@ fx_statuses mrg111 '[{"key":"p1","name":"Pipeline staging","state":"INPROGRESS",
 cycle $((T0 + 20))
 check "a running merge pipeline wakes nobody" '[ -z "$(unread s1)" ]'
 check "a running merge pipeline turns the fast poll on" 'lib daemon_any_running'
-check "status shows the followed commit" 'grep -q "^modelo-bill-e@mrg111 build · Pipeline staging INPROGRESS, Sonar SUCCESSFUL" <<<"$("$PRW" status --session s1)"' "$("$PRW" status --session s1)"
+check "status shows the followed commit" 'grep -q "^billing-app@mrg111 build · Pipeline staging INPROGRESS, Sonar SUCCESSFUL" <<<"$("$PRW" status --session s1)"' "$("$PRW" status --session s1)"
 fx_statuses mrg111 '[{"key":"p1","name":"Pipeline staging","state":"FAILED","url":"https://bitbucket.org/x/pipelines/812"},
                      {"key":"sonar","name":"Sonar","state":"SUCCESSFUL","url":"https://sonar/x"}]'
 cycle $((T0 + 30))
 out="$(unread s1)"
-check "the failed merge pipeline wakes once, at once, with its link" '[ "$out" = "modelo-bill-e#229 after merge into staging @mrg111: \"Pipeline staging\" FAILED, \"Sonar\" SUCCESSFUL · https://bitbucket.org/x/pipelines/812" ]' "$out"
+check "the failed merge pipeline wakes once, at once, with its link" '[ "$out" = "billing-app#229 after merge into staging @mrg111: \"Pipeline staging\" FAILED, \"Sonar\" SUCCESSFUL · https://bitbucket.org/x/pipelines/812" ]' "$out"
 check "the build phase is closed" '[ "$(jq -r ".[0].status" "$SUBS")" = closed ]'
 check "the build snapshot is dropped once nobody follows it" '! ls "$PRW_STATE_DIR/snapshots" | grep -q commit-mrg111'
 lib 'events_ack s1 1'
@@ -76,7 +76,7 @@ check "the finished PR pipeline on a fast-forwarded head does not end the phase"
 fx_statuses fff333 '[{"key":"pr","name":"PR analysis","state":"SUCCESSFUL","updated_on":"2026-11-02T10:00:00Z"},
                      {"key":"br","name":"Pipeline staging","state":"SUCCESSFUL","updated_on":"2026-11-02T10:09:00Z"}]'
 cycle $((T0 + 30))
-check "the branch pipeline on the same commit ends it" '[ "$(unread s3)" = "modelo-bill-e#229 after merge into staging @fff333: \"Pipeline staging\" SUCCESSFUL" ]' "$(unread s3)"
+check "the branch pipeline on the same commit ends it" '[ "$(unread s3)" = "billing-app#229 after merge into staging @fff333: \"Pipeline staging\" SUCCESSFUL" ]' "$(unread s3)"
 
 # 4. MERGED without merge_commit yet: asked again on the next cycle.
 fresh
@@ -94,17 +94,17 @@ check "the merge commit is filled in later and followed" 'unread s4 | grep -q "@
 # 5. A pushed commit without PR (direct push to staging).
 fresh
 "$PRW" subscribe --commit c0ffee12 --branch staging --repo "$FX_REPO" --session s5 >/dev/null
-q='repositories/septeo-immobilier/modelo-bill-e/pullrequests?q=source.branch.name%3D%22staging%22%20AND%20state%3D%22OPEN%22'
+q='repositories/acme/billing-app/pullrequests?q=source.branch.name%3D%22staging%22%20AND%20state%3D%22OPEN%22'
 fx_put "$q" '{"values":[]}'
 "$PRW" subscribe --branch staging --repo "$FX_REPO" --session s5 >/dev/null
 check "a commit subscription and a pending branch coexist" '[ "$("$PRW" list --session s5 | wc -l | tr -d " ")" = 2 ]' "$("$PRW" list --session s5)"
-check "the commit subscription is listed" 'grep -q "^septeo-immobilier/modelo-bill-e build staging@c0ffee12 s5" <<<"$("$PRW" list --session s5)"' "$("$PRW" list --session s5)"
+check "the commit subscription is listed" 'grep -q "^acme/billing-app build staging@c0ffee12 s5" <<<"$("$PRW" list --session s5)"' "$("$PRW" list --session s5)"
 FX_REPO_S="$FX_REPO"
 fx_statuses c0ffee12 '[{"key":"b","name":"Pipeline staging","state":"INPROGRESS"}]'
 cycle "$T0"
 fx_statuses c0ffee12 '[{"key":"b","name":"Pipeline staging","state":"STOPPED"}]'
 cycle $((T0 + 10))
-check "a stopped pipeline on a pushed commit wakes" '[ "$(unread s5)" = "modelo-bill-e push to staging @c0ffee1: \"Pipeline staging\" STOPPED" ]' "$(unread s5)"
+check "a stopped pipeline on a pushed commit wakes" '[ "$(unread s5)" = "billing-app push to staging @c0ffee1: \"Pipeline staging\" STOPPED" ]' "$(unread s5)"
 check "the pending branch subscription survives" 'grep -q "@staging pending" <<<"$("$PRW" list --session s5)"'
 "$PRW" subscribe --commit deadbeef --repo "$FX_REPO" --session s5 >/dev/null
 "$PRW" unsubscribe "$FX_REPO" --commit deadbeef --session s5
@@ -120,10 +120,10 @@ dk="$(fixture_key "repositories/$FX_REPO/pullrequests/$FX_PR/diffstat?pagelen=50
 printf 302 >"$FX/$dk.code"
 "$PRW" subscribe "$FX_REPO" 229 --session s6 >/dev/null
 for i in 0 1 2; do cycle $((T0 + i * 60)); done
-check "a code 13 is logged with its HTTP code and URL" 'grep -q "fetch error septeo-immobilier/modelo-bill-e#229 (code 13, HTTP 302 on repositories/septeo-immobilier/modelo-bill-e/pullrequests/229/diffstat?pagelen=500)" "$PRW_STATE_DIR/daemon.log"' "$(cat "$PRW_STATE_DIR/daemon.log")"
+check "a code 13 is logged with its HTTP code and URL" 'grep -q "fetch error acme/billing-app#229 (code 13, HTTP 302 on repositories/acme/billing-app/pullrequests/229/diffstat?pagelen=500)" "$PRW_STATE_DIR/daemon.log"' "$(cat "$PRW_STATE_DIR/daemon.log")"
 date -u +%s >"$PRW_STATE_DIR/heartbeat"
 out="$("$PRW" doctor 2>&1)"; rc=$?
-check "doctor flags repeated fetch errors" '[ "$rc" = 1 ] && printf "%s" "$out" | grep -q "^FAIL septeo-immobilier/modelo-bill-e 229: 3 consecutive fetch errors (code 13, HTTP 302 on repositories/.*/diffstat?pagelen=500)"' "rc=$rc $out"
+check "doctor flags repeated fetch errors" '[ "$rc" = 1 ] && printf "%s" "$out" | grep -q "^FAIL acme/billing-app 229: 3 consecutive fetch errors (code 13, HTTP 302 on repositories/.*/diffstat?pagelen=500)"' "rc=$rc $out"
 check "doctor never prints the token" '! printf "%s" "$out" | grep -q SECRET'
 rm -f "$FX/$dk.code"
 cycle $((T0 + 200))
@@ -133,7 +133,7 @@ check "a successful fetch clears the error count" '[ "$rc" = 0 ] && printf "%s" 
 FX_PR=230; fx_pr OPEN abc123 def456 '[]'; FX_PR=229
 PRW_NOW=$(( $(date -u +%s) - 600 )) "$PRW" subscribe "$FX_REPO" 230 --session s6 >/dev/null
 out="$("$PRW" doctor 2>&1)"; rc=$?
-check "doctor flags a subscription never snapshotted" '[ "$rc" = 1 ] && printf "%s" "$out" | grep -q "^FAIL septeo-immobilier/modelo-bill-e 230: no snapshot yet"' "rc=$rc $out"
+check "doctor flags a subscription never snapshotted" '[ "$rc" = 1 ] && printf "%s" "$out" | grep -q "^FAIL acme/billing-app 230: no snapshot yet"' "rc=$rc $out"
 
 # 7. The daemon re-execs itself when its scripts change on disk.
 fresh

@@ -1,0 +1,11 @@
+# Dev / prod stages for a single-package app. Compose targets `development`;
+# the infra layer (CI, k8s, ECS) builds `--target production`.
+FROM oven/bun:1 AS development
+WORKDIR /app
+COPY package.json ./
+RUN bun install
+
+FROM oven/bun:1 AS production
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile

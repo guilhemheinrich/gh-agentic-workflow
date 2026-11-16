@@ -16,8 +16,8 @@ Wake lines, as the session receives them (comment bodies are never stored nor
 printed; the second line is a made-up example of the shape):
 
 ```
-Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/septeo-proptech/issue/TT-2287
-Linear · TT-2290 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-2290 · graph ~/linear-graphs/broker-pa-run-evolutions-courant.svg
+Linear · TT-2287 comment by Jane Doe (08:44) · https://linear.app/acme/issue/TT-2287
+Linear · TT-2290 Blocked → Todo · https://linear.app/acme/issue/TT-2290 · graph ~/linear-graphs/broker-pa-run-evolutions-courant.svg
 ```
 
 A state transition line ends with the path of the project's graph (§8).
@@ -136,7 +136,7 @@ harness; in Claude Code it survives `--resume`). Subscribe, then arm the wait
 with `run_in_background`:
 
 ```bash
-lw subscribe --session <id> --project broker-pa-run-and-evolutions-courant-5842ed0c2bcd --since 3d
+lw subscribe --session <id> --project example-project-run-5842ed0c2bcd --since 3d
 lw wait --session <id>
 ```
 
@@ -144,7 +144,7 @@ lw wait --session <id>
   Re-subscribing after an unsubscribe opens a new row; the closed one stays as
   history. These three spellings give the same target `5842ed0c2bcd`: the
   slugId, the slug, and the project URL
-  `https://linear.app/septeo-proptech/project/broker-pa-run-and-evolutions-courant-5842ed0c2bcd/overview`.
+  `https://linear.app/acme/project/example-project-run-5842ed0c2bcd/overview`.
 - **`--since` is capped at 7 days.** Without it, the first poll is a silent
   baseline; with it, comments after that point are delivered once (the
   "decision already taken" case). State moves made before the subscription are

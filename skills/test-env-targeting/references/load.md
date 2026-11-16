@@ -27,7 +27,7 @@ test-load-smoke: $(STACK) ## k6 smoke against ENV (never prod)
 	$(WITH_ENV) k6 run tests/load/smoke.js
 ```
 
-`modelo-bill-e/tests/load/k6/lib/auth.js` reads
+A typical `tests/load/k6/lib/auth.js` reads
 `__ENV.BASE_URL || "http://localhost:8080"`. Under this skill the name becomes
 `API_BASE_URL` and the default disappears: a load test that silently falls
 back to localhost reports a beautiful p95 of nothing.

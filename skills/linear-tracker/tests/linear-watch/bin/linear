@@ -84,7 +84,7 @@ def fixture(name: str) -> str:
 FAKE_PROJECT = "5842ed0c2bcd"  # the project the LW-0 payloads come from
 # The captured nodes predate LW-11 and carry no project url; lw now asks for it
 # (`project { slugId url }`), so the fake adds the url Linear would return.
-FAKE_PROJECT_URL = "https://linear.app/septeo-proptech/project/redacted-name-" + FAKE_PROJECT
+FAKE_PROJECT_URL = "https://linear.app/acme/project/redacted-name-" + FAKE_PROJECT
 TERMINAL_PAGE = {"hasNextPage": False, "endCursor": None}
 
 

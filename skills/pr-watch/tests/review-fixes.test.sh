@@ -39,9 +39,9 @@ FX_REPO="$FX_REPO_SAVE"
 : >"$FAKE_CURL_LOG"
 PRW_NOW=1793372000 "$PRW" daemon once
 check "a 403 repo is logged as no access" 'grep -q "no access to aaa-other/private#229 (403)" "$PRW_STATE_DIR/daemon.log"'
-check "the next repo is still polled" 'grep -q "modelo-bill-e/pullrequests/229$" "$FAKE_CURL_LOG"' "$(cat "$FAKE_CURL_LOG")"
+check "the next repo is still polled" 'grep -q "billing-app/pullrequests/229$" "$FAKE_CURL_LOG"' "$(cat "$FAKE_CURL_LOG")"
 fx_put "$(printf 'repositories/%s/user' x)" '{}'
-q='repositories/septeo-immobilier/modelo-bill-e/pullrequests?q=source.branch.name%3D%22feat%2Fauth%22%20AND%20state%3D%22OPEN%22'
+q='repositories/acme/billing-app/pullrequests?q=source.branch.name%3D%22feat%2Fauth%22%20AND%20state%3D%22OPEN%22'
 fx_put "$q" '{"values":[]}'
 PRW_NOW=1793372000 "$PRW" subscribe --branch feat/auth --repo "$FX_REPO" --session sauth >/dev/null
 fx_put "$q" '{}' 401

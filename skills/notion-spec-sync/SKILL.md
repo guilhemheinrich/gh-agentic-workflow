@@ -1,7 +1,9 @@
 ---
 name: notion-spec-sync
-description: Deterministically synchronize a repository's root README plus SpecKit specifications and fixes into Notion through the Notion MCP. Use when Codex must mirror README.md, specs/, specs/archive*/, fixes/, specs/fixes/, or specs/archive*/fixes into a Notion workspace as a repo-scoped project page and table with stable cards containing spec.md and review.md content, while keeping the LLM as orchestrator and deterministic logic in scripts.
+description: Deterministically synchronize a repository's root README plus SpecKit specifications and fixes into Notion through the Notion MCP. Use when you must mirror README.md, specs/, specs/archive*/, fixes/, specs/fixes/, or specs/archive*/fixes into a Notion workspace as a repo-scoped project page and table with stable cards containing spec.md and review.md content, while keeping the LLM as orchestrator and deterministic logic in scripts.
 ---
+
+Requires spec-kit (spec-driven development).
 
 # Notion Spec Sync
 
@@ -15,7 +17,7 @@ The sync destination is a deterministic Notion path:
 <notion-root>/<repo-name>
 ```
 
-Derive `<repo-name>` from Git, preferably `remote.origin.url` basename without `.git`; fall back to the Git top-level directory name only when no origin is configured. Keep `<notion-root>` configurable with `--notion-root` and default it to `sentinel-sync`.
+Derive `<repo-name>` from Git, preferably `remote.origin.url` basename without `.git`; fall back to the Git top-level directory name only when no origin is configured. Keep `<notion-root>` configurable with `--notion-root` and default it to `spec-sync`.
 
 Read all synced content from the current Git checkout. For a `staging -> main` promotion flow, run the same command on the branch/worktree whose state must be reflected in Notion; do not mix README/spec content from another branch.
 
@@ -27,7 +29,7 @@ Read all synced content from the current Git checkout. For a `staging -> main` p
    ```bash
    python3 skills/notion-spec-sync/scripts/build_notion_spec_sync_plan.py \
      --repo . \
-     --notion-root sentinel-sync \
+     --notion-root spec-sync \
      --project-icon "📁" \
      --page-icon "📄"
    ```
@@ -41,13 +43,13 @@ Read all synced content from the current Git checkout. For a `staging -> main` p
      -w /workspace \
      notion-spec-sync-plan \
      --repo /workspace \
-     --notion-root sentinel-sync \
+     --notion-root spec-sync \
      --project-icon "📁" \
      --page-icon "📄"
    ```
 
 3. Read the JSON plan. Apply actions in order:
-   - `ensure_path`: find or create each page segment by exact title under the previous parent; apply the emitted `icon` to the final project page (`sentinel-sync/<repo-name>`), then write `markdown` there when the MCP supports Markdown import/append. Use `children` only as the deterministic block fallback.
+   - `ensure_path`: find or create each page segment by exact title under the previous parent; apply the emitted `icon` to the final project page (`spec-sync/<repo-name>`), then write `markdown` there when the MCP supports Markdown import/append. Use `children` only as the deterministic block fallback.
    - `ensure_database`: find or create the specs database under the repo page and apply the emitted `default_sort` when the MCP supports database view sorting.
    - `upsert_page`: find an existing database row by the stable `Source path` property; update it if found, create it if missing.
 4. For every `upsert_page`, apply the emitted `icon` exactly. Do not let the orchestrator or sub-agents choose their own page icon.
@@ -68,7 +70,7 @@ Classify a folder as `FIX` when its parent directory is named `fixes`; otherwise
 
 ## Notion Shape
 
-Create the repo page at `sentinel-sync/<repo-name>` and write project-level content there. When a root `README.md`, `readme.md`, or configured `--readme-path` exists, emit it in `ensure_path.markdown` so the README becomes the Markdown description of the project page. Also emit `markdown_chunks` and `children` as deterministic fallbacks using the same chunking and fence sizing as specs. If no root README exists, emit a short placeholder paragraph so the absence is explicit.
+Create the repo page at `spec-sync/<repo-name>` and write project-level content there. When a root `README.md`, `readme.md`, or configured `--readme-path` exists, emit it in `ensure_path.markdown` so the README becomes the Markdown description of the project page. Also emit `markdown_chunks` and `children` as deterministic fallbacks using the same chunking and fence sizing as specs. If no root README exists, emit a short placeholder paragraph so the absence is explicit.
 
 Create one database named `Specs` under the repo page. Each row is a Notion page/card.
 

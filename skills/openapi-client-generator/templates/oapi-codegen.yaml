@@ -1,0 +1,7 @@
+# Minimal oapi-codegen configuration used by the Go target of the Makefile.
+# Adjust package and output to your layout.
+package: api
+output: generated/go/api.gen.go
+generate:
+  models: true
+  client: true

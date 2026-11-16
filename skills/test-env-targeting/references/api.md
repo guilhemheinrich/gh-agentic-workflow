@@ -52,8 +52,8 @@ a job has a side effect. Tag by effect, not by verb.
   `t.Cleanup`, as the templates do, so a failing assertion never leaves the
   row behind; never rely on a global teardown that a crash skips;
 - run through `make test-api-business`, which passes `--workers=1` because
-  they share one demo account, as bill-e does with `E2E_BUSINESS_GREP` in
-  `tests/e2e/package.json`. The target refuses `ENV=prod`.
+  they share one demo account, as a dedicated `E2E_BUSINESS_GREP` script in
+  `tests/e2e/package.json` can do. The target refuses `ENV=prod`.
 
 ## Go: build tag plus name allowlist
 

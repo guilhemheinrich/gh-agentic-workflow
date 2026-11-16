@@ -27,7 +27,7 @@ High / Medium findings emerged in the tasks-delta pass.
 |----------|------|---------|----------|
 | Info (resolved) | Plan ↔ Tasks | PRE-001 asset-registry refresh requirement now lands as T014; verified by T015. | `tasks.md` T014 / `analyze-pre.json` PRE-001 |
 | Info | Spec ↔ Data-model | PRE-002: spec mentions Property + Trigger entities; data-model folds them into RuleFile. No-action by design. | `data-model.md` |
-| Info | Tasks ↔ Open Questions | INFO-001 — T011 carries forward `[NEEDS CLARIFICATION: priority=P2]` for the future skill slug; correctly deferred to REVIEW per Septeo P2 policy. | `tasks.md` T011 |
+| Info | Tasks ↔ Open Questions | INFO-001 — T011 carries forward `[NEEDS CLARIFICATION: priority=P2]` for the future skill slug; correctly deferred to REVIEW per organization P2 policy. | `tasks.md` T011 |
 | Info | Verification commands | INFO-002 — Two `rg` patterns in T007/T013/T015 embed quoted single-quotes inside the pattern (`"globs:.*\\*\\*/\\*'"`); shell-quoting may need a tweak at execution. Not load-bearing for a doc-only spec. | `tasks.md` T013, T015 |
 
 ## Axis-by-axis result

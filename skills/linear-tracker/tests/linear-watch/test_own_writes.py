@@ -124,7 +124,7 @@ class OwnWriteCommandTest(OwnWritesCase):
     def test_issue_url_is_accepted(self):
         self.run_lw(
             "own-write", "--issue",
-            "https://linear.app/septeo-proptech/issue/TT-2290/some-title", "--state", "Todo",
+            "https://linear.app/acme/issue/TT-2290/some-title", "--state", "Todo",
         )
         self.assertEqual(self.rows(), [("state", "TT-2290", "Todo")])
 

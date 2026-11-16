@@ -1,0 +1,40 @@
+# Single entry point for client generation. Keep only the targets you need.
+# Every tool version is pinned; generated code is never edited by hand.
+OPENAPI_SPEC      ?= openapi.yaml
+OPENAPI_BUNDLE    ?= build/openapi.bundled.yaml
+OPENAPI_GEN_IMAGE ?= openapitools/openapi-generator-cli:v7.27.0
+# REQUIRED: set both to the exact releases you tested (for example in the
+# including Makefile or on the command line). No default on purpose.
+# Comments never go on the same line as a value: make would read them into it.
+HEY_API_VERSION   ?=
+REDOCLY_VERSION   ?=
+
+.PHONY: lint-spec bundle-spec generate-client check-versions
+
+check-versions:
+	@test -n "$(HEY_API_VERSION)" || { echo "HEY_API_VERSION is required (exact 0.x release)"; exit 1; }
+	@test -n "$(REDOCLY_VERSION)" || { echo "REDOCLY_VERSION is required (exact release)"; exit 1; }
+
+lint-spec: check-versions
+	npx --yes @redocly/cli@$(REDOCLY_VERSION) lint $(OPENAPI_SPEC)
+
+bundle-spec: lint-spec
+	mkdir -p $(dir $(OPENAPI_BUNDLE))
+	npx --yes @redocly/cli@$(REDOCLY_VERSION) bundle $(OPENAPI_SPEC) -o $(OPENAPI_BUNDLE)
+
+# Swagger 2.0 input: convert to OpenAPI 3 first, then verify the result.
+# docker run --rm -v "$(CURDIR):/local" $(OPENAPI_GEN_IMAGE) generate \
+#   -i /local/swagger.yaml -g openapi-yaml -o /local/build/converted
+
+generate-client: check-versions bundle-spec
+	rm -rf generated
+	# TypeScript (hey-api, exact 0.x pin):
+	npx --yes @hey-api/openapi-ts@$(HEY_API_VERSION) -i $(OPENAPI_BUNDLE) -o generated/typescript
+	# Python / Java / C# / TypeScript-fetch (openapi-generator, pinned image):
+	docker run --rm -v "$(CURDIR):/local" $(OPENAPI_GEN_IMAGE) generate \
+	  -i /local/$(OPENAPI_BUNDLE) -g python -o /local/generated/python
+	# Go (oapi-codegen pinned by the `tool` directive in go.mod; OpenAPI 3 only):
+	mkdir -p generated/go
+	go tool oapi-codegen -config oapi-codegen.yaml $(OPENAPI_BUNDLE)
+	# Microsoft ecosystem (Kiota, pin the version in .config/dotnet-tools.json):
+	# dotnet tool run kiota generate -d $(OPENAPI_BUNDLE) -l CSharp -o generated/csharp -n Acme.Api

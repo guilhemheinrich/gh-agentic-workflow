@@ -113,6 +113,7 @@ export function resolveAssets(root, registry, config) {
       rel: chosen.rel,
       isDir: chosen.isDir,
       category: chosen.entry.category,
+      plugin: chosen.entry.plugin,
       tags: chosen.entry.tags ?? [],
       description: chosen.entry.description ?? '',
     });

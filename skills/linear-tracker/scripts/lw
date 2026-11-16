@@ -2172,7 +2172,7 @@ def graph_stem(project_url: str) -> str:
 
     Hand-made graphs were named after the project's title, not its URL
     (broker-pa-run-evolutions-courant.json holds the project
-    .../broker-pa-run-and-evolutions-courant-5842ed0c2bcd). A pair whose .json
+    .../example-project-run-5842ed0c2bcd). A pair whose .json
     names this project (same slugId) is reused, so a rebuild overwrites it
     instead of leaving a stale twin beside it.
     """

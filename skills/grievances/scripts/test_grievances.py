@@ -815,10 +815,10 @@ class TestPublishPrepare(PublishCase):
 
     def test_labels_merge_the_flags_and_never_carry_the_binding(self):
         self.publish(record="TT-412")
-        issue = self.publish(prepare=True, force=True, label=["modelo-broker-pa"])[1]
+        issue = self.publish(prepare=True, force=True, label=["acme-broker"])[1]
         labels = json.loads(issue)["issue"]["labels"]
         self.assertIn("scaling", labels)
-        self.assertIn("modelo-broker-pa", labels, "--label values are added")
+        self.assertIn("acme-broker", labels, "--label values are added")
         self.assertNotIn("linear:TT-412", labels, "the binding is never a tracker label")
 
     def test_a_boundary_tag_warns_and_does_not_block(self):
