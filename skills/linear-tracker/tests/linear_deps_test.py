@@ -438,7 +438,7 @@ class ExportTests(unittest.TestCase):
         self.assertEqual(n["milestone"], "Staging: invitations")
         self.assertEqual(n["blocked_by"], ["INV-1", "INV-2"])
         self.assertEqual(self.by_id["INV-1"]["blocks"], ["INV-3"])
-        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "state_color", "assignee", "description_excerpt", "parent", "milestone",
+        self.assertEqual(set(n), {"identifier", "title", "url", "external", "state", "state_name", "state_color", "assignee", "description_excerpt", "body", "parent", "milestone",
                                   "type", "labels", "blocked_by", "blocks"})
         json.dumps(self.g)  # serializable as is
 
@@ -657,6 +657,144 @@ class MilestoneBandTests(unittest.TestCase):
         for q in (ld.QUERY_PROJECT_BY_FILTER, ld.QUERY_PROJECT_BY_ID):
             self.assertIn("projectMilestones", q)
             self.assertIn("sortOrder", q)
+
+
+SEM_PASS = os.path.join(HERE, "fixtures", "semantics-pass.json")
+SEM_FAIL = os.path.join(HERE, "fixtures", "semantics-fail.json")
+SEMANTICS = os.path.join(HERE, "..", "references", "semantics.json")
+TEAM_KEYS = {"Product": ["INV"], "Technical": ["INV"]}
+
+
+class VerifyTests(unittest.TestCase):
+    """`verify` runs references/semantics.json: one passing and one failing fixture per rule."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.model = ld.load_semantics(SEMANTICS)
+        self.model["binding"]["attributes"]["addressee"]["team_keys"] = TEAM_KEYS
+
+    def graph(self, fixture):
+        return ld.build_export(load(fixture), URL, "acme")
+
+    def outcome(self, fixture, rule):
+        (v,) = ld.verify_graph(self.model, self.graph(fixture), only=[rule])
+        return v.status, [n["identifier"] for n, _ in v.fail], [n["identifier"] for n, _ in v.unknown]
+
+    def semantics_file(self, model):
+        path = os.path.join(self.dir.name, "semantics.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(model, fh)
+        return path
+
+    def graph_file(self, fixture):
+        path = os.path.join(self.dir.name, "g.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(self.graph(fixture), fh)
+        return path
+
+    def test_every_rule_passes_on_the_passing_fixture(self):
+        for r in self.model["generic"]["rules"]:
+            with self.subTest(rule=r["id"]):
+                self.assertEqual(self.outcome(SEM_PASS, r["id"])[0], "PASS")
+
+    def test_each_rule_fails_on_the_right_issues(self):
+        expected = {
+            "one-type": ["INV-8", "INV-9"],
+            "one-addressee-at-most": ["INV-5"],
+            "addressee-on-waiting": ["INV-6"],
+            "addressee-only-on-waiting": ["INV-7"],
+            "waiting-in-addressee-team": ["TT-6"],
+            "proof-blocked-by-change": ["INV-11"],
+            "proof-blocked-by-whole-lot": ["INV-10", "INV-11"],
+            "change-recommends-proof": ["INV-2"],
+            "required-sections": ["INV-4"],
+        }
+        self.assertEqual(set(expected), {r["id"] for r in self.model["generic"]["rules"]})
+        for rule, fails in expected.items():
+            with self.subTest(rule=rule):
+                status, failed, _ = self.outcome(SEM_FAIL, rule)
+                self.assertEqual((status, failed), ("FAIL", fails))
+
+    def test_unreadable_facts_are_unknown_not_failures(self):
+        self.assertEqual(self.outcome(SEM_FAIL, "change-recommends-proof")[2], ["INV-3", "INV-4"])
+        self.assertEqual(self.outcome(SEM_FAIL, "required-sections")[2], ["INV-3"])
+        self.assertEqual(self.outcome(SEM_FAIL, "waiting-in-addressee-team")[2], ["INV-6"])
+
+    def test_the_whole_lot_rule_names_the_missing_blockers(self):
+        (v,) = ld.verify_graph(self.model, self.graph(SEM_FAIL), only=["proof-blocked-by-whole-lot"])
+        reasons = {n["identifier"]: why for n, why in v.fail}
+        self.assertEqual(reasons["INV-10"], "not blocked by INV-2 of lot 'Lot A'")
+        self.assertEqual(reasons["INV-11"], "not blocked by INV-1, INV-2 of lot 'Lot A'")
+
+    def test_a_waiver_needs_the_word_none_in_the_proof_section(self):
+        facts = ld.body_facts("## In plain words, with an example\n\nx\n\n## Recommended proof\n\n« none », internal.")
+        self.assertEqual(facts, {"sections": ["In plain words, with an example", "Recommended proof"], "proof_waiver": True})
+        self.assertFalse(ld.body_facts("## Recommended proof\n\nLink to the Proof, none yet.")["proof_waiver"])
+        self.assertIsNone(ld.body_facts("## Impact\n\nx")["proof_waiver"])
+        self.assertIsNone(ld.body_facts(None))
+
+    def test_cli_pass_exits_zero_and_prints_one_line_per_rule(self):
+        res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("PASS    one-type  (8 checked, 0 fail, 0 unknown)", res.stdout)
+        self.assertIn("9 rule(s): 9 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
+
+    def test_cli_fail_exits_one_and_lists_identifiers(self):
+        res = run_cli("verify", self.graph_file(SEM_FAIL), "--semantics", self.semantics_file(self.model))
+        self.assertEqual(res.returncode, 1)
+        lines = res.stdout.splitlines()
+        self.assertTrue(any(l.startswith("FAIL    one-type") for l in lines))
+        self.assertTrue(any(l.strip().startswith("FAIL     INV-8") for l in lines))
+        self.assertTrue(any(l.strip().startswith("UNKNOWN  INV-3") for l in lines))
+
+    def test_default_semantics_leave_the_team_rule_unknown_and_strict_turns_it_into_a_failure(self):
+        g = self.graph_file(SEM_PASS)
+        res = run_cli("verify", g)
+        self.assertEqual(res.returncode, 0, res.stdout)
+        self.assertIn("UNKNOWN waiting-in-addressee-team", res.stdout)
+        self.assertEqual(run_cli("verify", g, "--strict").returncode, 1)
+
+    def test_rule_filter_and_unknown_rule_id(self):
+        g = self.graph_file(SEM_FAIL)
+        res = run_cli("verify", g, "--rule", "one-addressee-at-most")
+        self.assertEqual(res.returncode, 1)
+        self.assertIn("1 rule(s): 0 pass, 1 fail", res.stdout)
+        self.assertNotEqual(run_cli("verify", g, "--rule", "nope").returncode, 0)
+
+    def test_the_vocabulary_is_closed(self):
+        self.model["generic"]["rules"].append({"id": "x", "rule": "vibes", "subject": "Bug"})
+        res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("unknown kind 'vibes'", res.stderr)
+
+    def test_a_rule_naming_an_unknown_type_is_rejected(self):
+        self.model["generic"]["rules"].append(
+            {"id": "x", "rule": "blocked-by-any", "subject": "Epic", "objects": "@change"})
+        res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
+        self.assertNotEqual(res.returncode, 0)
+        self.assertIn("unknown type or role", res.stderr)
+
+    def test_every_template_heading_required_by_the_model_exists_in_its_template(self):
+        # the model's required sections must come from the template files, not from memory
+        root = os.path.join(HERE, "..")
+        for t in self.model["generic"]["types"]:
+            f = self.model["binding"]["templates"][t["id"]]["file"]
+            with open(os.path.join(root, f), encoding="utf-8") as fh:
+                heads = [ld.norm(h) for h in re.findall(r"(?m)^## (.+)$", fh.read())]
+            for sec in t["required_sections"]:
+                with self.subTest(type=t["id"], section=sec):
+                    self.assertTrue(any(h.startswith(ld.norm(sec)) for h in heads))
+
+    def test_generic_block_never_names_linear_label_groups(self):
+        def strip(x):  # prose comments and anchors into ticket-types.md may name the tool
+            if isinstance(x, dict):
+                return {k: strip(v) for k, v in x.items() if k not in ("_comment", "source")}
+            return [strip(v) for v in x] if isinstance(x, list) else x
+        text = json.dumps(strip(self.model["generic"]))
+        for word in ("Linear", "label", "milestone", "workspace"):
+            with self.subTest(word=word):
+                self.assertNotIn(word, text.replace("`", ""))
 
 
 class MilestoneStub(http.server.BaseHTTPRequestHandler):
