@@ -111,6 +111,20 @@ most plugins drag in a few others until the categories are reworked.
 
 Result: 9 hooks shipped (all in `devx-and-agentic`, together with the skills they call); `registry-sync-on-skill.sh` excluded.
 
+## Publication blacklist
+
+`config.json` has `publication.privatePlugins`, a list of plugin names that must never reach the public marketplace (first entry: `modelo-internal`; names that match nothing in the registry yet are allowed).
+
+* `--visibility public|all` selects the mode. **The default is `public`** (fail-closed): private plugins are not written to the output tree nor to `.claude-plugin/marketplace.json`. `all` includes them (for a private marketplace) and must be passed explicitly.
+* Leak guard (public mode): if a public plugin references an asset of a private plugin (which would also create a manifest `dependencies` entry), the build fails with the file, the referencing plugin and the private plugin. Private plugins' own files are not processed, so they produce no unresolved-reference noise.
+* Post-build assertion (public mode): the written tree is scanned and the build fails (and the output is removed) if `plugins/<private>` exists or a private name appears in `marketplace.json`.
+* The report prints `Private plugins configured: N (present in registry: M)` and, in public mode, the excluded plugins with their asset counts.
+
+```bash
+node scripts/build-plugins.mjs                      # public (default)
+node scripts/build-plugins.mjs --visibility all     # private marketplace
+```
+
 ## Determinism
 
 No timestamps, sorted traversal, fixed JSON key order, LF output, file modes normalised to 0644/0755, `.DS_Store`/`__pycache__`/`*.pyc`/`node_modules` skipped. `build.test.mjs` builds the real repo twice and compares every path, mode and byte. The output directory is only cleaned if it is empty or a previous build, and nothing is written when any reference fails.

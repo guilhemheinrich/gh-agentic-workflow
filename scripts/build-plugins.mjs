@@ -14,8 +14,14 @@ const opt = (name, def) => {
   return i === -1 ? def : args[i + 1];
 };
 if (args.includes('--help')) {
-  console.log('Usage: node scripts/build-plugins.mjs [--out dist] [--report-only] [--fail-on-drift]');
+  console.log('Usage: node scripts/build-plugins.mjs [--out dist] [--report-only] [--fail-on-drift] [--visibility public|all]');
   process.exit(0);
+}
+
+const visibility = opt('--visibility', 'public');
+if (!['public', 'all'].includes(visibility)) {
+  console.error(`Invalid --visibility '${visibility}' (expected: public | all)`);
+  process.exit(2);
 }
 
 const config = JSON.parse(fs.readFileSync(path.join(root, 'scripts/plugin-builder/config.json'), 'utf8'));
@@ -23,6 +29,7 @@ const result = buildPlugins({
   root,
   config,
   out: path.resolve(root, opt('--out', 'dist')),
+  visibility,
   write: !args.includes('--report-only'),
 });
 

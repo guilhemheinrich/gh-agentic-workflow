@@ -6,7 +6,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
-import { buildPlugins } from './build.mjs';
+import { assertNoPrivateOutput, buildPlugins } from './build.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const realConfig = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/plugin-builder/config.json'), 'utf8'));
@@ -265,4 +265,77 @@ test('drift is reported: missing path, duplicate, unregistered', () => {
   assert.match(text, /\[DUPLICATE_DROPPED\] command 'dup'.*CONTENT DIFFERS/);
   assert.match(text, /\[UNREGISTERED\] skill 'orphan'/);
   assert.equal(r.drift, 3);
+});
+
+// ---- publication blacklist ----------------------------------------------
+const pubFixture = (extraFiles = {}) =>
+  fixture(
+    { 'skills/one/SKILL.md': 'plain\n', 'skills/secret/SKILL.md': 'private\n', ...extraFiles },
+    [
+      { path: 'skills/one/', type: 'skill', category: 'cat-a' },
+      { path: 'skills/secret/', type: 'skill', category: 'cat-b' },
+    ],
+  );
+const privateCfg = (names = ['cat-b']) => miniConfig({ publication: { privatePlugins: names } });
+
+test('public visibility excludes private plugins from tree and marketplace', () => {
+  const out = tmp();
+  const r = buildPlugins({ root: pubFixture(), config: privateCfg(), out, write: true, visibility: 'public' });
+  assert.deepEqual(r.errors, []);
+  assert.ok(fs.existsSync(path.join(out, 'plugins/cat-a')));
+  assert.equal(fs.existsSync(path.join(out, 'plugins/cat-b')), false);
+  const mkt = JSON.parse(fs.readFileSync(path.join(out, '.claude-plugin/marketplace.json'), 'utf8'));
+  assert.deepEqual(mkt.plugins.map((p) => p.name), ['cat-a']);
+  const text = r.report.join('\n');
+  assert.match(text, /Private plugins configured: 1 \(present in registry: 1\)/);
+  assert.match(text, /cat-b \(1 asset\(s\)\)/);
+});
+
+test('visibility defaults to public', () => {
+  const out = tmp();
+  const r = buildPlugins({ root: pubFixture(), config: privateCfg(), out, write: true });
+  assert.deepEqual(r.errors, []);
+  assert.equal(fs.existsSync(path.join(out, 'plugins/cat-b')), false);
+});
+
+test('all visibility includes private plugins', () => {
+  const out = tmp();
+  const r = buildPlugins({ root: pubFixture(), config: privateCfg(), out, write: true, visibility: 'all' });
+  assert.deepEqual(r.errors, []);
+  assert.ok(fs.existsSync(path.join(out, 'plugins/cat-b/skills/secret/SKILL.md')));
+  const mkt = JSON.parse(fs.readFileSync(path.join(out, '.claude-plugin/marketplace.json'), 'utf8'));
+  assert.deepEqual(mkt.plugins.map((p) => p.name), ['cat-a', 'cat-b']);
+});
+
+test('leak guard fails when a public plugin references a private one', () => {
+  const root = pubFixture({ 'skills/one/SKILL.md': 'See skill `secret`.\n' });
+  const out = path.join(tmp(), 'dist');
+  const r = buildPlugins({ root, config: privateCfg(), out, write: true, visibility: 'public' });
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /skills\/one\/SKILL\.md/);
+  assert.match(r.errors[0], /plugin 'cat-a'/);
+  assert.match(r.errors[0], /private plugin 'cat-b'/);
+  assert.equal(fs.existsSync(out), false);
+  // the same content is fine in a private build
+  assert.deepEqual(buildPlugins({ root, config: privateCfg(), out: tmp(), write: true, visibility: 'all' }).errors, []);
+});
+
+test('private files are not processed in public mode (no unresolved-reference noise)', () => {
+  const root = pubFixture({ 'skills/secret/SKILL.md': 'Uses skill `one` and skills/ghost/\n' });
+  const r = buildPlugins({ root, config: privateCfg(), out: tmp(), write: true, visibility: 'public' });
+  assert.deepEqual(r.errors, []);
+});
+
+test('unknown private plugin names are tolerated and reported', () => {
+  const out = tmp();
+  const r = buildPlugins({ root: pubFixture(), config: privateCfg(['does-not-exist']), out, write: true, visibility: 'public' });
+  assert.deepEqual(r.errors, []);
+  assert.match(r.report.join('\n'), /Private plugins configured: 1 \(present in registry: 0\)/);
+  assert.ok(fs.existsSync(path.join(out, 'plugins/cat-b')));
+});
+
+test('post-build assertion detects a private plugin in an output tree', () => {
+  const out = tmp();
+  buildPlugins({ root: pubFixture(), config: privateCfg(), out, write: true, visibility: 'all' });
+  assert.equal(assertNoPrivateOutput(out, new Set(['cat-b'])).length, 2);
 });

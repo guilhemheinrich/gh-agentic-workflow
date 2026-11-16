@@ -6,6 +6,12 @@
       "name": "guilhemheinrich"
     }
   },
+  "publication": {
+    "_comment": "Fail-closed publication blacklist. Plugins listed in privatePlugins are excluded from the output tree and marketplace.json unless the build is run with --visibility all. A public plugin referencing a private one fails the build. Unknown names are tolerated (the plugin may not exist yet).",
+    "privatePlugins": [
+      "modelo-internal"
+    ]
+  },
   "canonicalRoots": {
     "skill": [
       "skills/"
