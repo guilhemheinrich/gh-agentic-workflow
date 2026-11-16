@@ -18,7 +18,10 @@ description: >-
   as a JSON graph agents can query, with `scripts/linear_deps.py` and a Linear
   API key read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline
   whether every issue of one type (every Proof) is blocked by an issue of
-  other types (a development task).
+  other types (a development task). `linear_deps.py verify` lists the semantic
+  inconsistencies of a project (a Done Proof blocked by an open change, a Feature
+  without a Proof, a lot without a staging Proof) against a user-written JSON
+  ontology, never blocking, with a per-lot staging/prod report.
   `publish` is a verb of the `grievances`
   skill; this skill is one backend that answers it, and it never writes a
   ledger. Use when wiring a repository to a Linear project, when a finding must
@@ -40,7 +43,7 @@ description: >-
   "issue from a finding", "which project does this spec belong to",
   "follow a spec in Linear", "spec-kit lifecycle", "ticket type",
   "Linear template", "proof ticket", "dependency tree", "dependency graph",
-  "draw Linear tickets", "what blocks this issue", "is every proof blocked",
+  "draw Linear tickets", "what blocks this issue", "is every proof blocked", "semantic check of a Linear project", "inconsistent tickets", "what is in staging",
   "LINEAR_API_KEY", "linear watch", "lw subscribe", "lw wait",
   "watch this ticket", "réveiller la session sur Linear",
   "surveiller le projet Linear".
