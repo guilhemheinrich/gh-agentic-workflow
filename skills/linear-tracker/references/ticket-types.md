@@ -8,6 +8,11 @@ of them.
 
 Every example below is made up.
 
+The rules below are also written as data, for a generic model and its Linear
+binding, in [`semantics.json`](semantics.json); `linear_deps.py verify` runs
+them against an exported project (see « Checking the whole semantic model » in
+[`../SKILL.md`](../SKILL.md)). This page stays the reference when the two differ.
+
 ## Where the templates live
 
 In Linear, as **workspace-level** templates, so every team sees them. The files

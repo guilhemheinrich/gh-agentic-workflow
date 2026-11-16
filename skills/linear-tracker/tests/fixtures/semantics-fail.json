@@ -1,0 +1,209 @@
+{
+ "project": {
+  "name": "Semantics fail (made up)",
+  "milestones": [
+   "Lot A"
+  ]
+ },
+ "issues": [
+  {
+   "identifier": "INV-1",
+   "title": "Feature INV-1",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Feature",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nOne Proof links it.\n"
+  },
+  {
+   "identifier": "INV-2",
+   "title": "Technical task INV-2",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Technical task",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nLink to the Proof that shows it on staging.\n"
+  },
+  {
+   "identifier": "INV-3",
+   "title": "Bug INV-3",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Bug",
+     "group": "Type"
+    }
+   ]
+  },
+  {
+   "identifier": "INV-4",
+   "title": "Improvement INV-4",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Improvement",
+     "group": "Type"
+    }
+   ],
+   "description": "## Today\n\nx\n"
+  },
+  {
+   "identifier": "INV-5",
+   "title": "Question INV-5",
+   "state": "started",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Question",
+     "group": "Type"
+    },
+    {
+     "name": "Product",
+     "group": "Addressee"
+    },
+    {
+     "name": "Technical",
+     "group": "Addressee"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-6",
+   "title": "Blocker INV-6",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Blocker",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-7",
+   "title": "Feature INV-7",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Feature",
+     "group": "Type"
+    },
+    {
+     "name": "Product",
+     "group": "Addressee"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nnone, internal\n"
+  },
+  {
+   "identifier": "INV-8",
+   "title": "x INV-8",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "backend",
+     "group": null
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-9",
+   "title": "Bug INV-9",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Bug",
+     "group": "Type"
+    },
+    {
+     "name": "Feature",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n\n## Recommended proof\n\nnone\n"
+  },
+  {
+   "identifier": "INV-10",
+   "title": "Proof INV-10",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "INV-11",
+   "title": "Proof INV-11",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  },
+  {
+   "identifier": "TT-6",
+   "title": "Question TT-6",
+   "state": "unstarted",
+   "parent": null,
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Question",
+     "group": "Type"
+    },
+    {
+     "name": "Product",
+     "group": "Addressee"
+    }
+   ],
+   "description": "## In plain words, with an example\n\nA made-up case.\n"
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "INV-1",
+   "to": "INV-10"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-5",
+   "to": "INV-11"
+  }
+ ]
+}
