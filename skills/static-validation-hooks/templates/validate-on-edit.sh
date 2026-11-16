@@ -455,7 +455,7 @@ up_hint() {
 # precedence. Measured 2026-09-17, Compose v5.1.2 on Docker 29.4.0 via OrbStack:
 # `config --format json` 64 ms, `ls --format json` 74 ms — against a basename
 # that is wrong for the repository where the defect was first seen (`compose.yml`
-# declares `name: broker-pa`, the directory is `modelo-broker-pa`).
+# declares `name: billing`, the directory is `acme-billing`).
 #
 # WHAT THIS CANNOT SEE, stated rather than claimed away: a file list (`-f`) or a
 # project name (`-p`) passed on the command line when the stack was started. The

@@ -4,7 +4,7 @@
 # Every builder writes into $FX (the directory served by the fake curl) under
 # the key the fake curl derives from the URL.
 
-FX_REPO="septeo-immobilier/modelo-bill-e"
+FX_REPO="acme/billing-app"
 FX_PR=229
 
 fx_put() { # URL_TAIL JSON [CODE]
@@ -21,7 +21,7 @@ fx_pr() {
       merge_commit: (if $m == "" then null else {hash: $m} end),
       source: {branch: {name: "feat/cascade"}, commit: {hash: $h}},
       destination: {branch: {name: "staging"}, commit: {hash: $d}},
-      links: {html: {href: "https://bitbucket.org/septeo-immobilier/modelo-bill-e/pull-requests/229"}},
+      links: {html: {href: "https://bitbucket.org/acme/billing-app/pull-requests/229"}},
       participants: $p}')"
 }
 

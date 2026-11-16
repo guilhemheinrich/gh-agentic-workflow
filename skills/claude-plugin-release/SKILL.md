@@ -140,32 +140,22 @@ claude plugin marketplace add ./path/to/marketplace-repo
 The plugin system **never reads git tags or forge releases** — it reads
 the `version` string (or the SHA). So automation must WRITE the computed
 version back into `plugin.json` and commit it; a tag alone ships
-nothing. semantic-release does this cleanly from Conventional Commits
-via `@semantic-release/exec` + `@semantic-release/git`:
+nothing. semantic-release does this cleanly from Conventional Commits via
+`@semantic-release/exec` + `@semantic-release/git` (both verified on npm:
+`exec` 7.1.0, `git` 11.0.1, `changelog` 7.0.0, `github` 12.0.11).
 
-```json
-{
-  "branches": ["main"],
-  "plugins": [
-    "@semantic-release/commit-analyzer",
-    "@semantic-release/release-notes-generator",
-    "@semantic-release/changelog",
-    ["@semantic-release/exec", {
-      "prepareCmd": "jq --arg v \"${nextRelease.version}\" '.version = $v' .claude-plugin/plugin.json > .claude-plugin/plugin.json.tmp && mv .claude-plugin/plugin.json.tmp .claude-plugin/plugin.json"
-    }],
-    ["@semantic-release/git", {
-      "assets": [".claude-plugin/plugin.json", "CHANGELOG.md"],
-      "message": "chore(release): ${nextRelease.version} [skip ci]"
-    }],
-    "@semantic-release/github"
-  ]
-}
-```
+Ready-to-copy files:
 
-Adapt the path if the plugin lives in a subdirectory of a multi-plugin
+- [`templates/.releaserc.json`](templates/.releaserc.json): analyzer, notes, changelog, `exec` (runs the bump script in `prepare`), `git` (commits `plugin.json` + `CHANGELOG.md` with `[skip ci]`), `github`.
+- [`templates/set-plugin-version.mjs`](templates/set-plugin-version.mjs): writes `version` into `plugin.json` (no `jq` dependency). Copy it to `scripts/` of the plugin repo.
+
+Adapt the paths if the plugin lives in a subdirectory of a multi-plugin
 marketplace repo (e.g. `plugins/<name>/.claude-plugin/plugin.json`), and
 swap `@semantic-release/github` for the forge in use (`@semantic-release/gitlab`,
-or drop it on Bitbucket and keep tags + changelog only).
+or drop it on Bitbucket and keep tags + changelog only). Without a
+`CHANGELOG.md` requirement, drop `@semantic-release/changelog` and its asset.
+`@semantic-release/git` runs in `prepare`, so a failed publish can freeze the
+branch behind the skip-CI commit (see `semantic-release-js-ts-pipeline`).
 
 Minimal CI shape (any runner):
 
@@ -176,9 +166,7 @@ npx semantic-release                                   # bump + changelog + tag 
 
 Manual-release repos (no semantic-release) should enforce the same
 invariant with a fail-closed script: refuse the tag when
-`plugin.json.version` ≠ the newest `CHANGELOG.md` heading (see
-`release-verify.sh` in the Septeo `claude-flow` repo for a working
-example of that pattern).
+`plugin.json.version` differs from the newest `CHANGELOG.md` heading.
 
 ## 4. Extras that matter at release time
 

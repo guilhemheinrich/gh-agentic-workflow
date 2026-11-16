@@ -6,28 +6,28 @@ FX="$WORK/fx"; mkdir -p "$FX"; use_fixture "$FX"
 SUBS="$PRW_STATE_DIR/subscriptions.json"
 
 out="$("$PRW" subscribe "$FX_REPO" 229 --session s1 --harness claude --head aaa111)"
-check "positional subscribe prints the PR" '[ "$out" = "subscribed septeo-immobilier/modelo-bill-e#229" ]' "$out"
+check "positional subscribe prints the PR" '[ "$out" = "subscribed acme/billing-app#229" ]' "$out"
 "$PRW" subscribe "$FX_REPO" 229 --session s1 --harness claude --head bbb222 >/dev/null
 check "same key keeps one entry" '[ "$(jq length "$SUBS")" = 1 ]' "$(cat "$SUBS")"
 check "own_heads accumulates" '[ "$(jq -c ".[0].own_heads" "$SUBS")" = "[\"aaa111\",\"bbb222\"]" ]' "$(cat "$SUBS")"
 check "entry is open with harness" '[ "$(jq -r ".[0].status + \" \" + .[0].harness" "$SUBS")" = "open claude" ]'
 
 # --branch with no open PR: pending.
-q='repositories/septeo-immobilier/modelo-bill-e/pullrequests?q=source.branch.name%3D%22feat%2Fnew%22%20AND%20state%3D%22OPEN%22'
+q='repositories/acme/billing-app/pullrequests?q=source.branch.name%3D%22feat%2Fnew%22%20AND%20state%3D%22OPEN%22'
 fx_put "$q" '{"values":[]}'
 out="$("$PRW" subscribe --branch feat/new --repo "$FX_REPO" --session s2 --head ccc333)"
-check "branch without PR is pending" '[ "$out" = "pending septeo-immobilier/modelo-bill-e@feat/new" ]' "$out"
+check "branch without PR is pending" '[ "$out" = "pending acme/billing-app@feat/new" ]' "$out"
 
 # --branch with an open PR, repo from the git remote of the cwd.
-q2='repositories/septeo-immobilier/modelo-bill-e/pullrequests?q=source.branch.name%3D%22feat%2Fcascade%22%20AND%20state%3D%22OPEN%22'
+q2='repositories/acme/billing-app/pullrequests?q=source.branch.name%3D%22feat%2Fcascade%22%20AND%20state%3D%22OPEN%22'
 fx_put "$q2" '{"values":[{"id":229}]}'
 git init -q "$WORK/repo"
-git -C "$WORK/repo" remote add origin git@bitbucket.org:septeo-immobilier/modelo-bill-e.git
+git -C "$WORK/repo" remote add origin git@bitbucket.org:acme/billing-app.git
 out="$(cd "$WORK/repo" && "$PRW" subscribe --branch feat/cascade --session s3)"
-check "repo resolved from the ssh remote" '[ "$out" = "subscribed septeo-immobilier/modelo-bill-e#229" ]' "$out"
-git -C "$WORK/repo" remote set-url origin https://bitbucket.org/septeo-immobilier/modelo-bill-e.git
+check "repo resolved from the ssh remote" '[ "$out" = "subscribed acme/billing-app#229" ]' "$out"
+git -C "$WORK/repo" remote set-url origin https://bitbucket.org/acme/billing-app.git
 out="$(cd "$WORK/repo" && "$PRW" subscribe --branch feat/cascade --session s4)"
-check "repo resolved from the https remote" '[ "$out" = "subscribed septeo-immobilier/modelo-bill-e#229" ]' "$out"
+check "repo resolved from the https remote" '[ "$out" = "subscribed acme/billing-app#229" ]' "$out"
 
 # A pending entry turns open when the same branch later resolves.
 fx_put "$q" '{"values":[{"id":230}]}'
@@ -36,7 +36,7 @@ check "pending entry replaced by the open one" '[ "$(jq "[.[] | select(.session 
 check "pending own_heads carried over" '[ "$(jq -c ".[] | select(.session == \"s2\") | .own_heads" "$SUBS")" = "[\"ccc333\"]" ]'
 
 out="$("$PRW" list --session s1)"
-check "list --session prints one line" '[ "$out" = "septeo-immobilier/modelo-bill-e#229 open s1" ]' "$out"
+check "list --session prints one line" '[ "$out" = "acme/billing-app#229 open s1" ]' "$out"
 
 "$PRW" ignore-comment "$FX_REPO" 229 4521 --session s1
 check "ignore-comment records the id" '[ "$(jq -c ".[] | select(.session == \"s1\") | .ignored_comments" "$SUBS")" = "[\"4521\"]" ]'

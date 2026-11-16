@@ -72,7 +72,7 @@ The desktop app groups the sidebar by folder, and a session cannot change
 folder once it exists. So the placement happens when the session starts.
 `start_session` accepts a `cwd` only with `initiation: "user_asked"`, and
 only when the user named the place. When the message names the project
-("côté modelo-calendar"), the agent starts the session there. Otherwise it
+("côté acme-calendar"), the agent starts the session there. Otherwise it
 offers the session, with a title naming the project. If the app cannot open
 the session in that folder, the agent says in one line which project to open
 it in.
@@ -103,7 +103,7 @@ conversation tracks, so the reader never scrolls back to find them:
 | Any session driving a roadmap | its `ROADMAP.md`, a local file (see below) |
 
 Example (real PR of this repo, made-up Linear URL):
-`*Sujet : épingler le sujet d'une session de pilotage. Fusionné ; reste la doc. · [ENG-42](https://linear.app/…) · [PR #28](https://github.com/guilhemheinrich/gh-agentic-workflow/pull/28)*`
+`*Sujet : épingler le sujet d'une session de pilotage. Fusionné ; reste la doc. · [ENG-42](https://linear.app/…) · [PR #28](https://github.com/acme/example-repo/pull/28)*`
 
 **Local files: only when their scope is a whole milestone, project or
 roadmap.** External URLs are always allowed; a local file is allowed as a
@@ -134,7 +134,7 @@ carried forward.
 #### Carried forward from the transcript, not from memory
 
 "Repeat it in every later summary" cannot rest on the agent remembering its
-own previous replies. Measured on 2026-11-04 over the modelo-workspace pilot
+own previous replies. Measured on 2026-11-04 over the acme-workspace pilot
 sessions: pilot `87de7c7a` (Linear project "Calendar · Notifications seule &
 IAM agence") carried 1-4 links from summary #52 to #95, had already lost the
 project link by then, and carried none from #96 on, right after a compaction

@@ -51,10 +51,10 @@ lw = load_lw()
 
 TEST_KEY = "lin_api_TESTkey0123456789abcdefghijklmnopqrstuv"
 PROJECT = "5842ed0c2bcd"
-PROJECT_URL = f"https://linear.app/septeo-proptech/project/redacted-name-{PROJECT}"
+PROJECT_URL = f"https://linear.app/acme/project/redacted-name-{PROJECT}"
 SLUG = "redacted-name"
 DAY = "2026-11-12"
-TT207_LINE = "Linear · TT-207 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-207"
+TT207_LINE = "Linear · TT-207 Blocked → Todo · https://linear.app/acme/issue/TT-207"
 
 
 def at(hhmmss: str) -> datetime:
@@ -64,7 +64,7 @@ def at(hhmmss: str) -> datetime:
 class SlugTest(unittest.TestCase):
     def test_slug_is_the_name_part_without_the_slug_id(self):
         self.assertEqual(
-            lw.graph_slug("https://linear.app/septeo-proptech/project/"
+            lw.graph_slug("https://linear.app/acme/project/"
                           "broker-pa-run-evolutions-courant-5842ed0c2bcd"),
             "broker-pa-run-evolutions-courant")
 
@@ -110,13 +110,13 @@ class StemTest(unittest.TestCase):
 
     def test_a_pair_for_the_same_project_keeps_its_name(self):
         # real case: the URL says run-and-evolutions, the file on disk says run-evolutions
-        url = "https://linear.app/septeo-proptech/project/broker-pa-run-and-evolutions-courant-5842ed0c2bcd"
+        url = "https://linear.app/acme/project/example-project-run-5842ed0c2bcd"
         self.seed("broker-pa-run-evolutions-courant", url)
         self.assertEqual(lw.graph_stem(url), "broker-pa-run-evolutions-courant")
         self.assertEqual(lw.graph_stem(url + "/overview"), "broker-pa-run-evolutions-courant")
 
     def test_another_projects_pair_is_left_alone(self):
-        self.seed("other", "https://linear.app/septeo-proptech/project/other-0123456789ab")
+        self.seed("other", "https://linear.app/acme/project/other-0123456789ab")
         self.assertEqual(lw.graph_stem(PROJECT_URL), SLUG)
 
     def test_temp_files_and_unreadable_json_are_ignored(self):
@@ -387,7 +387,7 @@ class CoalescingTest(GraphCase):
                 time.sleep(0.02)
             gate.write_text("go\n")  # the second project's renderer must not wait on the first's lock
             other = lw.rebuild_graph(self.state, "0123456789ab",
-                                     "https://linear.app/septeo-proptech/project/other-0123456789ab")
+                                     "https://linear.app/acme/project/other-0123456789ab")
         finally:
             gate.write_text("go\n")
             worker.join(timeout=30)
@@ -592,7 +592,7 @@ class DaemonRebuildTest(CycleCase):
     def test_graph_after_cycle_rebuilds_once_per_project_with_several_transitions(self):
         result = lw.CycleResult()
         other = "0123456789ab"
-        other_url = "https://linear.app/septeo-proptech/project/other-0123456789ab"
+        other_url = "https://linear.app/acme/project/other-0123456789ab"
         for ident in ("TT-1", "TT-2", "TT-3"):
             result.add_transition(PROJECT, PROJECT_URL, ident)
         result.add_transition(other, other_url, "TT-4")

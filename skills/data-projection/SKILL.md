@@ -71,9 +71,9 @@ A survey of three real specs in the fleet found no two sharing a structure:
 
 | Spec | Headings | Column table |
 | --- | --- | --- |
-| `modelo-analytics/010-user-identification` | `## Entities` → `### 1. UserProfile (ClickHouse)` | `Column \| Type \| Description \| Nullable \| Default` |
-| `modelo-analytics/020-cors-origins-management` | `## 1. \`environment_allowed_origins\` (migration 039)` | a different set |
-| `modelo_reporting/008-opaque-cube-mode` | `## Interfaces Serveur` | none, and no SQL at all |
+| `acme-analytics/010-user-identification` | `## Entities` → `### 1. UserProfile (ClickHouse)` | `Column \| Type \| Description \| Nullable \| Default` |
+| `acme-analytics/020-cors-origins-management` | `## 1. \`environment_allowed_origins\` (migration 039)` | a different set |
+| `acme_reporting/008-opaque-cube-mode` | `## Interfaces Serveur` | none, and no SQL at all |
 
 A parser over that prose would invent findings, and a fabricated finding is
 worse than a missing one. So the declaration is a typed JSON block, and the

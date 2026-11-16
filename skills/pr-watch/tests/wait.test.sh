@@ -7,11 +7,11 @@ export PRW_WAIT_POLL=1
 lib() { bash -c "for l in '$SKILL_DIR'/scripts/lib/*.sh; do . \"\$l\"; done; $1"; }
 
 "$PRW" subscribe "$FX_REPO" 229 --session s1 >/dev/null
-( sleep 2; lib 'events_append s1 "{\"ts\":1,\"text\":\"modelo-bill-e#229 merged\"}"' ) &
+( sleep 2; lib 'events_append s1 "{\"ts\":1,\"text\":\"billing-app#229 merged\"}"' ) &
 start="$(date +%s)"
 out="$("$PRW" wait --session s1)"; rc=$?
 took=$(( $(date +%s) - start ))
-check "wait prints the event text" '[ "$(printf "%s" "$out" | head -n1)" = "modelo-bill-e#229 merged" ]' "$out"
+check "wait prints the event text" '[ "$(printf "%s" "$out" | head -n1)" = "billing-app#229 merged" ]' "$out"
 check "wait exits 0 on delivery" '[ "$rc" = 0 ]' "rc=$rc"
 check "wait returns within 5 s" '[ "$took" -le 5 ]' "took=$took"
 
@@ -41,15 +41,15 @@ rm -f "$PRW_STATE_DIR/pending/s1.jsonl"
 # status reads the last snapshot, no API call.
 "$PRW" subscribe "$FX_REPO" 229 --session s5 >/dev/null
 mkdir -p "$PRW_STATE_DIR/snapshots"
-jq -n '{repo:"septeo-immobilier/modelo-bill-e",pr:229,state:"OPEN",head:"abc123",dest_head:"d",title:"Cockpit",url:"u",
-  participants:{"a":{name:"Julien Boutet",state:"approved"}},statuses:{"k":{name:"PR analysis",state:"FAILED"}},
+jq -n '{repo:"acme/billing-app",pr:229,state:"OPEN",head:"abc123",dest_head:"d",title:"Cockpit",url:"u",
+  participants:{"a":{name:"Alex Martin",state:"approved"}},statuses:{"k":{name:"PR analysis",state:"FAILED"}},
   comments:{"1":{author:"x",path:null,line:null,deleted:false},"2":{author:"y",path:null,line:null,deleted:true}},
-  conflict:false,fetched_at:"2026-10-30T15:04:06Z"}' >"$PRW_STATE_DIR/snapshots/septeo-immobilier__modelo-bill-e__229.json"
+  conflict:false,fetched_at:"2026-10-30T15:04:06Z"}' >"$PRW_STATE_DIR/snapshots/acme__billing-app__229.json"
 : >"$FAKE_CURL_LOG"
 out="$("$PRW" status "$FX_REPO" 229)"
-check "status names state, pipeline, reviews and comments" '[ "$out" = "modelo-bill-e#229 OPEN · PR analysis FAILED · approved by Julien Boutet · 1 comment · conflict no · as of 2026-10-30T15:04:06Z" ]' "$out"
+check "status names state, pipeline, reviews and comments" '[ "$out" = "billing-app#229 OPEN · PR analysis FAILED · approved by Alex Martin · 1 comment · conflict no · as of 2026-10-30T15:04:06Z" ]' "$out"
 check "status makes no API call" '[ ! -s "$FAKE_CURL_LOG" ]'
 out="$("$PRW" status --session s5)"
-check "status --session lists the session PRs" 'printf "%s" "$out" | grep -q "^modelo-bill-e#229 OPEN"' "$out"
+check "status --session lists the session PRs" 'printf "%s" "$out" | grep -q "^billing-app#229 OPEN"' "$out"
 
 summary

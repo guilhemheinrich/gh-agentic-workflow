@@ -1,0 +1,9 @@
+services:
+  <service-name>:
+    build:
+      context: .
+      dockerfile: apps/<service-name>/Dockerfile
+    volumes:
+      - ./apps/<service-name>:/app                                 # Layer 1: source code
+      - /app/node_modules                                          # Layer 2: anonymous volume
+      - ./packages/<pkg-name>:/app/node_modules/<scope>/<pkg-name> # Layer 3: workspace package

@@ -1,0 +1,39 @@
+# Save as .github/workflows/release.yml. The filename is part of the npm trusted-publisher
+# identity: declare the publisher on npmjs (Settings -> Trusted Publisher, workflow
+# filename "release.yml") BEFORE merging this file.
+# For a deployed app with no npm publish: drop `id-token: write` and remove
+# @semantic-release/npm from .releaserc.json.
+name: Release
+
+on:
+  push:
+    branches: [main, next]
+  pull_request:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write # OIDC token exchange with npm + provenance
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history and tags are required for commit analysis
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24" # npm >= 11.5.1; no registry-url, no NODE_AUTH_TOKEN
+      - run: npm ci
+      - name: Dry-run on pull requests
+        if: github.event_name == 'pull_request'
+        run: npx semantic-release --dry-run --no-ci
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Release
+        if: github.event_name == 'push'
+        run: npx semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

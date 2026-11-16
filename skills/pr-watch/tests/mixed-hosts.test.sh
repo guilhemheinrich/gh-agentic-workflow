@@ -20,7 +20,7 @@ fx_put "repos/$FX_REPO/pulls/42" '{}' 401
 : >"$FAKE_CURL_LOG"
 PRW_NOW="$T0" "$PRW" daemon once
 check "the Bitbucket PR was fetched in the same cycle" 'grep -q "pullrequests/229$" "$FAKE_CURL_LOG"' "$(cat "$FAKE_CURL_LOG")"
-check "the Bitbucket snapshot was written" '[ -f "$PRW_STATE_DIR/snapshots/septeo-immobilier__modelo-bill-e__229.json" ]'
+check "the Bitbucket snapshot was written" '[ -f "$PRW_STATE_DIR/snapshots/acme__billing-app__229.json" ]'
 check "the rejected GitHub PR was asked once, not once per page" '[ "$(grep -c "pulls/42$" "$FAKE_CURL_LOG")" = 1 ]' "$(cat "$FAKE_CURL_LOG")"
 check "the daemon logs the rejected credential" 'grep -q "auth error" "$PRW_STATE_DIR/daemon.log"'
 

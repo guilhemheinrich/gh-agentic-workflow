@@ -116,7 +116,7 @@ Choose by **whose hand moves next**:
 | Next hand | Status | Example |
 |---|---|---|
 | the human | `to-merge`, `to-test`, `decide`… | the human merges PR 12 |
-| a person or an access the human must chase | `blocked` | Julien's prod read access was refused |
+| a person or an access the human must chase | `blocked` | Dana's prod read access was refused |
 | side sessions this one started | `waiting-sessions` | "🧭 Pilotage 1/3 · roadmap facturation" |
 | a CI pipeline | `waiting-pipeline` | the side session reported "j'attends le pipeline sur `402c0f38b`" — not "⛔ Bloqué · pipeline PR 478" |
 | a colleague reviewing or merging | `waiting-review` | PR 147 waits on the bill-e owner's merge |
@@ -140,7 +140,7 @@ Pick the name, in this order:
 1. **A Linear project or initiative it follows**: its name verbatim, so the
    sidebar matches Linear. Example: the project "Facturation réception".
 2. **A roadmap file or a pilot-roadmap fiche**: its title. Example:
-   `ROADMAP.md` titled "Migration MODELO_HUB".
+   `ROADMAP.md` titled "Migration ACME_HUB".
 3. **Otherwise**: the name the human gave the work, 2-4 words.
 
 Leave out any "Linear ·" or "Pilote ·" prefix: the 🧭 icon already says it,
@@ -325,7 +325,7 @@ Every hook stays silent in a scheduled-task run, detected by the
 A PR is often merged from the forge while its session sits idle. No turn
 runs, so no hook fires, and the title keeps saying "🔀 To merge #12". The
 desktop app's PR bar does notice, but it covers GitHub only. Bitbucket
-repositories such as `modelo-broker-pa` get no PR bar at all.
+repositories such as `acme-broker` get no PR bar at all.
 
 The sweep closes that gap for every forge, in the watcher and the scheduled
 task alike. For each session whose title is `to-merge`, it reads `cwd` and

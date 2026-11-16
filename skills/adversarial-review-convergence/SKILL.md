@@ -55,7 +55,7 @@ belongs to [cursor-adversarial-review](../cursor-adversarial-review/SKILL.md)
 ## 2. The evidence base
 
 One real run, 2026-09-17: four rounds on one spec plus its plan
-(`modelo-broker-pa` spec 200, shared document identity across tenants). Two
+(`acme-billing` spec 200, shared document identity across tenants). Two
 lanes, `gpt-5.6-sol-high` and `cursor-grok-4.6-high`, dispatched through
 `cursor-review.sh` into a staged ephemeral workspace, so the repository stayed
 out of the reviewers' context.
@@ -323,7 +323,6 @@ that went quiet.
 - [cursor-adversarial-review](../cursor-adversarial-review/SKILL.md) — the transport this method was developed on: staged ephemeral workspace, `path:line` findings, `--panel N --exclude-vendor`.
 - [openrouter-adversarial-review](../openrouter-adversarial-review/SKILL.md) — the same discipline through a pay-per-token gateway, when the reviewer should be picked by benchmark rather than by subscription.
 - [grievances](../grievances/SKILL.md) — where every `MINOR` and every out-of-scope `MAJOR` goes, with an id, on the last round.
-- [systematic-debugging](../systematic-debugging/SKILL.md) — the same discipline applied to a defect instead of to a document: measure before hypothesising.
 
 ---
 
@@ -333,7 +332,7 @@ that went quiet.
 Templates: written here, not yet exercised end to end.**
 
 **What is evidenced.** Sections 2–3 come from a single real review —
-`modelo-broker-pa` spec 200, 2026-09-17, four rounds over one spec and one
+`acme-billing` spec 200, 2026-09-17, four rounds over one spec and one
 plan, two lanes per round (`gpt-5.6-sol-high`, `cursor-grok-4.6-high`)
 dispatched through `cursor-review.sh` into a staged workspace. The counts in §2
 are that run's counts. Each of the twelve rules names the specific event that

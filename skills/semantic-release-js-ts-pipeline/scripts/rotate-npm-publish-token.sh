@@ -15,8 +15,8 @@
 # remove that step would trade away the whole point.
 #
 # Usage:
-#   ./rotate-npm-publish-token.sh --scope @septeo-immo
-#   ./rotate-npm-publish-token.sh --package @septeo-immo/spaghetti-compass
+#   ./rotate-npm-publish-token.sh --scope @acme
+#   ./rotate-npm-publish-token.sh --package @acme/my-package
 #   ./rotate-npm-publish-token.sh --package @org/pkg --expires 60 --verify-publish .
 #   ./rotate-npm-publish-token.sh --scope @org --dry-run
 #
@@ -100,7 +100,7 @@ fi
 
 TARGET_FLAG=()
 if [ -n "$SCOPE" ]; then
-	case "$SCOPE" in @*) ;; *) die "--scope must start with @, e.g. @septeo-immo" ;; esac
+	case "$SCOPE" in @*) ;; *) die "--scope must start with @, e.g. @acme" ;; esac
 	TARGET_FLAG=(--scopes "$SCOPE")
 	SLUG="${SCOPE#@}"
 else

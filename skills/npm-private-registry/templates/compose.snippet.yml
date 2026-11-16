@@ -1,0 +1,11 @@
+services:
+  frontend:
+    build:
+      context: .            # monorepo root, so .npmrc is in the context
+      dockerfile: .docker/frontend/Dockerfile
+      secrets:
+        - npm_token         # only services with private dependencies
+
+secrets:
+  npm_token:
+    environment: NPM_TOKEN  # value comes from the unversioned .env / shell

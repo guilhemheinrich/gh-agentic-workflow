@@ -112,7 +112,7 @@ ran in that folder, finished a read-only investigation in 40 s, and its hooks
 wrote `turns` under its own id.
 
 ```bash
-cd ~/code/modelo-workspace/repos/calendar \
+cd ~/code/acme-workspace/repos/calendar \
   && claude --bg -n "Calendar : formatage des dates" --permission-mode plan "<brief>"
 claude agents --json | jq -r '.[] | select(.name == "Calendar : formatage des dates") | .sessionId'
 session-meta.py set <child-id> parent_session <pilot-id>

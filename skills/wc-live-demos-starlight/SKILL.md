@@ -51,14 +51,7 @@ Starlight page (parent)
 
 ## Controlled component pattern
 
-If components are “controlled” (state driven from outside), the iframe init script must wire events that write back, for example:
-
-```javascript
-el.addEventListener('range-change', (e) => { el.date = e.detail.start; });
-el.addEventListener('view-change', (e) => { el.view = e.detail.newView; });
-```
-
-Without this wiring, the preview can look “frozen”.
+If components are “controlled” (state driven from outside), the iframe init script must wire events that write back (template: [`templates/controlled-wiring.js`](templates/controlled-wiring.js)). Without this wiring, the preview can look “frozen”.
 
 ## MDX usage
 

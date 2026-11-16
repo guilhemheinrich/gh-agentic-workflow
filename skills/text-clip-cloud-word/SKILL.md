@@ -28,14 +28,7 @@ fill: a `<video>`, an animated CSS gradient, or an image.
 The accent word is a small stack of absolutely-positioned layers, **all clipped to the
 same glyph outline** via `clip-path: url(#glyph-clip)`:
 
-```
-<a class="cloud-word">                       position:relative; display:inline-block;
-  ├─ span.fallback   (z0)  ← solid gradient   isolation:isolate; drop-shadow filter
-  ├─ video /clouds.mp4(z1) ← drifting clouds   (the "floating cloud")
-  ├─ span.shimmer    (z2)  ← foil + highlight   mix-blend-mode: overlay
-  └─ span.sr-only          ← real text for a11y
-</a>
-```
+Layers, bottom to top: `span.fallback` (solid gradient, `isolation:isolate`, drop-shadow filter), the `video` (drifting clouds), `span.shimmer` (foil + highlight, `mix-blend-mode: overlay`), and an `sr-only` span with the real text.
 
 Key facts measured on the live site:
 
@@ -81,11 +74,11 @@ Two ways to get the `<clipPath>`:
   `.mp4`/`.webm`. Remember `muted` + `playsinline` or autoplay is blocked.
 - **Animated CSS gradient** (template default): zero assets, lightweight; animate
   `background-position` on layered radial blobs to fake drifting clouds.
-- **Static image**: cheapest; pair it with the animated shimmer so it still feels alive.
+- **Static image**: cheapest; pair with the animated shimmer.
 
 ## Template
 
-[`references/cloud-word.html`](references/cloud-word.html) — complete, browser-verified.
+[`templates/cloud-word.html`](templates/cloud-word.html) — complete, browser-verified.
 It uses the live-`<text>` clip and an animated-gradient stand-in for the cloud video,
 and includes commented hooks to swap in your own `clouds.mp4`. Reproduces the layering,
 foil gradient, shimmer sweep, and embossed edge.

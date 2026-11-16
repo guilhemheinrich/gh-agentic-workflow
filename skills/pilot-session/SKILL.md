@@ -381,6 +381,6 @@ Docker command). Disable with `PILOT_REMINDER=0`.
 
 - `references/harness-claude-desktop.md` — how Claude Desktop starts, wakes
   and bounds side sessions, and what the pilot does about it.
-- `references/worked-example-modelo-linear.md` — one instantiation: a roadmap
+- `references/worked-example-linear.md` — one instantiation: a roadmap
   in a Linear project, Bitbucket changes to `staging`, staging proofs on
   Kubernetes. A model of how to fill the generic rules, not rules.

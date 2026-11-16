@@ -36,7 +36,7 @@ Prometheus, a bootstrapped Kong, a three-node topology. It is still an
 integration test in shape, so it reads the same `tests/env/` files, but it is
 excluded from the default scope and runs through its own entry point.
 
-`modelo-broker-api/apps/backend/jest.live.config.js` is the fleet's example:
+A `jest.live.config.js` is a good example of the shape:
 a second Jest config that spreads the base one and lists `testMatch` for the
 `test/live/**` suites, each documented with the `make` target and the compose
 overlay that brings its infrastructure up. Copy that shape:
@@ -54,7 +54,7 @@ Two ways to get the store, both reading `DATABASE_URL` from `.env.local.secret`
 
 **Compose, already up.** The stack `make up` started is the store. The
 integration config does not start anything; `global-setup.ts` may apply
-migrations. This is the fleet default and the cheapest to reason about:
+migrations. This is the usual default and the cheapest to reason about:
 `docker compose ps` shows what the tests hit.
 
 **Testcontainers, per run.** The test starts a fresh Postgres and gets its
@@ -97,7 +97,7 @@ belong in an API test.
   database. Lift it when each worker gets its own schema or container.
 - **Run-scoped names** (`it-<timestamp>`) even inside a transaction: when a
   rollback fails, the leftover is attributable.
-- **No `t.Skip` on missing env.** `main_smoke_test.go` in bill-e skips its
+- **No `t.Skip` on missing env.** A `main_smoke_test.go` may skip its
   iframe test when variables are absent, so that `go test ./...` stays green
   without the stack. The build tag already gives that guarantee: without
   `-tags smoke` the file is not compiled. Inside the tag, a missing variable

@@ -42,18 +42,18 @@ lw = load_lw()
 # A made-up key in the real key's shape; only the fake ever accepts it.
 TEST_KEY = "lin_api_TESTkey0123456789abcdefghijklmnopqrstuv"
 PROJECT = "5842ed0c2bcd"
-PROJECT_URL = "https://linear.app/septeo-proptech/project/redacted-name-5842ed0c2bcd/overview"
+PROJECT_URL = "https://linear.app/acme/project/redacted-name-5842ed0c2bcd/overview"
 DAY = "2026-11-12"
 
 # the newest comment of the fixture: TT-2537, Person A, 15:46:49.980Z
 NEWEST_COMMENT = "c9dceae3-9888-4aa9-a5b2-2e812e96c9c3"
 NEWEST_LINE = (
     "Linear · TT-2537 comment by Person A (15:46) · "
-    "https://linear.app/septeo-proptech/issue/TT-2537"
+    "https://linear.app/acme/issue/TT-2537"
 )
 # TT-207 is Todo (unstarted) in the fixture, updated 15:48:31.600Z
 # a state move line ends with the project's graph path (LW-11); HOME is a temp dir here
-TT207_LINE = ("Linear · TT-207 Blocked → Todo · https://linear.app/septeo-proptech/issue/TT-207"
+TT207_LINE = ("Linear · TT-207 Blocked → Todo · https://linear.app/acme/issue/TT-207"
               " · graph ~/linear-graphs/redacted-name.svg")
 
 
@@ -198,7 +198,7 @@ class ProjectCommentsTest(CycleCase):
         # all 31 comments of the day but the 15:46 one, which Linear has not seen yet
         self.assertEqual(len(first), 30)
         self.assertIn("Linear · TT-1068 comment by Person B (08:44) · "
-                      "https://linear.app/septeo-proptech/issue/TT-1068", first)
+                      "https://linear.app/acme/issue/TT-1068", first)
         self.cycle("15:45:00")
         self.assertEqual(self.lines(), first)
         self.cycle("15:50:00")
@@ -310,9 +310,9 @@ class IssueSubscriptionTest(CycleCase):
         self.ok("15:40:00", "subscribe", "--session", "s1", "--issue", "TT-2519", "--since", "1d")
         self.cycle("15:40:00")
         self.assertEqual(self.lines(), [
-            "Linear · TT-2519 comment by Person A (13:09) · https://linear.app/septeo-proptech/issue/TT-2519",
-            "Linear · TT-2519 comment by Person A (13:19) · https://linear.app/septeo-proptech/issue/TT-2519",
-            "Linear · TT-2519 comment by Person A (14:25) · https://linear.app/septeo-proptech/issue/TT-2519",
+            "Linear · TT-2519 comment by Person A (13:09) · https://linear.app/acme/issue/TT-2519",
+            "Linear · TT-2519 comment by Person A (13:19) · https://linear.app/acme/issue/TT-2519",
+            "Linear · TT-2519 comment by Person A (14:25) · https://linear.app/acme/issue/TT-2519",
         ])
         self.cycle("15:45:00")
         self.assertEqual(len(self.lines()), 3)

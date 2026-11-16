@@ -45,14 +45,14 @@ says when to read it and when to write to it.
 - **The file name is English**, like every other committed artifact. Its
   **content** follows each repo's language rule.
 - A `DOLEANCES.md` is the **legacy** name (the convention started in
-  `modelo-homestaging`). It is not a second ledger: migrate it, never duplicate it
+  `acme-homestaging`). It is not a second ledger: migrate it, never duplicate it
   — see [Migrating a legacy ledger](#migrating-a-legacy-ledger).
 
 ## The CLI — the normal way to touch the file
 
 `scripts/grievances.py` (Python 3, standard library only). By default it resolves
 `<git root>/specs/GRIEVANCES.md`; override with `--file`, `--repo`, or
-`GRIEVANCES_FILE`. Under the Septeo Docker-only execution policy, run it in a
+`GRIEVANCES_FILE`. Under the Acme Docker-only execution policy, run it in a
 container:
 
 ```bash

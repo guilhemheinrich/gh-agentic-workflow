@@ -70,8 +70,8 @@ Wake lines, as the session receives them (Bitbucket, then GitHub — real shapes
 see `references/`):
 
 ```
-modelo-bill-e#229 pipeline "PR analysis" INPROGRESS→FAILED · https://bitbucket.org/…/pull-requests/229
-modelo-bill-e#229 comment by Julien Boutet on src/cockpit/filters.ts:42 (id 4521)
+billing-app#229 pipeline "PR analysis" INPROGRESS→FAILED · https://bitbucket.org/…/pull-requests/229
+billing-app#229 comment by Alex Martin on src/cockpit/filters.ts:42 (id 4521)
 cockpit#42 pipeline "lint" INPROGRESS→FAILED · https://github.com/octo-org/cockpit/pull/42
 ```
 

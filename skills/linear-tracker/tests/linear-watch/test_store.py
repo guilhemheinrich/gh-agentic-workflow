@@ -33,12 +33,12 @@ def load_lw():
 lw = load_lw()
 
 SLUG_ID = "5842ed0c2bcd"
-FULL_SLUG = "broker-pa-run-and-evolutions-courant-5842ed0c2bcd"
+FULL_SLUG = "example-project-run-5842ed0c2bcd"
 PROJECT_URL = (
-    "https://linear.app/septeo-proptech/project/"
-    "broker-pa-run-and-evolutions-courant-5842ed0c2bcd/overview"
+    "https://linear.app/acme/project/"
+    "example-project-run-5842ed0c2bcd/overview"
 )
-ISSUE_URL = "https://linear.app/septeo-proptech/issue/TT-2287/some-title"
+ISSUE_URL = "https://linear.app/acme/issue/TT-2287/some-title"
 TABLES = {"subscriptions", "cursors", "issue_states", "own_writes", "events"}
 
 

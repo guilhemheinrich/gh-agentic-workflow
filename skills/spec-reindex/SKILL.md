@@ -11,6 +11,8 @@ tags:
   - spec-kit
 ---
 
+Requires spec-kit (spec-driven development).
+
 # Spec re-index skill
 
 ## When to use

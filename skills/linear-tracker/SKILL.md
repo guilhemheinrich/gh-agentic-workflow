@@ -675,7 +675,7 @@ the command line. Python standard library only; Docker is the execution rule.
   excerpt.
 - **A card** shows the identifier, `↳ TT-1970` for the parent issue, the title, then
   the state name · assignee · milestone, then chips: the ticket type first (bold,
-  bordered), then the other labels as `group/name` (`repo/modelo-hub`). What does not
+  bordered), then the other labels as `group/name` (`repo/acme-hub`). What does not
   fit ends with `…` or a `+N` chip; the **tooltip** holds everything: full title,
   state, type, assignee, milestone, parent and every label.
 - A **cycle** (A blocks B blocks A) is reported on stderr and in the SVG; the link

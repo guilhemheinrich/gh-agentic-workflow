@@ -1,0 +1,50 @@
+# Monorepo with turbo prune. Replace @scope/my-app, apps/my-app, packages/shared-lib.
+# Stage chain: pruner -> development -> development-runtime -> production -> production-runtime
+FROM oven/bun:1-alpine AS pruner
+WORKDIR /repo
+COPY . .
+RUN bun x turbo@2 prune @scope/my-app --docker --out-dir /pruned
+
+# Free install: generates the lockfile (a product of this stage, never an input).
+FROM oven/bun:1-alpine AS development
+WORKDIR /build
+COPY --from=pruner /pruned/json/ ./
+RUN bun install --linker hoisted
+COPY --from=pruner /pruned/full/ ./
+RUN cd packages/shared-lib && bun run build
+
+FROM node:24-alpine AS development-runtime
+COPY --from=development /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=development /build/node_modules /node_modules
+WORKDIR /app
+COPY --from=development /build/apps/my-app/node_modules ./node_modules
+COPY --from=development /build/apps/my-app/ ./
+# Exposed so `make lock` can extract it with docker create + docker cp.
+COPY --from=development /build/bun.lock ./bun.lock.docker
+COPY .docker/my-app/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+EXPOSE 3000
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bun", "run", "dev"]
+
+# Strict install from the committed, docker-generated lockfile (NOT turbo's).
+FROM oven/bun:1-alpine AS production
+WORKDIR /build
+COPY --from=pruner /pruned/json/ ./
+COPY apps/my-app/bun.lock.docker ./bun.lock
+RUN bun install --frozen-lockfile --linker hoisted
+COPY --from=pruner /pruned/full/ ./
+RUN cd packages/shared-lib && bun run build
+
+FROM node:24-alpine AS production-runtime
+COPY --from=production /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=production /build/node_modules /node_modules
+WORKDIR /app
+COPY --from=production /build/apps/my-app/node_modules ./node_modules
+COPY --from=production /build/apps/my-app/ ./
+COPY .docker/my-app/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+USER node
+EXPOSE 3000
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bun", "run", "start"]

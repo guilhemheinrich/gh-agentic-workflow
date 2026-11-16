@@ -1,0 +1,10 @@
+# Single-package variant: `docker compose cp` needs a running container.
+version: '3'
+tasks:
+  lock:
+    desc: Regenerate the lockfile in the development stage and copy it to the host
+    cmds:
+      - docker compose build my-service
+      - docker compose up -d my-service
+      - docker compose cp my-service:/app/bun.lock ./bun.lock
+      - docker compose down

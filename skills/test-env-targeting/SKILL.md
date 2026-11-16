@@ -130,7 +130,7 @@ or in the ambient environment. See R6.
 
 Trap, real: a root Makefile with `-include .env` and `export` pushes the
 application's runtime `.env` into every recipe, where it counts as "caller".
-`modelo-bill-e` does this. An `E2E_BASE_URL` left in that root `.env` beats
+Some repos do this. An `E2E_BASE_URL` left in that root `.env` beats
 `tests/env/.env.staging` silently. Test-target variables do not belong in the
 app's `.env`.
 
@@ -146,8 +146,8 @@ bash tests/env/with-env.sh staging -- k6 run tests/load/smoke.js
 ```
 
 Downstream there is no `dotenv` import, no hand-written parser, no
-`--env-file` per runner. The 25-line `.env` parser at the top of
-`modelo-bill-e/tests/e2e/playwright.config.ts` is what this rule deletes.
+`--env-file` per runner. A hand-written 25-line `.env` parser at the top of
+`playwright.config.ts` is what this rule deletes.
 The only in-runner loading is the fallback in `env.ts` and `testenv.go`, so
 that a bare `npx playwright test` or `go test` from an IDE still finds
 `.env.local` or `.env.staging`. Both use the standard library and the same
@@ -178,7 +178,7 @@ test in a tagged package therefore starts with `env := testenv.Load(t)`.
 No test reads `process.env` or `os.Getenv` directly. Tests import `env`.
 Optional values that a journey needs are demanded loudly through
 `requireUser()` / `RequireUser(t)`: a skip hides a misconfiguration, a failure
-shows it. `modelo-hub/apps/auth-api/vitest.config.ci.ts` excludes a test
+shows it. A `vitest.config.ci.ts` that excludes a test
 because ambient variables are missing in CI; under this rule the run would
 have named them.
 
@@ -226,16 +226,15 @@ make test-api-list ENV=prod PROD_CONFIRM=1
 ### R7. Environment, lane and mode are three axes
 
 - **Environment** is `TEST_ENV`. It is never a Playwright project.
-- **Lane** is speed or scope: `fast` / `slow`, `nightly-extended` in
-  broker-api. It is a `--grep` the Makefile composes from `LANE=fast`, ANDed
+- **Lane** is speed or scope: `fast` / `slow`, `nightly-extended`. It is a `--grep` the Makefile composes from `LANE=fast`, ANDed
   with the prod allowlist through lookaheads. The Makefile rejects a `LANE`
   outside its `LANES` list, because a mistyped tag matches nothing and a run
   of zero tests exits green. It is not a project-level
   `grep` either: Playwright ANDs a project `grep` with the CLI `--grep`, so a
   project pinned to `/@fast/` silently drops every spec that lacks the tag.
-  `modelo-calendar/apps/e2e/playwright.config.ts` has that shape today.
-- **Mode** is a runtime shape of the app: `.env.hub` and `.env.hubless` in
-  bill-e and broker-pa. A staging hubless run makes sense. Modes stay in the
+  A Playwright config with that shape silently drops specs.
+- **Mode** is a runtime shape of the app: `.env.sso` and `.env.standalone`
+  in an app that can run with or without an SSO shell. A staging standalone run makes sense. Modes stay in the
   app's own env files, not in `tests/env/`.
 
 Projects encode the category (`api`, `e2e`), because a category has its own
@@ -256,8 +255,8 @@ moment demo data differs.
 | `PROD_CONFIRM`       | prod lock, `1`                             | make command line only |
 | `TEST_LIVE`          | opt a remote target into the live lane     | make command line only |
 
-The fleet today uses `E2E_BASE_URL` (bill-e), `BASE_URL` (calendar, k6) and
-`HUB_SHELL_BASE_URL` (hub-shell) for the same thing. Adopting a repo means
+A fleet often ends up with `E2E_BASE_URL`, `BASE_URL` and `SHELL_BASE_URL`
+for the same thing. Adopting a repo means
 renaming to the two `*_BASE_URL` above, with a one-release alias if scripts
 outside the repo depend on the old name. Both origins are http(s) URLs; the
 schema rejects any other scheme.
@@ -310,13 +309,13 @@ Then open the reference of the category you are changing.
 
 ## 5. Anti-patterns this skill replaces
 
-| Seen in the fleet                                        | Rule |
+| Seen in the wild                                         | Rule |
 | -------------------------------------------------------- | ---- |
 | Hand-written `.env` parser in `playwright.config.ts`     | R4   |
 | `BASE_URL \|\| "http://localhost:3000"` default in code  | R5   |
 | No validation; CI excludes the test that needs a variable | R5   |
 | One Playwright project per environment                   | R7   |
 | Lane `grep` pinned on the only project the Makefile runs | R7   |
-| Mode files (`.env.hub`) mistaken for target files        | R7   |
+| Mode files (`.env.sso`) mistaken for target files        | R7   |
 | Three names for the frontend URL across repos            | R8   |
-| Prod reachable by editing `HUB_BASE_URL` in place         | R1, R6, and the note in `MODELO_HUB/.env.staging.example` |
+| Prod reachable by editing a base URL in place             | R1, R6 |

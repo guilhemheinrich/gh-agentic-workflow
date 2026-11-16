@@ -1,12 +1,6 @@
-# Kubeconfig File Format (dashboard artifact)
+# Kubeconfig file format (dashboard artifact)
 
-The file is downloaded from the **Kubernetes administration dashboard**:
-
-- URL: [https://modelo-dashboard-k8s-preprod.septeo.fr](https://modelo-dashboard-k8s-preprod.septeo.fr)
-
-It is a standard kubeconfig (`apiVersion: v1`, `kind: Config`) containing cluster, user, context, and current-context.
-
-## Structure example
+The file is downloaded from your organization's Kubernetes administration dashboard (Kubeconfig button of the namespace). It is a standard kubeconfig (`apiVersion: v1`, `kind: Config`).
 
 ```yaml
 apiVersion: v1
@@ -14,46 +8,30 @@ kind: Config
 preferences: {}
 
 clusters:
-  - name: modelo-pprod
+  - name: acme-preprod
     cluster:
       certificate-authority-data: <base64-encoded-ca-cert>
-      server: https://api-kube-compute-lat.septeo.fr
+      server: https://k8s-api.example.com
 
 users:
-  - name: modelo-debug-only
+  - name: debug-only
     user:
       token: <JWT-token>
 
 contexts:
-  - name: modelo-debug-only@modelo-pprod
+  - name: debug-only@acme-preprod
     context:
-      cluster: modelo-pprod
-      user: modelo-debug-only
-      namespace: modelo-management-pprod
+      cluster: acme-preprod
+      user: debug-only
+      namespace: acme-app-preprod
 
-current-context: modelo-debug-only@modelo-pprod
+current-context: debug-only@acme-preprod
 ```
 
 ## Key points
 
-| Element | Expected value |
-|---------|----------------|
-| Service account | `modelo-debug-only` (intentionally limited permissions) |
-| Namespace (pprod) | `modelo-management-pprod` |
-| Cluster API server | `https://api-kube-compute-lat.septeo.fr` |
-| Token | JWT bound to the service account (no client certificate in this example) |
-| Cluster certificate | `certificate-authority-data` base64-encoded |
-
-## File location on the local machine
-
-The path depends on the project and team conventions, for example:
-
-- `/Users/.../modelo-meet/kubeconfig.yaml`
-- `./kubeconfig.yaml` at the root of a cloned repository
-- a local secrets directory outside the repository
-
-**Do not version-control this file**: it must **never** be committed to Git (contains secrets and cluster scope).
-
-## Usage with Docker
-
-The kubeconfig is **not** copied into the `k8s-troubleshoot` Docker image. It is mounted read-only in the container, typically at `/home/.kube/config`, with `KUBECONFIG` pointing to that path. See the main SKILL.md for details.
+- Service account `debug-only` has intentionally limited permissions (see `scope-permissions.md`).
+- Authentication is a JWT bound to the service account, no client certificate.
+- The path on disk depends on the project: `./kubeconfig.yaml`, `~/.kube/config-dashboard`, or a secrets directory outside the repository.
+- **Never commit this file**: it contains a token and cluster scope.
+- It is not copied into the `k8s-troubleshoot` image; it is mounted read-only at `/home/.kube/config` with `KUBECONFIG` pointing to it.
