@@ -137,26 +137,6 @@ assets:
       Conventions for the rules/ tree: category folders, .mdc naming, required frontmatter, and how globs scope each
       rule. Apply when creating or moving rules.
     category: architecture
-  - path: .cursor/rules/4-specify-rules.mdc
-    type: rule
-    tags:
-      - cursor
-      - meta
-      - spec-kit
-    description: >-
-      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
-      entries for this repo.
-    category: workflows-and-processes
-  - path: .cursor/rules/specify-rules.mdc
-    type: rule
-    tags:
-      - cursor
-      - meta
-      - spec-kit
-    description: >-
-      Meta pointer: canonical project rules are under rules/; use this file to find architecture, NestJS, and spec-kit
-      context without duplicating long rules.
-    category: workflows-and-processes
   - path: agents/archivist.md
     type: agent
     tags:
@@ -378,43 +358,6 @@ assets:
       metadata contracts, UI display rules, semantic-release CI/CD governance, and migration planning. References the
       app-version-surface and semantic-release-js-ts-pipeline skills.
     category: tools-and-configurations
-  - path: commands/specify-mcp-backend.md
-    type: command
-    tags:
-      - architecture
-      - backend
-      - documentation
-      - security
-      - spec-kit
-    description: >-
-      Generic prompt for /speckit.specify to create a backend MCP server specification. Covers transport choice,
-      endpoint contract, JSON-RPC lifecycle, capability modeling, security, observability, testing, and rollout.
-    category: templates-and-models
-  - path: commands/specify-mcp-chatbot.md
-    type: command
-    tags:
-      - architecture
-      - backend
-      - react
-      - security
-      - spec-kit
-      - typescript
-    description: >-
-      Generic prompt for /speckit.specify to create an MCP-powered chatbot or frontend client specification. Covers chat
-      UI, product chat endpoints, streaming events, MCP client lifecycle, backend orchestration boundaries, security,
-      testing, and rollout.
-    category: templates-and-models
-  - path: commands/specify-qa.md
-    type: command
-    tags:
-      - e2e
-      - spec-kit
-      - testing
-    description: >-
-      E2E specification command driven by project analysis. Scans all existing specs to learn conventions, identifies
-      E2E gaps, and directly produces complete specs (spec.md, plan.md, tasks.md) aligned with project quality and
-      patterns. Unlike qa-tester (analysis only), this command produces deliverables.
-    category: quality-assurance
   - path: commands/spt.md
     type: command
     tags:
@@ -721,16 +664,6 @@ assets:
     category: tools-and-configurations
     bundles:
       - common
-  - path: rules/04-tools-and-configurations/4-specify-rules.mdc
-    type: rule
-    tags:
-      - cursor
-      - meta
-      - spec-kit
-    description: >-
-      Meta pointer: canonical rules live under rules/ by category; use specify-rules with the architecture and standards
-      entries for this repo.
-    category: tools-and-configurations
   - path: rules/04-tools-and-configurations/4-static-validation.mdc
     type: rule
     category: tools-and-configurations
@@ -1761,18 +1694,6 @@ assets:
     category: workflows-and-processes
     bundles:
       - common
-  - path: skills/speckit-data-mcd/
-    type: skill
-    tags:
-      - documentation
-      - docker
-      - spec-kit
-      - sql
-    description: >-
-      Guide human/AI communication for Speckit data specifications and database change reports using focused conceptual
-      data models (MCD), with Mocodo and Mermaid notation for clarification, before/after diagrams, and implementation
-      summaries.
-    category: workflows-and-processes
   - path: skills/sql-migration-guidelines/
     type: skill
     description: >-
