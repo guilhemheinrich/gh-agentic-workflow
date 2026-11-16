@@ -5,3 +5,6 @@ SCRAP/
 # Python — bytecode from the skill scripts (specs/015-grievance-slug-ids)
 __pycache__/
 *.pyc
+
+# Generated plugin marketplace (scripts/build-plugins.mjs)
+/dist/

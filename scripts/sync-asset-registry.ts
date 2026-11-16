@@ -96,14 +96,6 @@ function discoverAll(): Discovered[] {
       absFile: abs,
     });
   }
-  for (const dir of glob.sync(".agents/skills/*/SKILL.md", { cwd: REPO_ROOT, posix: true })) {
-    const abs = path.join(REPO_ROOT, dir);
-    out.push({
-      registryPath: skillRegistryPathFromDir(path.dirname(abs)),
-      type: "skill",
-      absFile: abs,
-    });
-  }
   for (const f of glob.sync("commands/*.md", { cwd: REPO_ROOT, posix: true })) {
     out.push({
       registryPath: f,
@@ -112,16 +104,6 @@ function discoverAll(): Discovered[] {
     });
   }
   for (const f of glob.sync(".cursor/commands/*.md", { cwd: REPO_ROOT, posix: true })) {
-    out.push({
-      registryPath: f,
-      type: "command",
-      absFile: path.join(REPO_ROOT, f),
-    });
-  }
-  for (const f of glob.sync(".specify/extensions/**/commands/*.md", {
-    cwd: REPO_ROOT,
-    posix: true,
-  })) {
     out.push({
       registryPath: f,
       type: "command",

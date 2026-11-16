@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude PostToolUse matcher=Agent|Task|Edit|Write|MultiEdit
 # hooks/session-title-progress.sh
 #
 # Claude Code PostToolUse hook, matcher "Agent|Task|Edit|Write|MultiEdit".

@@ -1,0 +1,97 @@
+{
+  "marketplace": {
+    "name": "gh-agentic-workflow",
+    "description": "Skills, agents, commands and hooks for AI-assisted development, split into focused plugins.",
+    "owner": {
+      "name": "guilhemheinrich"
+    }
+  },
+  "canonicalRoots": {
+    "skill": [
+      "skills/"
+    ],
+    "command": [
+      "commands/",
+      ".cursor/commands/"
+    ],
+    "agent": [
+      "agents/"
+    ],
+    "hook": [
+      "hooks/"
+    ]
+  },
+  "externalReferences": {
+    "_comment": "Names that look like references but resolve to nothing this build ships. Grouped by reason; every use is listed in the build report.",
+    "skill": {
+      "unbuilt-skill-described-in-a-roadmap": [
+        "linear-watch"
+      ],
+      "test-fixture-path": [
+        "g"
+      ],
+      "relative-link-already-dangling-in-source": [
+        "scripts",
+        "shared",
+        "skills"
+      ]
+    },
+    "agent": {},
+    "slash": {
+      "http-endpoint-or-filesystem-path": [
+        "api",
+        "app",
+        "authorize",
+        "bootstrap",
+        "credits",
+        "health",
+        "healthz",
+        "info",
+        "items",
+        "logo.abcd1234.png",
+        "logout",
+        "metadata",
+        "metrics",
+        "models",
+        "providers",
+        "ready",
+        "service-token",
+        "tmp",
+        "user",
+        "var",
+        "version",
+        "work"
+      ],
+      "claude-code-builtin": [
+        "mcp",
+        "plugin",
+        "reload-plugins"
+      ],
+      "spec-kit-project-command-not-shipped-here": [
+        "dev-it",
+        "implement",
+        "index",
+        "plan",
+        "specify",
+        "speckit.analyze",
+        "speckit.clarify",
+        "speckit.implement",
+        "speckit.memory",
+        "speckit.plan",
+        "speckit.specify",
+        "speckit.tasks",
+        "tasks"
+      ],
+      "command-defined-by-the-user-project-or-a-skill-workflow": [
+        "deploy",
+        "kubify",
+        "reflect",
+        "reflect-skills",
+        "review-implemented"
+      ],
+      "repo-command-not-in-registry-so-not-built": [
+        "debug"
+      ]
+    }
+  }
+}

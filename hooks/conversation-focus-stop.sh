@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude Stop timeout=10
 # hooks/conversation-focus-stop.sh
 #
 # Claude Code Stop hook — the "after the reply" half of the conversation-focus

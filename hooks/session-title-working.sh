@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# @hook claude UserPromptSubmit
 # hooks/session-title-working.sh
 #
 # Claude Code UserPromptSubmit hook. The moment the human sends a message, the

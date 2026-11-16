@@ -72,7 +72,7 @@ guard can become a producer. Until then, keep "produce before, verify after".
 
 The rules are about how every conversation runs, not about one repo, so
 install them once for all sessions, as `session-title` does. Copy both scripts
-to `~/.agents/hooks/` and merge into `~/.claude/settings.json`:
+to `~/.agents/hooks/` and merge into `~/.claude/settings.json`. Each hook script declares its own wiring in `# @hook claude <Event> [matcher=…] [timeout=…]` header lines; the Claude Code plugin build (`scripts/build-plugins.mjs`) generates `hooks/hooks.json` from them, so the JSON below is only for a manual, non-plugin install.
 
 ```json
 {
