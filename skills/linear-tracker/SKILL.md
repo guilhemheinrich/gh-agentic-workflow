@@ -760,83 +760,108 @@ readable type: open it before calling it a violation. Exit code 0 when every iss
 passes, 1 otherwise. When no issue has `--type`, a note on stderr lists the types
 present, so a misspelt type is not read as "all good".
 
-### Checking the whole semantic model — `linear_deps.py verify`
+### Detecting semantic inconsistencies — `linear_deps.py verify`
 
-`check` tests one typing rule. `verify` runs **every** rule of
-[`references/semantics.json`](references/semantics.json) (JSON because the script is
-standard-library only and `python:alpine` has no YAML parser) against the same
-`deps.json`, offline:
-
-```bash
-docker run --rm -v "$PWD":/work -w /work python:3.12-slim \
-  python skills/linear-tracker/scripts/linear_deps.py verify deps.json
-```
-
-The file has two blocks. `generic` is tool-agnostic: types (definition, test,
-roles, required sections), relations, and rules in a closed vocabulary
-(`attribute-cardinality`, `attribute-required`, `attribute-only-on`,
-`owned-by-addressee`, `blocked-by-any`, `blocked-by-all-in-grouping`,
-`linked-or-waived`, `requires-sections`); types are named by id or by role
-(`@change` = Bug, Feature, Improvement, Technical task). `binding` maps it to
-Linear: label groups (Type, Addressee), template names and files, the milestone
-as the « lot », state kinds. An unknown rule kind or type is refused at load.
-
-Each rule prints `PASS`, `FAIL`, `UNKNOWN` or `N/A` with the issue identifiers
-and the reason. `UNKNOWN` means the export lacks the fact (a description, the
-team mapping), never a violation. Exit 1 on any `FAIL`; `--strict` also on
-`UNKNOWN`. `--rule ID` (repeatable) runs some rules, `--open-only` skips closed
-issues. Two rules need more than the labels: `change-recommends-proof` and
-`requires-sections` read the ticket body, which a live export records (the
-headings, and whether « Recommended proof » says « none »), and
-`waiting-in-addressee-team` needs `binding.attributes.addressee.team_keys`
-(addressee → team keys), empty by default. `check` stays as the one-rule form;
-`blocked-by-any` calls the same function.
-
-### Writing your own rules — `verify --rules`
-
-`references/semantics.json` holds the rules every workspace shares. Yours (« a Feature
-needs a Proof », « the project needs a staging milestone ») go in a **separate file** of
-the consumer repository, merged onto the base by `verify`. JSON, not YAML: the script is
-standard-library only and `python:alpine` has no YAML parser.
-
-**Guide the person, do not guess.** To write a rule with someone, ask in this order and
-write the answer as one rule:
-
-1. *Which tickets does it constrain?* → `subject`: a type id (`"Proof"`), a role
-   (`"@change"` = Bug, Feature, Improvement, Technical task) or `"*"`.
-2. *What must be true of them?* → pick the kind in the table below.
-3. *Does a closed ticket count?* Rules on state (`closed-requires-blockers-closed`)
-   look at closed subjects on purpose; the others skip nothing unless `--open-only`.
-4. *Give one ticket that would break it*, then run the rule on the real project and
-   check that ticket comes back `FAIL`.
-
-| Kind | Says | Example (made-up ids) |
-|---|---|---|
-| `closed-requires-blockers-closed` | a Done `subject` has no blocker of `objects` that is not Done (canceled blockers are ignored) | Done Proof INV-30 blocked by INV-12 « In Progress » → `FAIL`; blocker in another project → `UNKNOWN` |
-| `grouping-exists` | the project has ≥ `min` (default 1) milestones whose name matches the regex `match` (case-insensitive) | milestones `Lot A`, `Prod` and `match: "staging"` → `FAIL` |
-| `linked-or-waived` | each `subject` blocks or relates to an `object` ticket; `"waivable": false` refuses the « none » waiver | Feature INV-6 with no linked Proof → `FAIL` |
-| `blocked-by-any`, `blocked-by-all-in-grouping`, `attribute-*`, `owned-by-addressee`, `requires-sections` | structure and labels, see above | |
+`verify` is a deterministic **detector**: it reads a model (a JSON file), reads a project
+(an exported `deps.json` or a project URL fetched live) and prints the list of tickets
+that contradict the model. It blocks nothing and is wired to nothing: the exit code is a
+linter's (1 on a `FAIL`), `--exit-zero` makes it report-only, and a hook or a person
+decides what to do with the list.
 
 ```bash
-# write a commented starter (never overwrites), edit it, run it
-python skills/linear-tracker/scripts/linear_deps.py verify --init-rules .claude/linear/rules.json
 docker run --rm -e LINEAR_API_KEY -v "$PWD":/work -w /work python:3.12-slim \
-  python skills/linear-tracker/scripts/linear_deps.py verify "<project URL>" --rules .claude/linear/rules.json
+  python skills/linear-tracker/scripts/linear_deps.py verify "<project URL>" \
+  --semantics .claude/linear/semantics.json --json --exit-zero
 ```
 
-The first argument is either an exported `deps.json` or a **project URL**, fetched live
-(`LINEAR_API_KEY`, same read-only key as the graph). `.claude/linear/rules.json` is read
-without `--rules` when it exists in the working directory. The file has `rules` (appended;
-the same `id` as a base rule **replaces** it, which is how `"waivable": false` tightens
-`change-recommends-proof`), `disable` (rule ids to drop) and `binding` (merged into the
-Linear binding, e.g. `attributes.addressee.team_keys`). An unknown kind, type, attribute,
-regex or `disable` id is refused at load, so a typo never reads as « all good ». Real
-check, 2026-11-16, on three project exports from `~/linear-graphs/`:
-`done-proof-needs-done-change` passes on all three (13 Proofs checked, no false alarm).
+`--json` prints a sorted list of `{rule, status, issue, state, title, reason}`; the same
+input always gives the same bytes. Without it, one line per rule (`PASS`, `FAIL`,
+`UNKNOWN`, `N/A`) then the offending issues, under a `model:` header naming the files
+used. `UNKNOWN` means the export lacks the fact (a description, the team mapping), never
+a violation. `--strict` also exits 1 on `UNKNOWN`; `--rule ID` runs some rules;
+`--open-only` skips closed issues (not for rules about state, which look at closed ones
+on purpose).
 
-**Hook.** `verify` is hook-ready as it stands: one command, exit 1 on `FAIL`, nothing
-printed on the key. A wrapper hook is not shipped yet (see `specs/GRIEVANCES.md`); until
-then call the command above from the repository's own hook.
+#### Three layers, and which one is yours
+
+```text
+Linear (fixed, the engine knows only this)   issue · label (name, group) · state type
+                                             · project milestone · parent / sub-issue
+                                             · relations blocks, related (+ duplicate, similar, ignored)
+        ↑ binding   « business type = the label of group Type », « a lot = a milestone »,
+        |           « Done = state type completed »
+Your ontology (a JSON file you own)          types, roles, groupings, and rules in a closed vocabulary
+        ↑ rules     « a Done Proof has no blocker of role change that is not Done »
+Your project                                 what `verify` reads
+```
+
+Worked example. In Linear, INV-30 carries the label `Proof` of group `Type`, state type
+`completed`, and is blocked by INV-12 (label `Technical task`, state `started`). The
+binding turns the labels into business types (Proof, Technical task) and the role
+`change` groups Bug, Feature, Improvement and Technical task. The rule
+`closed-requires-blockers-closed` (subject `Proof`, objects `@change`) then reads: INV-30
+is Done but blocked by INV-12 still In Progress, a `FAIL`. Change the binding (group
+`Kind`, values `Story`/`Check`) and the same engine judges another vocabulary: the
+tests run it on one that shares nothing with the shipped file. The engine **refuses at
+load** anything Linear does not offer (a relation `depends`, a grouping on `sprint`, a
+state type `shipped`), so a typo never reads as « all good ».
+
+#### `references/semantics.json` is a template, not the norm
+
+It holds **one coherent proposal**: the eight ticket types of
+[`references/ticket-types.md`](references/ticket-types.md) and ten rules on them. A
+project that works differently does not have to follow it: copy the file, change types,
+roles, binding and rules, and point `--semantics` at the copy. Do not assume the shipped
+rules apply to a project before asking its owner which ones it wants. `--rules` is for
+the small case: a few extra rules, or a tweak of one, on top of whichever model is used.
+
+The model's two blocks: `generic` (tool-agnostic: types with definition, test, roles and
+required sections; relations; rules) and `binding` (Linear: label groups for the types and
+attributes, templates, the milestone as the grouping, state types that count as done or
+ignored). The `type` attribute is the engine's one primitive: `binding.attributes.type`
+names the label group and lists the values, which must equal the type ids.
+
+Rule kinds (the closed vocabulary; types are an id, a list, `@role` or `*`):
+
+| Kind | Says |
+|---|---|
+| `closed-requires-blockers-closed` | a closed `subject` has no `objects` blocker that is not closed (ignored states do not count; a blocker outside the project is `UNKNOWN`) |
+| `grouping-exists` | the project has ≥ `min` (default 1) groupings (milestones) whose name matches the regex `match`, case-insensitive |
+| `linked-to` | each `subject` has a `relations` link (`blocks`, `related`, `parent`, `child`) to a ticket of `object` |
+| `linked-or-waived` | the same, unless the section named by `waiver.section` starts with `waiver.match` (a regex); `"waivable": false` removes the waiver |
+| `blocked-by-any` / `blocked-by-all-in-grouping` | a `subject` is blocked by at least one / by every `objects` ticket of its grouping |
+| `attribute-cardinality` / `-required` / `-only-on` | label-group counts and where an attribute may appear |
+| `team-matches-attribute` | the issue lives in the team that `binding.attributes.<attribute>.team_keys` maps the label to |
+| `requires-sections` | the body has the sections its type requires (`required_sections`), the first one first |
+
+Example (made up), a model for a team that calls things differently: types `Story`,
+`Spike`, `Check`, label group `Kind`, the rule « a Spike is a sub-issue of a Story »
+(`linked-to`, subject `Spike`, relations `["parent"]`, object `Story`). A Spike with no
+parent comes back as `spike-under-story  ZZ-3  FAIL  no linked Story`.
+`tests/fixtures/engine-model.json` is that model.
+
+#### Writing the rules with someone — a guided session
+
+Do not guess rules; ask in this order and write each answer as one rule:
+
+1. *Which tickets does it constrain?* → `subject`.
+2. *What must be true of them?* → pick the kind in the table.
+3. *Does a closed ticket count?* Rules about state look at closed subjects on purpose.
+4. *Give one ticket that would break it*, run the rule on the real project and check that
+   this ticket comes back `FAIL`. If not, the rule says something else than intended.
+
+`verify --init-rules FILE` writes a starter rules file (never overwrites): a staging
+milestone, every Feature linked to a Proof with no waiver. It names the shipped template's
+vocabulary (`lot`, `Feature`, `Proof`): adapt it to your model. The merge file has `rules`
+(appended; the same `id` as an existing rule **replaces** it), `disable` (ids to drop) and
+`binding` (merged into the binding, e.g. `attributes.addressee.team_keys`);
+`.claude/linear/rules.json` is read without `--rules` when it exists.
+
+Checked on 2026-11-16 against three real project exports (`~/linear-graphs/`): the
+state rule `done-proof-needs-done-change` passes on all (13 Proofs, no false alarm).
+
+**Hook.** `verify` is hook-ready as it stands (one command, `--json`, `--exit-zero`). A
+wrapper hook is not shipped yet (see `specs/GRIEVANCES.md`).
 
 ### The API key — where it comes from, where it lives
 

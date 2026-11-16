@@ -667,7 +667,8 @@ TEAM_KEYS = {"Product": ["INV"], "Technical": ["INV"]}
 
 
 class VerifyTests(unittest.TestCase):
-    """`verify` runs references/semantics.json: one passing and one failing fixture per rule."""
+    """The SHIPPED template (references/semantics.json) is one proposal among others: it must load and
+    behave on its fixtures. The engine itself is proven independent of it in EngineTests."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -733,9 +734,12 @@ class VerifyTests(unittest.TestCase):
 
     def test_a_waiver_needs_the_word_none_in_the_proof_section(self):
         facts = ld.body_facts("## In plain words, with an example\n\nx\n\n## Recommended proof\n\n« none », internal.")
-        self.assertEqual(facts, {"sections": ["In plain words, with an example", "Recommended proof"], "proof_waiver": True})
-        self.assertFalse(ld.body_facts("## Recommended proof\n\nLink to the Proof, none yet.")["proof_waiver"])
-        self.assertIsNone(ld.body_facts("## Impact\n\nx")["proof_waiver"])
+        self.assertEqual(facts["sections"], ["In plain words, with an example", "Recommended proof"])
+        self.assertEqual(facts["texts"]["Recommended proof"], "none , internal.")
+        waiver = re.compile(next(r["waiver"]["match"] for r in ld.load_json(SEMANTICS)["generic"]["rules"] if "waiver" in r), re.I)
+        self.assertTrue(waiver.search(facts["texts"]["Recommended proof"]))
+        self.assertFalse(waiver.search(ld.body_facts("## Recommended proof\n\nLink to the Proof, none yet.")["texts"]["Recommended proof"]))
+        self.assertNotIn("Recommended proof", ld.body_facts("## Impact\n\nx")["texts"])
         self.assertIsNone(ld.body_facts(None))
 
     def test_cli_pass_exits_zero_and_prints_one_line_per_rule(self):
@@ -878,3 +882,104 @@ class MilestoneStub(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ENGINE_MODEL = os.path.join(HERE, "fixtures", "engine-model.json")
+ENGINE_RAW = os.path.join(HERE, "fixtures", "engine-raw.json")
+ENGINE_EXPECTED = [
+    ("a-wave-named-go", "(project)", "FAIL"),
+    ("check-done-needs-code-done", "ZZ-5", "FAIL"),
+    ("check-in-wave-of-code", "ZZ-5", "FAIL"),
+    ("spike-under-story", "ZZ-3", "FAIL"),
+    ("story-has-check", "ZZ-7", "FAIL"),
+    ("story-has-spike-or-skip", "ZZ-7", "FAIL"),
+]
+VERIFY_FUNCTIONS = ("load_semantics", "apply_overlay", "retype", "resolve_types", "group_labels",
+                    "verify_rule", "verify_graph", "verify_main")
+BUSINESS_WORDS = ("proof", "feature", "bug", "addressee", "recommended", "lot", "improvement",
+                  "question", "research", "technical", "waiting")
+
+
+class EngineTests(unittest.TestCase):
+    """The engine is independent of the model: a vocabulary shared with nothing in the shipped file
+    (types Story/Spike/Check, label group Kind, grouping « wave ») yields an exact, deterministic list."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.graph_path = os.path.join(self.dir.name, "g.json")
+        with open(self.graph_path, "w", encoding="utf-8") as fh:
+            json.dump(ld.build_export(load(ENGINE_RAW), URL, "acme"), fh)
+
+    def run_json(self, *extra):
+        res = run_cli("verify", self.graph_path, "--semantics", ENGINE_MODEL, "--json", *extra)
+        return res, json.loads(res.stdout)
+
+    def test_the_list_of_inconsistencies_is_exact_and_deterministic(self):
+        res, first = self.run_json()
+        self.assertEqual([(f["rule"], f["issue"], f["status"]) for f in first["inconsistencies"]], ENGINE_EXPECTED)
+        self.assertEqual(self.run_json()[1], first)
+        self.assertEqual(res.stdout, self.run_json()[0].stdout)
+
+    def test_an_issue_typed_with_another_vocabulary_is_not_judged(self):
+        _, out = self.run_json()
+        self.assertNotIn("ZZ-6", {f["issue"] for f in out["inconsistencies"]})   # label Type=Proof means nothing here
+
+    def test_a_finding_says_what_is_wrong(self):
+        _, out = self.run_json()
+        why = {(f["rule"], f["issue"]): f["reason"] for f in out["inconsistencies"]}
+        self.assertEqual(why[("check-done-needs-code-done", "ZZ-5")], "is Done but blocked by ZZ-2 (Story) still Doing")
+        self.assertEqual(why[("spike-under-story", "ZZ-3")], "no linked Story")
+        self.assertIn("Wave 1 | Later", why[("a-wave-named-go", "(project)")])
+
+    def test_it_reports_without_blocking_when_asked(self):
+        self.assertEqual(self.run_json()[0].returncode, 1)
+        self.assertEqual(self.run_json("--exit-zero")[0].returncode, 0)
+
+    def test_the_text_report_names_the_model_it_ran(self):
+        res = run_cli("verify", self.graph_path, "--semantics", ENGINE_MODEL, "--exit-zero")
+        self.assertIn("model: " + ENGINE_MODEL, res.stdout)
+
+    def test_the_engine_only_speaks_linear(self):
+        model = load(ENGINE_MODEL)
+        for label, edit in (
+                ("relation", lambda m: m["generic"]["rules"][1].update(relations=["depends"])),
+                ("grouping field", lambda m: m["binding"]["groupings"]["wave"].update(node_field="sprint")),
+                ("state kind", lambda m: m["binding"]["states"].update(done_kinds=["shipped"]))):
+            with self.subTest(label):
+                broken = json.loads(json.dumps(model))
+                edit(broken)
+                path = os.path.join(self.dir.name, "m.json")
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(broken, fh)
+                res = run_cli("verify", self.graph_path, "--semantics", path)
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn("Linear", res.stderr)
+
+    def test_a_waiver_is_declared_by_the_rule_not_known_to_the_engine(self):
+        model = load(ENGINE_MODEL)
+        model["generic"]["rules"][3]["waiver"]["match"] = "^because"      # now ZZ-2 is waived and ZZ-1 is not
+        path = os.path.join(self.dir.name, "m.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(model, fh)
+        _, out = self.run_json("--semantics", path)   # the later --semantics wins
+        waived = [f["issue"] for f in out["inconsistencies"] if f["rule"] == "story-has-spike-or-skip"]
+        self.assertEqual(waived, ["ZZ-1"])            # ZZ-7 now says « because » (waived); ZZ-1 says « skip » (no longer)
+
+    def test_verify_code_names_no_business_word(self):
+        import ast
+        import inspect
+        for name in VERIFY_FUNCTIONS:
+            tree = ast.parse(inspect.getsource(getattr(ld, name)).lstrip())
+            doc = {id(n.body[0]) for n in ast.walk(tree)
+                   if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and n.body and isinstance(n.body[0], ast.Expr)}
+            for node in ast.walk(tree):
+                words = []
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in doc:
+                    words.append(node.value)
+                if isinstance(node, ast.Name):
+                    words.append(node.id)
+                for text in words:
+                    for bad in BUSINESS_WORDS:
+                        with self.subTest(function=name, text=text, word=bad):
+                            self.assertNotIn(bad, text.lower())

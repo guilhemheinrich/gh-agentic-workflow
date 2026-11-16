@@ -75,7 +75,7 @@
        "source": "ticket-types.md#addressee-who-must-answer-or-act", "text": "A Question or a Blocker names who must answer or act."},
       {"id": "addressee-only-on-waiting", "rule": "attribute-only-on", "attribute": "addressee", "types": "@waiting",
        "source": "ticket-types.md#labels", "text": "Addressee is used on Question and Blocker only."},
-      {"id": "waiting-in-addressee-team", "rule": "owned-by-addressee", "subject": "@waiting",
+      {"id": "waiting-in-addressee-team", "rule": "team-matches-attribute", "attribute": "addressee", "subject": "@waiting",
        "source": "ticket-types.md#addressee-who-must-answer-or-act", "text": "A Question or a Blocker is created in the team that must answer or act."},
       {"id": "proof-blocked-by-change", "rule": "blocked-by-any", "subject": "Proof", "objects": "@change",
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A Proof is blocked by at least one dev issue."},
@@ -84,6 +84,7 @@
       {"id": "done-proof-needs-done-change", "rule": "closed-requires-blockers-closed", "subject": "Proof", "objects": "@change",
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A Proof that is Done cannot be blocked by a dev issue that is not Done."},
       {"id": "change-recommends-proof", "rule": "linked-or-waived", "subject": "@change", "relations": ["blocks", "related"], "object": "Proof",
+       "waiver": {"section": "Recommended proof", "match": "^(none|no proof|aucun[e]?)\\b"},
        "source": "ticket-types.md#technical-task-or-proof-a-merge-or-an-observation", "text": "Every code ticket links a recommended Proof, or says « none » and why."},
       {"id": "required-sections", "rule": "requires-sections", "subject": "*",
        "source": "ticket-types.md#every-ticket-opens-with-an-example-in-plain-words", "text": "A ticket body has the sections its type requires, « In plain words » first."}

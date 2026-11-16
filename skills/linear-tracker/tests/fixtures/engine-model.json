@@ -1,0 +1,142 @@
+{
+ "format": "ticket-semantics/1",
+ "_comment": "Test-only model with a vocabulary shared with nothing in references/semantics.json.",
+ "generic": {
+  "attributes": {
+   "type": {
+    "definition": "kind of work"
+   }
+  },
+  "groupings": {
+   "wave": {
+    "definition": "issues shipped together"
+   }
+  },
+  "types": [
+   {
+    "id": "Story",
+    "roles": [
+     "code"
+    ],
+    "definition": "d",
+    "test": "t",
+    "required_sections": [
+     "Why"
+    ]
+   },
+   {
+    "id": "Spike",
+    "roles": [
+     "code"
+    ],
+    "definition": "d",
+    "test": "t"
+   },
+   {
+    "id": "Check",
+    "roles": [
+     "evidence"
+    ],
+    "definition": "d",
+    "test": "t"
+   }
+  ],
+  "roles": {
+   "code": "ends in a merge",
+   "evidence": "observe and report"
+  },
+  "relations": {
+   "blocks": {
+    "directed": true,
+    "meaning": "m"
+   }
+  },
+  "rules": [
+   {
+    "id": "check-done-needs-code-done",
+    "rule": "closed-requires-blockers-closed",
+    "subject": "Check",
+    "objects": "@code",
+    "text": "A done Check has no open code blocker."
+   },
+   {
+    "id": "story-has-check",
+    "rule": "linked-to",
+    "subject": "Story",
+    "relations": [
+     "blocks",
+     "related"
+    ],
+    "object": "Check",
+    "text": "Every Story is linked to a Check."
+   },
+   {
+    "id": "spike-under-story",
+    "rule": "linked-to",
+    "subject": "Spike",
+    "relations": [
+     "parent"
+    ],
+    "object": "Story",
+    "text": "A Spike is a sub-issue of a Story."
+   },
+   {
+    "id": "story-has-spike-or-skip",
+    "rule": "linked-or-waived",
+    "subject": "Story",
+    "relations": [
+     "child"
+    ],
+    "object": "Spike",
+    "waiver": {
+     "section": "Why",
+     "match": "^skip"
+    },
+    "text": "A Story has a Spike or says skip."
+   },
+   {
+    "id": "a-wave-named-go",
+    "rule": "grouping-exists",
+    "grouping": "wave",
+    "match": "^go",
+    "text": "A wave named go exists."
+   },
+   {
+    "id": "check-in-wave-of-code",
+    "rule": "blocked-by-all-in-grouping",
+    "subject": "Check",
+    "objects": "@code",
+    "grouping": "wave",
+    "text": "A Check is blocked by every code issue of its wave."
+   }
+  ]
+ },
+ "binding": {
+  "tracker": "linear",
+  "attributes": {
+   "type": {
+    "label_group": "Kind",
+    "scope": "workspace",
+    "values": [
+     "Story",
+     "Spike",
+     "Check"
+    ]
+   }
+  },
+  "groupings": {
+   "wave": {
+    "linear": "project milestone",
+    "node_field": "milestone"
+   }
+  },
+  "states": {
+   "done_kinds": [
+    "completed"
+   ],
+   "ignored_kinds": [
+    "canceled"
+   ]
+  }
+ }
+}
