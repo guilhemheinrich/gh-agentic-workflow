@@ -29,7 +29,15 @@ function fixSkillName(text, name) {
   return { text: `---\n${fm.replace(/^name:[ \t]*.*$/m, `name: ${name}`)}${text.slice(end)}`, fixed: m[1].trim() };
 }
 
-export function buildPlugins({ root, config, out, write }) {
+export const VISIBILITIES = ['public', 'all'];
+
+export function buildPlugins({ root, config, out, write, visibility = 'public' }) {
+  if (!VISIBILITIES.includes(visibility)) throw new Error(`invalid visibility '${visibility}' (expected: ${VISIBILITIES.join(', ')})`);
+  const privateNames = new Set(config.publication?.privatePlugins ?? []);
+  const isPublicMode = visibility === 'public';
+  // In public mode private plugins are indexed (so references to them resolve and can be
+  // detected by the leak guard) but their own files are never planned or emitted.
+  const skipPlugin = (p) => isPublicMode && privateNames.has(p);
   const registry = loadRegistry(root);
   const { assets, issues, skippedRules } = resolveAssets(root, registry, config);
   const errors = [];
@@ -101,7 +109,12 @@ export function buildPlugins({ root, config, out, write }) {
     plan.files.set(rel, { buf: outBuf, mode });
   };
 
+  const excludedPrivate = new Map(); // private plugin -> asset count
   for (const a of builtAssets) {
+    if (skipPlugin(a.plugin)) {
+      excludedPrivate.set(a.plugin, (excludedPrivate.get(a.plugin) ?? 0) + 1);
+      continue;
+    }
     const plan = planOf(a.plugin);
     plan.counts[a.type]++;
     const mk = (file, rel) => ({
@@ -124,6 +137,18 @@ export function buildPlugins({ root, config, out, write }) {
       const dir = { command: 'commands', agent: 'agents', hook: 'hooks' }[a.type];
       const ext = a.type === 'hook' ? 'sh' : 'md';
       addFile(plan, `${dir}/${a.name}.${ext}`, fs.readFileSync(abs), a.type === 'hook' ? 0o755 : 0o644, mk(a.rel));
+    }
+  }
+
+  // ---- leak guard: no public plugin may reference a private one ----------
+  if (isPublicMode) {
+    for (const [p, plan] of [...plugins].sort(([a], [b]) => a.localeCompare(b))) {
+      for (const [dep, from] of [...plan.deps].sort(([a], [b]) => a.localeCompare(b))) {
+        if (!privateNames.has(dep)) continue;
+        for (const file of [...from].sort()) {
+          errors.push(`publication leak: '${file}' (plugin '${p}') references private plugin '${dep}'; refusing a public build`);
+        }
+      }
     }
   }
 
@@ -160,6 +185,13 @@ export function buildPlugins({ root, config, out, write }) {
     report.push(`Allowed external references (config.externalReferences): ${usedExternal.size}`);
     for (const k of [...usedExternal.keys()].sort()) report.push(`  ${k} x${usedExternal.get(k)}`);
   }
+  const presentPrivate = new Set(builtAssets.filter((a) => privateNames.has(a.plugin)).map((a) => a.plugin));
+  report.push(`Visibility: ${visibility}`);
+  report.push(`Private plugins configured: ${privateNames.size} (present in registry: ${presentPrivate.size})`);
+  if (isPublicMode && excludedPrivate.size) {
+    report.push('Private plugins excluded from this public build:');
+    for (const p of [...excludedPrivate.keys()].sort()) report.push(`  ${p} (${excludedPrivate.get(p)} asset(s))`);
+  }
   report.push(`Registry drift: ${issues.length}`, ...issues.map((i) => `  [${i.code}] ${i.message}`));
   if (nameFixes.length) report.push('Skill name normalised:', ...nameFixes.map((n) => `  ${n}`));
   if (excludedHooks.length) report.push('Hooks excluded:', ...excludedHooks.map((h) => `  ${h}`));
@@ -186,6 +218,27 @@ export function buildPlugins({ root, config, out, write }) {
         put(`plugins/${p}/${rel}`, f.buf, f.mode);
       }
     }
+    if (isPublicMode) {
+      const leaks = assertNoPrivateOutput(out, privateNames);
+      if (leaks.length) {
+        errors.push(...leaks);
+        fs.rmSync(out, { recursive: true, force: true });
+      }
+    }
   }
   return { report, errors, drift: issues.length, plugins, marketplace };
+}
+
+/** Post-build check on the written tree (public mode): returns a list of leak errors. */
+export function assertNoPrivateOutput(out, privateNames) {
+  const leaks = [];
+  for (const p of [...privateNames].sort()) {
+    if (fs.existsSync(path.join(out, 'plugins', p))) leaks.push(`publication leak: output contains directory 'plugins/${p}' of a private plugin`);
+  }
+  const mktFile = path.join(out, '.claude-plugin/marketplace.json');
+  const names = (JSON.parse(fs.readFileSync(mktFile, 'utf8')).plugins ?? []).map((e) => e.name);
+  for (const p of [...privateNames].sort()) {
+    if (names.includes(p)) leaks.push(`publication leak: marketplace.json lists private plugin '${p}'`);
+  }
+  return leaks;
 }
