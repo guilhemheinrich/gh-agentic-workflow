@@ -302,6 +302,16 @@
           "type": "string"
         }
       }
+    },
+    "x-plugin-descriptions": {
+      "type": "object",
+      "description": "Optional descriptions for plugin names (asset `plugin` field) that are not categories. Categories use x-category-descriptions.",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z][a-z0-9-]*$": {
+          "type": "string"
+        }
+      }
     }
   },
   "$defs": {
@@ -453,6 +463,11 @@
         },
         "category": {
           "$ref": "#/$defs/category"
+        },
+        "plugin": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "description": "Optional plugin this asset is published in. Defaults to the category when absent."
         },
         "bundles": {
           "type": "array",

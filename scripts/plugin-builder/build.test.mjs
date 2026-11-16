@@ -28,16 +28,16 @@ function snapshot(dir) {
 }
 
 /** Tiny fixture repo: files = {relPath: content}, assets = registry entries. */
-function fixture(files, assets) {
+function fixture(files, assets, extraRegistry = '') {
   const root = tmp();
   for (const [rel, content] of Object.entries(files)) {
     fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
     fs.writeFileSync(path.join(root, rel), content);
   }
   const yamlAssets = assets
-    .map((a) => `  - path: ${a.path}\n    type: ${a.type}\n    category: ${a.category}\n    tags: [x]\n    description: d`)
+    .map((a) => `  - path: ${a.path}\n    type: ${a.type}\n    category: ${a.category}\n${a.plugin ? `    plugin: ${a.plugin}\n` : ''}    tags: [x]\n    description: d`)
     .join('\n');
-  fs.writeFileSync(path.join(root, 'asset-registry.yml'), `version: 1.0.0\nx-category-descriptions:\n  cat-a: Alpha things\n  cat-b: Beta things\nassets:\n${yamlAssets}\n`);
+  fs.writeFileSync(path.join(root, 'asset-registry.yml'), `version: 1.0.0\nx-category-descriptions:\n  cat-a: Alpha things\n  cat-b: Beta things\n${extraRegistry}assets:\n${yamlAssets}\n`);
   return root;
 }
 
@@ -71,7 +71,7 @@ test('rebuilding into an existing output dir replaces it deterministically', () 
   assert.deepEqual(snapshot(out), first);
 });
 
-test('real repo: entry names equal manifest names, no version, relative sources', () => {
+test('real repo: entry names equal manifest names, one config version, relative sources', () => {
   const out = tmp();
   const r = buildPlugins({ root: repo, config: realConfig, out, write: true });
   assert.deepEqual(r.errors, []);
@@ -80,13 +80,14 @@ test('real repo: entry names equal manifest names, no version, relative sources'
   for (const entry of mkt.plugins) {
     const manifest = JSON.parse(fs.readFileSync(path.join(out, entry.source, '.claude-plugin/plugin.json'), 'utf8'));
     assert.equal(manifest.name, entry.name);
-    assert.equal('version' in manifest, false);
-    assert.equal('version' in entry, false);
+    assert.equal(manifest.version, realConfig.version);
+    assert.equal(entry.version, realConfig.version);
     assert.match(entry.source, /^\.\/plugins\/[a-z0-9-]+$/);
     for (const dep of manifest.dependencies ?? []) assert.ok(mkt.plugins.some((p) => p.name === dep), `unknown dependency ${dep}`);
   }
   const registry = JSON.parse(JSON.stringify(yaml.load(fs.readFileSync(path.join(repo, 'asset-registry.yml'), 'utf8'))));
-  for (const entry of mkt.plugins) assert.ok(entry.name in registry['x-category-descriptions'], `${entry.name} is not a registry category`);
+  const described = { ...registry['x-category-descriptions'], ...registry['x-plugin-descriptions'] };
+  for (const entry of mkt.plugins) assert.ok(entry.name in described, `${entry.name} has no registry description`);
 });
 
 test('real repo: hooks.json uses CLAUDE_PLUGIN_ROOT and never ships repo-specific hooks', () => {
@@ -338,4 +339,102 @@ test('post-build assertion detects a private plugin in an output tree', () => {
   const out = tmp();
   buildPlugins({ root: pubFixture(), config: privateCfg(), out, write: true, visibility: 'all' });
   assert.equal(assertNoPrivateOutput(out, new Set(['cat-b'])).length, 2);
+});
+
+test('explicit plugin field overrides the category; description comes from x-plugin-descriptions', () => {
+  const root = fixture(
+    { 'skills/one/SKILL.md': 'one\n', 'skills/two/SKILL.md': 'two\n' },
+    [
+      { path: 'skills/one/', type: 'skill', category: 'cat-a', plugin: 'custom-plug' },
+      { path: 'skills/two/', type: 'skill', category: 'cat-a' },
+    ],
+    'x-plugin-descriptions:\n  custom-plug: Custom things\n',
+  );
+  const out = tmp();
+  const r = buildPlugins({ root, config: miniConfig(), out, write: true });
+  assert.deepEqual(r.errors, []);
+  assert.ok(fs.existsSync(path.join(out, 'plugins/custom-plug/skills/one/SKILL.md')));
+  assert.ok(fs.existsSync(path.join(out, 'plugins/cat-a/skills/two/SKILL.md')));
+  assert.ok(!fs.existsSync(path.join(out, 'plugins/cat-a/skills/one')));
+  const manifest = JSON.parse(fs.readFileSync(path.join(out, 'plugins/custom-plug/.claude-plugin/plugin.json'), 'utf8'));
+  assert.equal(manifest.description, 'Custom things');
+  const mkt = JSON.parse(fs.readFileSync(path.join(out, '.claude-plugin/marketplace.json'), 'utf8'));
+  assert.deepEqual(mkt.plugins.map((p) => p.name), ['cat-a', 'custom-plug']);
+});
+
+test('a plugin field naming a category reuses the category description', () => {
+  const root = fixture({ 'skills/one/SKILL.md': 'one\n' }, [{ path: 'skills/one/', type: 'skill', category: 'cat-a', plugin: 'cat-b' }]);
+  const out = tmp();
+  const r = buildPlugins({ root, config: miniConfig(), out, write: true });
+  assert.deepEqual(r.errors, []);
+  const manifest = JSON.parse(fs.readFileSync(path.join(out, 'plugins/cat-b/.claude-plugin/plugin.json'), 'utf8'));
+  assert.equal(manifest.description, 'Beta things');
+});
+
+test('a plugin with no description anywhere fails the build and writes nothing', () => {
+  const root = fixture({ 'skills/one/SKILL.md': 'one\n' }, [{ path: 'skills/one/', type: 'skill', category: 'cat-a', plugin: 'orphan' }]);
+  const out = path.join(tmp(), 'dist');
+  const r = buildPlugins({ root, config: miniConfig(), out, write: true });
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /plugin 'orphan' has no description/);
+  assert.ok(!fs.existsSync(out));
+});
+
+test('builds with explicit plugin fields are byte-identical across runs', () => {
+  const make = () =>
+    fixture(
+      { 'skills/one/SKILL.md': 'one\n', 'skills/two/SKILL.md': 'two\n' },
+      [
+        { path: 'skills/one/', type: 'skill', category: 'cat-a', plugin: 'custom-plug' },
+        { path: 'skills/two/', type: 'skill', category: 'cat-b' },
+      ],
+      'x-plugin-descriptions:\n  custom-plug: Custom things\n',
+    );
+  const root = make();
+  const a = tmp();
+  const b = tmp();
+  buildPlugins({ root, config: miniConfig(), out: a, write: true });
+  buildPlugins({ root, config: miniConfig(), out: b, write: true });
+  assert.deepEqual(snapshot(a), snapshot(b));
+});
+
+test('config version is applied to every manifest and marketplace entry, and omitted when unset', () => {
+  const root = fixture({ 'skills/one/SKILL.md': 'one\n' }, [{ path: 'skills/one/', type: 'skill', category: 'cat-a' }]);
+  const withV = tmp();
+  assert.deepEqual(buildPlugins({ root, config: miniConfig({ version: '1.2.3' }), out: withV, write: true }).errors, []);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(withV, 'plugins/cat-a/.claude-plugin/plugin.json'), 'utf8')).version, '1.2.3');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(withV, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.2.3');
+  const noV = tmp();
+  assert.deepEqual(buildPlugins({ root, config: miniConfig(), out: noV, write: true }).errors, []);
+  assert.equal('version' in JSON.parse(fs.readFileSync(path.join(noV, 'plugins/cat-a/.claude-plugin/plugin.json'), 'utf8')), false);
+});
+
+test('real repo: every built asset has an explicit plugin, drift is limited, no public plugin depends on a private one', () => {
+  const registry = yaml.load(fs.readFileSync(path.join(repo, 'asset-registry.yml'), 'utf8'));
+  for (const a of registry.assets.filter((x) => x.type !== 'rule')) assert.ok(a.plugin, `${a.path} has no explicit plugin`);
+  const out = tmp();
+  const r = buildPlugins({ root: repo, config: realConfig, out, write: true });
+  assert.deepEqual(r.errors, []);
+  const privates = new Set(realConfig.publication.privatePlugins);
+  for (const p of r.marketplace.plugins) {
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, p.source, '.claude-plugin/plugin.json'), 'utf8'));
+    for (const dep of manifest.dependencies ?? []) assert.ok(!privates.has(dep), `${p.name} depends on private plugin ${dep}`);
+  }
+});
+
+test('README public naming contract lists every public plugin and skill of the real build', () => {
+  const readme = fs.readFileSync(path.join(repo, 'scripts/plugin-builder/README.md'), 'utf8').split('\r\n').join('\n');
+  const section = readme.slice(readme.indexOf('## Public naming contract'), readme.indexOf('## Adding a branch-pinned marketplace'));
+  const out = tmp();
+  const r = buildPlugins({ root: repo, config: realConfig, out, write: true });
+  assert.deepEqual(r.errors, []);
+  for (const p of r.marketplace.plugins) {
+    const start = section.indexOf(`### \`${p.name}\``);
+    assert.ok(start >= 0, `README contract lacks plugin ${p.name}`);
+    const next = section.indexOf('### `', start + 5);
+    const block = section.slice(start, next < 0 ? undefined : next);
+    const skillsDir = path.join(out, p.source, 'skills');
+    for (const skill of fs.existsSync(skillsDir) ? fs.readdirSync(skillsDir) : []) assert.ok(block.includes(`\`${skill}\``), `README contract lacks ${p.name}:${skill}`);
+  }
+  for (const priv of realConfig.publication.privatePlugins) assert.ok(!section.includes(`### \`${priv}\``), `README contract must not list private plugin ${priv}`);
 });

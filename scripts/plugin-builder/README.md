@@ -17,7 +17,7 @@ Output:
 
 ```
 dist/.claude-plugin/marketplace.json
-dist/plugins/<plugin>/.claude-plugin/plugin.json      # name, description, author; no version
+dist/plugins/<plugin>/.claude-plugin/plugin.json      # name, description, author, version (config.json `version`)
 dist/plugins/<plugin>/{skills,agents,commands,hooks}/ # as applicable
 ```
 
@@ -32,31 +32,47 @@ plain `.mjs` on `js-yaml` with no new dependency.
 
 ## Grouping rule
 
-**Plugin = registry `category`, nothing else.** Every category present among the
-built assets becomes one plugin whose name and description come straight from
-`x-category-descriptions`. There is no merge table, no per-asset override and no
-`plugin:` field, so the split stays 100% mechanical: when categories are
-reworked in the registry, the plugins follow on the next build.
+**Plugin = the asset's `plugin` field if set, otherwise its registry `category`.**
+Every distinct plugin name among the built assets becomes one plugin. There is no
+merge table; the split is driven only by registry data.
 
-| Plugin (= category) | Skills | Agents | Commands | Hooks | Total |
+- `plugin` (optional, per asset, kebab-case `^[a-z][a-z0-9-]*$`) decouples the
+  plugin split from `category`. With no `plugin` field anywhere, the output is
+  identical to the pure category split.
+- The plugin description comes from `x-category-descriptions` when the plugin
+  name is also a category, otherwise from the top-level optional map
+  `x-plugin-descriptions` (name -> description). A plugin with neither entry
+  fails the build.
+
+```yaml
+x-plugin-descriptions:
+  my-plugin: What this plugin groups
+assets:
+  - path: skills/my-skill/
+    type: skill
+    category: other
+    plugin: my-plugin
+```
+
+Current split (every asset sets `plugin` explicitly; public build):
+
+| Plugin | Skills | Agents | Commands | Hooks | Total |
 |---|---:|---:|---:|---:|---:|
-| `architecture` | 3 | 0 | 0 | 0 | 3 |
-| `devx-and-agentic` | 10 | 0 | 0 | 9 | 19 |
-| `domain-specific` | 4 | 0 | 0 | 0 | 4 |
-| `frameworks-and-libraries` | 13 | 0 | 0 | 0 | 13 |
-| `other` | 0 | 1 | 1 | 0 | 2 |
-| `philosophy` | 2 | 0 | 0 | 0 | 2 |
-| `programming-languages` | 6 | 0 | 0 | 0 | 6 |
-| `quality-assurance` | 12 | 4 | 2 | 0 | 18 |
-| `standards` | 2 | 0 | 0 | 0 | 2 |
-| `templates-and-models` | 0 | 0 | 2 | 0 | 2 |
-| `tools-and-configurations` | 18 | 1 | 7 | 0 | 26 |
-| `workflows-and-processes` | 10 | 5 | 1 | 0 | 16 |
-| | **80** | **11** | **13** | **9** | **113** |
+| `agent-sessions` | 9 | 0 | 0 | 9 | 18 |
+| `agent-tooling` | 4 | 0 | 0 | 0 | 4 |
+| `backend-and-data` | 6 | 0 | 0 | 0 | 6 |
+| `docker-and-k8s` | 5 | 0 | 2 | 0 | 7 |
+| `frontend` | 4 | 0 | 0 | 0 | 4 |
+| `git-and-delivery` | 7 | 2 | 5 | 0 | 14 |
+| `review-and-projection` | 5 | 0 | 0 | 0 | 5 |
+| `speckit` | 3 | 9 | 2 | 0 | 14 |
+| `testing-and-debugging` | 4 | 1 | 2 | 0 | 7 |
+| | **47** | **12** | **11** | **9** | **79** |
 
-Skills are installed as `/<plugin>:<skill>`, e.g. `/quality-assurance:e2e-playwright`.
-Plugin names are long and some plugins are tiny (2 assets); both are expected to
-improve when the categories are cleaned up.
+Skills are installed as `/<plugin>:<skill>`, e.g. `/testing-and-debugging:e2e-playwright`.
+`modelo-internal` (private, never published) and `speckit` (needs GitHub Spec Kit installed) are
+described in `x-plugin-descriptions`. Cross-plugin references are limited to "see also" mentions and are
+listed in every build report.
 
 `bundles` was rejected as a grouping key (24 of 147 entries, mostly rules).
 
@@ -66,8 +82,8 @@ The build prints every drift under `Registry drift`; `--fail-on-drift` turns it 
 
 * The library lives in `skills/`, `agents/`, `commands/` and `hooks/`. `.agents/` was a duplicate of `skills/` and has been deleted; `.claude/skills` is for Claude working on this repo and is never built.
 * `skills/` wins over any other location for the same name (`canonicalRoots` in `config.json`). Today the only duplicates are `.cursor/commands/k8s-troubleshoot.md` (content differs) and `.cursor/commands/spt.md` (identical); both lose to `commands/`, and their registry categories disagree with the copy that wins.
-* Registered but missing on disk: `agents/gitter.md`, `commands/commit.md` (the repo has `agents/commiter.md` and `commands/git.md`).
-* **Unregistered, so not built:** skills `bitbucket-pipelines`, `docstring-python-docs`, `godoc-go-docs`, `openapi-client-generator`, `phpdoc-php-docs`, `rustdoc-rust-docs`; agents `commiter`, `fixer`, `workflow`; commands `debug`, `git`; hook `enforce-tools`.
+* Both `.cursor/commands/` copies (`k8s-troubleshoot`, `spt`) are identical to the `commands/` copy and reported as `DUPLICATE_DROPPED` (informational; `scripts/sync-asset-registry.ts` re-adds them if removed).
+* Unregistered, so not built: agents `fixer`, `workflow` (malformed frontmatter, depend on a Cursor-Teams `/fix` command). The Cursor-only hook `enforce-tools` is registered but has no `# @hook claude` header, so it is not shipped.
 * Frontmatter `name` of `skills/dockerfile-multi-stage` is `multi-stage-dockerfile` (the name of another skill). The build rewrites it to the directory name; other skills without a `name` keep deriving it from the directory.
 
 Left out on purpose: the 29 registered `rules` (`*.mdc`). Claude Code plugins have no rules component.
@@ -93,11 +109,9 @@ Install paths such as `~/.claude/skills/x/` are not references to built assets a
 
 Every cross-plugin reference found while rewriting becomes an entry in the
 referencing plugin's `plugin.json` `dependencies` (bare plugin names, resolved in
-the same marketplace, sorted). Today that is 11 plugin pairs, and they contain
-cycles (e.g. `tools-and-configurations` <-> `quality-assurance`). Claude Code
-accepts that: installing `tools-and-configurations` pulled in its four
-transitive dependencies, including the cyclic ones. The practical effect is that
-most plugins drag in a few others until the categories are reworked.
+the same marketplace, sorted). Today these are 7 plugin pairs (mostly "see also" links such as
+`review-and-projection` -> `agent-sessions` for `grievances`), including one cycle
+(`agent-tooling` <-> `git-and-delivery`). A public plugin never depends on a private one (leak guard).
 
 ## Hooks
 
@@ -109,7 +123,7 @@ most plugins drag in a few others until the categories are reworked.
 3. its source never mentions `asset-registry.yml` (this repo's own file);
 4. every `skills/<x>` path it uses is built into the **same** plugin (hooks find skill scripts via `hooks/../skills/<x>/`, and plugins cannot see each other).
 
-Result: 9 hooks shipped (all in `devx-and-agentic`, together with the skills they call); `registry-sync-on-skill.sh` excluded.
+Result: 9 hooks shipped (all in `agent-sessions`, together with the skills they call); `registry-sync-on-skill.sh` and `enforce-tools.sh` are not shipped.
 
 ## Publication blacklist
 
@@ -131,14 +145,72 @@ No timestamps, sorted traversal, fixed JSON key order, LF output, file modes nor
 
 ## Validation
 
-Run with Claude Code 2.1.325 (see the PR description for the exact output).
-
-* `claude plugin validate dist` -> passes, 12 warnings (one per plugin), all `plugin.json -> version: No version specified`.
-* `claude plugin validate dist --strict` therefore **fails**, only because `version` is deliberately omitted (the brief says to omit it for now). With a version it would be clean. `author` is set to silence the other warning.
-* `claude --plugin-dir dist/plugins/devx-and-agentic -p ...` (stream-json init event): 10 skills loaded, all namespaced `devx-and-agentic:*`, no plugin errors.
-* `claude plugin marketplace add ./dist` + `claude plugin install tools-and-configurations@gh-agentic-workflow` worked and installed its 4 dependencies (then removed again).
+* `claude plugin validate dist --strict` passes for both `--visibility public` and `--visibility all` outputs. `config.json` carries a single `"version"` (currently `0.1.0`) applied to every `plugin.json` and marketplace entry; omit it to build without versions (strict validation then fails).
 
 Not verified: the hooks actually firing with the intended behaviour inside a real desktop session, behaviour with only a subset of plugins installed, and `claude plugin validate <plugin> --profile directory` (that profile is only for Anthropic directory submissions).
+
+## Public naming contract
+
+Plugin and skill names below are the public interface (`/<plugin>:<skill>`); renaming one is a breaking change.
+Generated from the public build output (`node scripts/build-plugins.mjs --out <dir>`); a test checks that every
+built asset sets `plugin` explicitly. `modelo-internal` exists in the registry but is private and never published.
+
+| Plugin | Skills | Agents | Commands | Hooks | Total |
+|---|---:|---:|---:|---:|---:|
+| `agent-sessions` | 9 | 0 | 0 | 9 | 18 |
+| `agent-tooling` | 4 | 0 | 0 | 0 | 4 |
+| `backend-and-data` | 6 | 0 | 0 | 0 | 6 |
+| `docker-and-k8s` | 5 | 0 | 2 | 0 | 7 |
+| `frontend` | 4 | 0 | 0 | 0 | 4 |
+| `git-and-delivery` | 7 | 2 | 5 | 0 | 14 |
+| `review-and-projection` | 5 | 0 | 0 | 0 | 5 |
+| `speckit` | 3 | 9 | 2 | 0 | 14 |
+| `testing-and-debugging` | 4 | 1 | 2 | 0 | 7 |
+| | **47** | **12** | **11** | **9** | **79** |
+
+### `agent-sessions`
+
+- Skills: `ai-usage-tracking`, `conversation-focus`, `grievances`, `linear-tracker`, `pilot-session`, `plain-explanation`, `pr-watch`, `session-meta`, `session-title`
+- Hooks: `conversation-focus-prompt`, `conversation-focus-stop`, `pilot-reminder`, `session-title-ask`, `session-title-close-kids`, `session-title-progress`, `session-title-sync`, `session-title-watcher-check`, `session-title-working`
+
+### `agent-tooling`
+
+- Skills: `claude-plugin-release`, `eslint-solid-nestjs`, `lsp-mcp`, `static-validation-hooks`
+
+### `backend-and-data`
+
+- Skills: `apiconv`, `drizzle-pg-boss`, `mcp-spec-templates`, `openapi-client-generator`, `philosophy-data-first`, `sql-migration-guidelines`
+
+### `docker-and-k8s`
+
+- Skills: `compose-env-ports`, `docker-hotreload-volume`, `dockerfile`, `k8s-troubleshoot`, `npm-private-registry`
+- Commands: `k8s-troubleshoot`, `pre-kubify`
+
+### `frontend`
+
+- Skills: `cursor-dot-glow`, `lit-web-components`, `text-clip-cloud-word`, `wc-live-demos-starlight`
+
+### `git-and-delivery`
+
+- Skills: `app-version-surface`, `devops-pipeline-design`, `git-activity-report`, `integration-branch-discipline`, `makefile-conventions`, `semantic-release-js-ts-pipeline`, `sonarqube-config`
+- Agents: `commiter`, `dependency-updater`
+- Commands: `git`, `improve`, `merge`, `pr-history`, `push`
+
+### `review-and-projection`
+
+- Skills: `adversarial-review-convergence`, `change-projection`, `cursor-adversarial-review`, `data-projection`, `openrouter-adversarial-review`
+
+### `speckit`
+
+- Skills: `e2e-spec-writing`, `notion-spec-sync`, `spec-reindex`
+- Agents: `archivist`, `cartographer`, `debugger`, `implementer`, `orchestrator`, `qa-tester`, `reviewer`, `specifier`, `tester`
+- Commands: `spec-release-and-versioning`, `spt`
+
+### `testing-and-debugging`
+
+- Skills: `e2e-playwright`, `playwright-auth-factory`, `test-env-targeting`, `web-analysis`
+- Agents: `scraper`
+- Commands: `debug`, `scrape-site`
 
 ## Adding a branch-pinned marketplace
 
