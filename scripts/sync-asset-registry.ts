@@ -110,16 +110,6 @@ function discoverAll(): Discovered[] {
       absFile: path.join(REPO_ROOT, f),
     });
   }
-  for (const f of glob.sync(".specify/extensions/**/commands/*.md", {
-    cwd: REPO_ROOT,
-    posix: true,
-  })) {
-    out.push({
-      registryPath: f,
-      type: "command",
-      absFile: path.join(REPO_ROOT, f),
-    });
-  }
   for (const f of glob.sync("rules/**/*.mdc", { cwd: REPO_ROOT, posix: true })) {
     out.push({
       registryPath: f,
