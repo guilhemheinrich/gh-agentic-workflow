@@ -20,7 +20,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -29,9 +29,9 @@ jobs:
       - name: Set build directory
         run: echo "BUILD_DIR=$RUNNER_TEMP/dist" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: lts/*
 
       - name: Install dependencies
         run: npm ci
@@ -86,7 +86,7 @@ jobs:
           Add the marketplace in Claude Code:
 
           ```
-          /plugin marketplace add guilhemheinrich/gh-agentic-workflow#dist
+          /plugin marketplace add https://github.com/guilhemheinrich/gh-agentic-workflow.git#dist
           ```
 
           Pull requests go to `main`, never to this branch.
