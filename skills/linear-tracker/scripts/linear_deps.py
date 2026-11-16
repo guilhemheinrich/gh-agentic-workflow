@@ -612,7 +612,7 @@ def check_main(argv):
 DEFAULT_SEMANTICS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "references", "semantics.json")
 RULE_KINDS = ("attribute-cardinality", "attribute-required", "attribute-only-on", "team-matches-attribute",
               "blocked-by-any", "blocked-by-all-in-grouping", "linked-or-waived", "linked-to", "requires-sections",
-              "closed-requires-blockers-closed", "grouping-exists")
+              "closed-requires-blockers-closed", "grouping-exists", "grouping-contains")
 # The ONLY facts the engine reads from Linear: the low-level ontology every business model sits on.
 # A binding or a rule naming anything else (a `sprint` field, a `depends` relation) is refused at load.
 LINEAR_LAYER = {
@@ -694,6 +694,14 @@ def load_semantics(path, overlays=()):
                     path, where, rel, ", ".join(LINEAR_LAYER["relations"])))
         if "waiver" in r and not (isinstance(r["waiver"], dict) and {"section", "match"} <= set(r["waiver"])):
             raise SystemExit("error: %s: %s `waiver` needs `section` and `match`" % (path, where))
+        for key in ("where", "objects_where"):
+            w = r.get(key)
+            if w is not None:
+                spec = bind["attributes"].get(w.get("attribute")) if isinstance(w, dict) else None
+                if not spec or norm(w.get("value")) not in {norm(x) for x in spec.get("values", [])}:
+                    raise SystemExit("error: %s: %s `%s` needs an attribute of the binding and one of its values" % (path, where, key))
+        if r["rule"] == "grouping-contains" and (not r.get("grouping") or "subject" not in r):
+            raise SystemExit("error: %s: %s needs `grouping` and `subject`" % (path, where))
         if r["rule"] == "grouping-exists":
             try:
                 re.compile(r.get("match", ""))
@@ -703,6 +711,10 @@ def load_semantics(path, overlays=()):
                 raise SystemExit("error: %s: %s needs `grouping` and `match`" % (path, where))
         elif r["rule"] != "attribute-cardinality" and not any(k in r for k in ("subject", "types")):
             raise SystemExit("error: %s: %s needs a `subject`" % (path, where))
+    for rp in gen.get("reports", []):
+        if rp.get("grouping") not in bind.get("groupings", {}) or rp.get("by") not in bind.get("attributes", {}):
+            raise SystemExit("error: %s: report %r needs a bound `grouping` and a bound attribute in `by`" % (path, rp.get("id")))
+        types_of(rp.get("subject", "*"), "report %r" % rp.get("id"))
     for name, g in bind.get("groupings", {}).items():
         if g.get("node_field") not in LINEAR_LAYER["node_fields"]:
             raise SystemExit("error: %s: grouping %r binds to %r, Linear offers %s" % (
@@ -772,12 +784,16 @@ def verify_rule(rule, model, graph, open_only=False):
     v = Verdict(rule)
     kind = rule["rule"]
 
-    def scope(types):
+    def has_value(n, w):
+        group = bind["attributes"][w["attribute"]]["label_group"]
+        return any(norm(l["name"]) == norm(w["value"]) for l in group_labels(n, group))
+
+    def scope(types, where=None):
         wanted = resolve_types(types, gen)
         for n in graph["nodes"]:
             if n["external"] or (open_only and kind not in STATE_RULES and n["state"] in closed):
                 continue
-            if norm(n["type"]) in wanted:
+            if norm(n["type"]) in wanted and (not where or has_value(n, where)):
                 yield n
 
     def untyped():
@@ -834,13 +850,14 @@ def verify_rule(rule, model, graph, open_only=False):
     elif kind == "blocked-by-all-in-grouping":
         field = bind["groupings"][rule["grouping"]]["node_field"]
         members = resolve_types(rule["objects"], gen)
-        for n in scope(rule["subject"]):
+        for n in scope(rule["subject"], rule.get("where")):
             v.checked.append(n)
             group_name = n.get(field)
             if not group_name:
                 v.unknown.append((n, "no %s, so nothing to compare" % rule["grouping"]))
                 continue
             need = [m for m in graph["nodes"] if not m["external"] and m.get(field) == group_name and norm(m["type"]) in members
+                    and (not rule.get("objects_where") or has_value(m, rule["objects_where"]))
                     and m["state"] not in ignored and m["identifier"] != n["identifier"]]
             missing = [m["identifier"] for m in need if m["identifier"] not in n["blocked_by"]]
             blind = [m["identifier"] for m in untyped() if m.get(field) == group_name]
@@ -908,6 +925,25 @@ def verify_rule(rule, model, graph, open_only=False):
             v.fail.append((project, "%d %s matching /%s/ (need %d); the project has: %s" % (
                 len(found), bind["groupings"][rule["grouping"]]["linear"], rule["match"], rule.get("min", 1),
                 " | ".join(names) or "none")))
+    elif kind == "grouping-contains":
+        field = bind["groupings"][rule["grouping"]]["node_field"]
+        wanted = resolve_types(rule["subject"], gen)
+        names = list(graph.get("project", {}).get("milestones") or []) if field == "milestone" else []
+        names += sorted({n.get(field) for n in graph["nodes"] if n.get(field) and n.get(field) not in names})
+        for name in names:
+            members = [m for m in graph["nodes"] if not m["external"] and m.get(field) == name and m["state"] not in ignored]
+            holder = {"identifier": name, "state": "-", "title": rule["grouping"]}
+            v.checked.append(holder)
+            found = [m for m in members if norm(m["type"]) in wanted]
+            if len(found) >= rule.get("min", 1):
+                continue
+            blind = [m["identifier"] for m in members if not m["type"]]
+            if blind:
+                v.unknown.append((holder, "holds %s with no readable type" % ", ".join(blind)))
+            else:
+                v.fail.append((holder, "%d of %s (need %d) among %d issue(s)" % (
+                    len(found), "/".join(sorted({t["id"] for t in gen["types"] if norm(t["id"]) in wanted})) or "?",
+                    rule.get("min", 1), len(members))))
     elif kind == "requires-sections":
         types = {norm(t["id"]): t for t in gen["types"]}
         for n in scope(rule["subject"]):
@@ -927,6 +963,33 @@ def verify_rule(rule, model, graph, open_only=False):
     return v
 
 
+def build_reports(model, graph):
+    """Per grouping (milestone), per value of an attribute: how many of the subject tickets are closed.
+    A report is declared by the model (`generic.reports`), so the engine names no environment."""
+    gen, bind = model["generic"], model["binding"]
+    done = set(bind.get("states", {}).get("done_kinds", []))
+    out = []
+    for rp in gen.get("reports", []):
+        field = bind["groupings"][rp["grouping"]]["node_field"]
+        group = bind["attributes"][rp["by"]]["label_group"]
+        values = bind["attributes"][rp["by"]]["values"]
+        wanted = resolve_types(rp["subject"], gen)
+        names = list(graph.get("project", {}).get("milestones") or []) if field == "milestone" else []
+        names += sorted({n.get(field) for n in graph["nodes"] if n.get(field) and n.get(field) not in names})
+        rows = []
+        for name in names:
+            cells = {}
+            for val in values:
+                mine = [n for n in graph["nodes"] if not n["external"] and n.get(field) == name and norm(n["type"]) in wanted
+                        and any(norm(l["name"]) == norm(val) for l in group_labels(n, group))]
+                finished = sum(1 for n in mine if n["state"] in done)
+                cells[val] = {"done": finished, "total": len(mine),
+                              "status": "none" if not mine else "done" if finished == len(mine) else "pending"}
+            rows.append({"grouping": name, "cells": cells})
+        out.append({"id": rp["id"], "text": rp.get("text", ""), "by": values, "rows": rows})
+    return out
+
+
 def verify_graph(model, graph, only=None, open_only=False):
     rules = [r for r in model["generic"]["rules"] if not only or r["id"] in only]
     retype(graph, model)
@@ -937,9 +1000,9 @@ STARTER_RULES = """{
   "format": "ticket-semantics-rules/1",
   "_comment": "Your own rules, merged onto references/semantics.json by `linear_deps.py verify --rules THIS_FILE`. Kinds: see SKILL.md, « Writing your own rules ». Types are ids (\\"Proof\\"), roles (\\"@change\\") or \\"*\\".",
   "rules": [
-    {"id": "staging-milestone-exists", "rule": "grouping-exists",
-     "grouping": "lot", "match": "staging",
-     "text": "The project has a milestone about staging."},
+    {"id": "bug-has-proof", "rule": "linked-to",
+     "subject": "Bug", "relations": ["blocks", "related"], "object": "Proof",
+     "text": "Every Bug is linked to a Proof that the fix works."},
     {"id": "feature-has-proof", "rule": "linked-or-waived",
      "subject": "Feature", "relations": ["blocks", "related"], "object": "Proof", "waivable": false,
      "text": "Every Feature is linked to at least one Proof, no waiver."}
@@ -997,7 +1060,8 @@ def verify_main(argv):
                   "title": n["title"], "reason": why}
                  for v in verdicts for label, items in (("FAIL", v.fail), ("UNKNOWN", v.unknown)) for n, why in items]
         found.sort(key=lambda f: (f["rule"], sort_key(f["issue"]), f["status"]))
-        json.dump({"semantics": args.semantics, "rules_files": overlays, "inconsistencies": found},
+        json.dump({"semantics": args.semantics, "rules_files": overlays, "inconsistencies": found,
+                   "reports": build_reports(model, graph)},
                   sys.stdout, indent=1, ensure_ascii=False)
         print()
         return code
@@ -1010,6 +1074,12 @@ def verify_main(argv):
                 print("    %-8s %s  [%s] %s  %s" % (label, n["identifier"], n["state"], n["title"], why))
     print("%d rule(s): %d pass, %d fail, %d unknown, %d n/a" % (
         len(verdicts), sum(v.status == "PASS" for v in verdicts), fails, unknowns, sum(v.status == "N/A" for v in verdicts)))
+    glyph = {"done": "✔", "pending": "⧗", "none": "-"}
+    for rp in build_reports(model, graph):
+        print("\nreport %s  %s" % (rp["id"], rp["text"]))
+        for row in rp["rows"]:
+            print("  %-48s %s" % (row["grouping"][:48], "   ".join(
+                "%s %s %d/%d" % (v, glyph[c["status"]], c["done"], c["total"]) for v, c in row["cells"].items())))
     return code
 
 

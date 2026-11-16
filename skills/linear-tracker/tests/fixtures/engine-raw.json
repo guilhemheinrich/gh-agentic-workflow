@@ -72,6 +72,10 @@
     {
      "name": "Check",
      "group": "Kind"
+    },
+    {
+     "name": "Live",
+     "group": "Stage"
     }
    ]
   },

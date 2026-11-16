@@ -5,6 +5,9 @@
   "attributes": {
    "type": {
     "definition": "kind of work"
+   },
+   "stage": {
+    "definition": "how far a Check ran"
    }
   },
   "groupings": {
@@ -108,6 +111,23 @@
     "objects": "@code",
     "grouping": "wave",
     "text": "A Check is blocked by every code issue of its wave."
+   },
+   {
+    "id": "wave-has-check",
+    "rule": "grouping-contains",
+    "grouping": "wave",
+    "subject": "Check",
+    "min": 1,
+    "text": "Every wave holds a Check."
+   }
+  ],
+  "reports": [
+   {
+    "id": "wave-stages",
+    "grouping": "wave",
+    "subject": "Check",
+    "by": "stage",
+    "text": "Checks Done per wave and stage."
    }
   ]
  },
@@ -121,6 +141,13 @@
      "Story",
      "Spike",
      "Check"
+    ]
+   },
+   "stage": {
+    "label_group": "Stage",
+    "values": [
+     "Alpha",
+     "Live"
     ]
    }
   },

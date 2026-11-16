@@ -662,6 +662,7 @@ class MilestoneBandTests(unittest.TestCase):
 SEM_PASS = os.path.join(HERE, "fixtures", "semantics-pass.json")
 SEM_FAIL = os.path.join(HERE, "fixtures", "semantics-fail.json")
 SEM_STATE = os.path.join(HERE, "fixtures", "semantics-state-fail.json")
+SEM_ENV = os.path.join(HERE, "fixtures", "semantics-env-fail.json")
 SEMANTICS = os.path.join(HERE, "..", "references", "semantics.json")
 TEAM_KEYS = {"Product": ["INV"], "Technical": ["INV"]}
 
@@ -710,6 +711,8 @@ class VerifyTests(unittest.TestCase):
             "proof-blocked-by-change": ["INV-11"],
             "proof-blocked-by-whole-lot": ["INV-10", "INV-11"],
             "done-proof-needs-done-change": [],
+            "one-environment-at-most": [], "proof-has-environment": [], "environment-only-on-proof": [],
+            "lot-has-proof": [], "prod-proof-after-staging": [],
             "change-recommends-proof": ["INV-2"],
             "required-sections": ["INV-4"],
         }
@@ -746,7 +749,7 @@ class VerifyTests(unittest.TestCase):
         res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("PASS    one-type  (8 checked, 0 fail, 0 unknown)", res.stdout)
-        self.assertIn("10 rule(s): 10 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
+        self.assertIn("15 rule(s): 15 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
 
     def test_cli_fail_exits_one_and_lists_identifiers(self):
         res = run_cli("verify", self.graph_file(SEM_FAIL), "--semantics", self.semantics_file(self.model))
@@ -775,6 +778,34 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual((status, failed, unknown), ("FAIL", ["INV-3"], ["INV-5"]))   # INV-5: outside blocker, state unknown
         (v,) = ld.verify_graph(self.model, self.graph(SEM_STATE), only=["done-proof-needs-done-change"])
         self.assertIn("blocked by INV-1 (Technical task) still In Progress", dict((n["identifier"], w) for n, w in v.fail)["INV-3"])
+
+    def test_the_environment_rules_fail_on_the_right_issues(self):
+        expected = {
+            "one-environment-at-most": ["ENV-6"],
+            "proof-has-environment": ["ENV-4"],
+            "environment-only-on-proof": ["ENV-5"],
+            "lot-has-proof": ["Lot B", "Lot C"],
+            "prod-proof-after-staging": ["ENV-3", "ENV-6"],
+        }
+        for rule, fails in expected.items():
+            with self.subTest(rule=rule):
+                status, failed, _ = self.outcome(SEM_ENV, rule)
+                self.assertEqual((status, failed), ("FAIL", fails))
+
+    def test_the_lot_report_reads_the_environment_from_the_proofs(self):
+        (rp,) = ld.build_reports(self.model, self.graph(SEM_ENV))
+        rows = {r["grouping"]: r["cells"] for r in rp["rows"]}
+        self.assertEqual(rows["Lot A"]["Staging"], {"done": 1, "total": 2, "status": "pending"})
+        self.assertEqual(rows["Lot A"]["Prod"], {"done": 0, "total": 2, "status": "pending"})
+        self.assertEqual(rows["Lot C"]["Staging"]["status"], "none")
+        done = ld.build_reports(self.model, self.graph(SEM_PASS))[0]["rows"][0]["cells"]
+        self.assertEqual((done["Staging"]["total"], done["Prod"]["total"]), (1, 1))
+
+    def test_the_text_report_prints_one_line_per_lot(self):
+        res = run_cli("verify", self.graph_file(SEM_ENV), "--exit-zero")
+        self.assertIn("report lot-environments", res.stdout)
+        self.assertRegex(res.stdout, r"Lot A\s+Staging ⧗ 1/2   Prod ⧗ 0/2")
+        self.assertRegex(res.stdout, r"Lot C\s+Staging - 0/0   Prod - 0/0")
 
     def test_open_only_does_not_hide_the_state_rule(self):
         (v,) = ld.verify_graph(self.model, self.graph(SEM_STATE), only=["done-proof-needs-done-change"], open_only=True)
@@ -818,11 +849,11 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(run_cli("verify", "--init-rules", starter).returncode, 0)
         self.assertNotEqual(run_cli("verify", "--init-rules", starter).returncode, 0)   # never overwrites
         res = run_cli("verify", self.graph_file(SEM_PASS), "--rules", starter)
-        self.assertIn("PASS    staging-milestone-exists", res.stdout)
+        self.assertIn("FAIL    bug-has-proof", res.stdout)      # INV-6 is a Bug with no linked Proof
         self.assertIn("PASS    feature-has-proof", res.stdout)
         res = run_cli("verify", self.graph_file(SEM_STATE), "--rules", starter)
         self.assertEqual(res.returncode, 1, res.stdout)
-        self.assertIn("FAIL    staging-milestone-exists", res.stdout)
+        self.assertIn("N/A     bug-has-proof", res.stdout)
         self.assertIn("FAIL    feature-has-proof", res.stdout)
 
     def test_the_vocabulary_is_closed(self):
@@ -893,6 +924,7 @@ ENGINE_EXPECTED = [
     ("spike-under-story", "ZZ-3", "FAIL"),
     ("story-has-check", "ZZ-7", "FAIL"),
     ("story-has-spike-or-skip", "ZZ-7", "FAIL"),
+    ("wave-has-check", "Later", "FAIL"),
 ]
 VERIFY_FUNCTIONS = ("load_semantics", "apply_overlay", "retype", "resolve_types", "group_labels",
                     "verify_rule", "verify_graph", "verify_main")
@@ -920,6 +952,15 @@ class EngineTests(unittest.TestCase):
         self.assertEqual([(f["rule"], f["issue"], f["status"]) for f in first["inconsistencies"]], ENGINE_EXPECTED)
         self.assertEqual(self.run_json()[1], first)
         self.assertEqual(res.stdout, self.run_json()[0].stdout)
+
+    def test_a_report_is_declared_by_the_model(self):
+        _, out = self.run_json()
+        (rp,) = out["reports"]
+        self.assertEqual((rp["id"], rp["by"]), ("wave-stages", ["Alpha", "Live"]))
+        rows = {r["grouping"]: r["cells"] for r in rp["rows"]}
+        self.assertEqual(rows["Wave 1"]["Live"], {"done": 1, "total": 1, "status": "done"})
+        self.assertEqual(rows["Wave 1"]["Alpha"]["status"], "none")
+        self.assertEqual(rows["Later"]["Live"]["status"], "none")
 
     def test_an_issue_typed_with_another_vocabulary_is_not_judged(self):
         _, out = self.run_json()

@@ -1,0 +1,135 @@
+{
+ "project": {
+  "name": "Environment fail (made up)",
+  "milestones": [
+   "Lot A",
+   "Lot B",
+   "Lot C"
+  ]
+ },
+ "issues": [
+  {
+   "identifier": "ENV-1",
+   "title": "Dev done",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Technical task",
+     "group": "Type"
+    }
+   ]
+  },
+  {
+   "identifier": "ENV-2",
+   "title": "Staging proof",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    },
+    {
+     "name": "Staging",
+     "group": "Environment"
+    }
+   ]
+  },
+  {
+   "identifier": "ENV-3",
+   "title": "Prod proof not after staging",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    },
+    {
+     "name": "Prod",
+     "group": "Environment"
+    }
+   ]
+  },
+  {
+   "identifier": "ENV-4",
+   "title": "Proof with no environment",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    }
+   ]
+  },
+  {
+   "identifier": "ENV-5",
+   "title": "Bug with an environment",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Lot B",
+   "labels": [
+    {
+     "name": "Bug",
+     "group": "Type"
+    },
+    {
+     "name": "Staging",
+     "group": "Environment"
+    }
+   ]
+  },
+  {
+   "identifier": "ENV-6",
+   "title": "Proof on two environments",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Lot A",
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    },
+    {
+     "name": "Staging",
+     "group": "Environment"
+    },
+    {
+     "name": "Prod",
+     "group": "Environment"
+    }
+   ]
+  },
+  {
+   "identifier": "ENV-7",
+   "title": "Feature",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Lot B",
+   "labels": [
+    {
+     "name": "Feature",
+     "group": "Type"
+    }
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "ENV-1",
+   "to": "ENV-2"
+  },
+  {
+   "type": "blocks",
+   "from": "ENV-1",
+   "to": "ENV-3"
+  }
+ ]
+}

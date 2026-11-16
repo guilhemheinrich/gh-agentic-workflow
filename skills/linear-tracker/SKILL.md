@@ -827,9 +827,10 @@ Rule kinds (the closed vocabulary; types are an id, a list, `@role` or `*`):
 |---|---|
 | `closed-requires-blockers-closed` | a closed `subject` has no `objects` blocker that is not closed (ignored states do not count; a blocker outside the project is `UNKNOWN`) |
 | `grouping-exists` | the project has ≥ `min` (default 1) groupings (milestones) whose name matches the regex `match`, case-insensitive |
+| `grouping-contains` | each grouping (milestone) holds ≥ `min` (default 1) tickets of `subject` |
 | `linked-to` | each `subject` has a `relations` link (`blocks`, `related`, `parent`, `child`) to a ticket of `object` |
 | `linked-or-waived` | the same, unless the section named by `waiver.section` starts with `waiver.match` (a regex); `"waivable": false` removes the waiver |
-| `blocked-by-any` / `blocked-by-all-in-grouping` | a `subject` is blocked by at least one / by every `objects` ticket of its grouping |
+| `blocked-by-any` / `blocked-by-all-in-grouping` | a `subject` is blocked by at least one / by every `objects` ticket of its grouping; `where` / `objects_where` (`{attribute, value}`) narrow either side, e.g. Prod Proofs blocked by the Staging Proofs of their lot |
 | `attribute-cardinality` / `-required` / `-only-on` | label-group counts and where an attribute may appear |
 | `team-matches-attribute` | the issue lives in the team that `binding.attributes.<attribute>.team_keys` maps the label to |
 | `requires-sections` | the body has the sections its type requires (`required_sections`), the first one first |
@@ -839,6 +840,23 @@ Example (made up), a model for a team that calls things differently: types `Stor
 (`linked-to`, subject `Spike`, relations `["parent"]`, object `Story`). A Spike with no
 parent comes back as `spike-under-story  ZZ-3  FAIL  no linked Story`.
 `tests/fixtures/engine-model.json` is that model.
+
+#### Reports: what is in staging, what is in prod
+
+A model may declare `generic.reports` (grouping, subject type, attribute to split by).
+The shipped template declares one: per lot (milestone) and per Environment, the
+Proofs Done over the Proofs, `✔` all Done, `⧗` some open, `-` none. A Linear milestone
+carries no label, so the environment is read from the Proofs, never declared on the
+lot:
+
+```text
+report lot-environments  Per lot and per environment: Proofs Done / Proofs.
+  Invitations                                      Staging ✔ 2/2   Prod ⧗ 0/1
+  Refunds                                          Staging ⧗ 1/2   Prod - 0/0
+```
+
+(made-up lots). `--json` carries the same rows under `reports`. The report follows
+`--semantics`: a model with another vocabulary (types, attribute, grouping) gets its own.
 
 #### Writing the rules with someone — a guided session
 
@@ -850,8 +868,8 @@ Do not guess rules; ask in this order and write each answer as one rule:
 4. *Give one ticket that would break it*, run the rule on the real project and check that
    this ticket comes back `FAIL`. If not, the rule says something else than intended.
 
-`verify --init-rules FILE` writes a starter rules file (never overwrites): a staging
-milestone, every Feature linked to a Proof with no waiver. It names the shipped template's
+`verify --init-rules FILE` writes a starter rules file (never overwrites): every Bug linked to a Proof,
+every Feature linked to a Proof with no waiver. It names the shipped template's
 vocabulary (`lot`, `Feature`, `Proof`): adapt it to your model. The merge file has `rules`
 (appended; the same `id` as an existing rule **replaces** it), `disable` (ids to drop) and
 `binding` (merged into the binding, e.g. `attributes.addressee.team_keys`);

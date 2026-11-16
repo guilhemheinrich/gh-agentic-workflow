@@ -2,8 +2,7 @@
  "project": {
   "name": "Semantics pass (made up)",
   "milestones": [
-   "Staging: invitations",
-   "Next lot"
+   "Staging: invitations"
   ]
  },
  "issues": [
@@ -45,6 +44,10 @@
     {
      "name": "Proof",
      "group": "Type"
+    },
+    {
+     "name": "Staging",
+     "group": "Environment"
     }
    ],
    "description": "## In plain words, with an example\n\nA made-up case.\n"
@@ -59,6 +62,10 @@
     {
      "name": "Proof",
      "group": "Type"
+    },
+    {
+     "name": "Prod",
+     "group": "Environment"
     }
    ],
    "description": "## In plain words, with an example\n\nA made-up case.\n"
@@ -86,7 +93,7 @@
    "title": "Bug INV-6",
    "state": "unstarted",
    "parent": null,
-   "milestone": "Next lot",
+   "milestone": null,
    "labels": [
     {
      "name": "Bug",
@@ -153,6 +160,11 @@
    "type": "blocks",
    "from": "INV-7",
    "to": "INV-6"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-3",
+   "to": "INV-4"
   }
  ]
 }

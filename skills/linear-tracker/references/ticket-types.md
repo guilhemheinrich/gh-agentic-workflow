@@ -124,12 +124,19 @@ for.
   seems to prove: a later merge in the same lot can break a proof that held on
   its own. Adding an issue to a lot already proved means reopening its Proofs,
   or moving the issue to the next lot.
-- A **Delivery is a project milestone** per lot and per environment
-  (« Staging: invitations », « Prod: invitations »). The staging milestone holds
-  the dev issues, the Technical tasks for infrastructure prerequisites (Helm
-  values, secrets, migrations, feature flags) and the staging Proofs; it reaches
-  100 % when its last Proof closes. Prod Proofs are blocked by the staging ones.
-  Product owners follow the milestones and open the Proofs.
+- A **lot is a project milestone**: a deliverable slice, the issues that ship
+  together and are proved together. Its description says what it delivers. It
+  holds the dev issues, the Technical tasks for infrastructure prerequisites
+  (Helm values, secrets, migrations, feature flags) and **at least one Proof**.
+  It is **not named after an environment**: the environment lives on the Proofs.
+- A Proof carries one **Environment** label (Staging or Prod, a workspace label
+  group, single choice, Proofs only). A Prod Proof is blocked by every Staging
+  Proof of its lot. A lot is « in staging » when its Staging Proofs are all
+  Done, « in prod » when its Prod Proofs are: `linear_deps.py verify` prints it
+  per lot (`Staging ✔ 2/2   Prod ⧗ 0/1`), so what is in staging and what is in
+  prod reads at a glance, and cannot drift from what was actually proved (a
+  milestone name can lie, a Done Proof cannot). Linear milestones carry no label.
+  Product owners follow the lots and open the Proofs.
 - An issue has one milestone and a milestone belongs to one project. A lot that
   spans teams is fine (a project spans teams); a lot that spans projects is not
   a lot.
