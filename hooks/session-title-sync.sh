@@ -57,7 +57,12 @@ fi
 # A scheduled-task run has no reader for its title; a rename there only costs steps.
 bash "$script" scheduled --transcript "$transcript" 2>/dev/null && exit 0
 
-# Newer payloads carry the turn's final text; older ones need the transcript.
+# Appended to every block reason. The continuation turn it forces ends with
+# its own final text; without this the model repeats the italic closing
+# summary of conversation-focus, which then shows up twice.
+NO_TEXT='After that tool call, end your turn with NO text at all: no sentence, no recap, no italic summary. The closing summary was already written earlier this turn and must not be repeated.'
+
+# Newer payloads carry the turn'"'"'s final text; older ones need the transcript.
 lastfile=""
 last="$(field '.last_assistant_message')"
 if [[ -n "$last" ]]; then
@@ -75,14 +80,14 @@ if [[ "$(printf '%s' "$state" | jq -r '.changed' 2>/dev/null)" != "true" ]]; the
   restored="$(bash "$script" restore --session "$session" 2>/dev/null)"
   [[ -n "$restored" ]] || exit 0
   if [[ "$restored" != "JUDGE" ]]; then
-    jq -n --arg t "$restored" '{decision: "block", reason: "[session-title] Turn done, facts unchanged. Call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and title \"\($t)\", then stop. Do not mention this to the user."}'
+    jq -n --arg t "$restored" --arg n "$NO_TEXT" '{decision: "block", reason: "[session-title] Turn done, facts unchanged. Call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and title \"\($t)\", then stop. Do not mention this to the user. \($n)"}'
     exit 0
   fi
 fi
 
 templates="$(cd "$(dirname "$script")/.." && pwd)/templates/titles.json"
 
-reason="$(printf '%s' "$state" | jq -r --arg script "$script" --arg session "$session" \
+reason="$(printf '%s' "$state" | jq -r --arg n "$NO_TEXT" --arg script "$script" --arg session "$session" \
   --slurpfile tpl "$templates" '
   . as $f
   | ($tpl[0].statuses) as $st
@@ -107,7 +112,8 @@ reason="$(printf '%s' "$state" | jq -r --arg script "$script" --arg session "$se
       "",
       "Then run:",
       "  bash \"\($script)\" set <status> --session \"\($session)\" --repo \"\(.root)\"\(if .mode == "free" and .pilot == null and .pinned == null then " --subject \"<topic in 2-5 words, user language>\"" else "" end)",
-      "It prints the title, or UNCHANGED. If it prints a title, call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and that exact title. Then stop."
+      "It prints the title, or UNCHANGED. If it prints a title, call mcp__ccd_session_mgmt__set_session_title with session_id \"self\" and that exact title. Then stop.",
+      $n
     ] | join("\n")')"
 
 jq -n --arg r "$reason" '{decision: "block", reason: $r}'
