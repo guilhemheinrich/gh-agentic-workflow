@@ -19,12 +19,15 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    env:
-      BUILD_DIR: ${{ runner.temp }}/dist
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      # The `runner` context is not available in job-level `env`, so the
+      # build directory is exported from a step instead.
+      - name: Set build directory
+        run: echo "BUILD_DIR=$RUNNER_TEMP/dist" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
