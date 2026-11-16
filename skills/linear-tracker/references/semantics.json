@@ -81,6 +81,8 @@
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A Proof is blocked by at least one dev issue."},
       {"id": "proof-blocked-by-whole-lot", "rule": "blocked-by-all-in-grouping", "subject": "Proof", "objects": "@change", "grouping": "lot",
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "Each Proof is blocked by every dev issue of its lot."},
+      {"id": "done-proof-needs-done-change", "rule": "closed-requires-blockers-closed", "subject": "Proof", "objects": "@change",
+       "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A Proof that is Done cannot be blocked by a dev issue that is not Done."},
       {"id": "change-recommends-proof", "rule": "linked-or-waived", "subject": "@change", "relations": ["blocks", "related"], "object": "Proof",
        "source": "ticket-types.md#technical-task-or-proof-a-merge-or-an-observation", "text": "Every code ticket links a recommended Proof, or says « none » and why."},
       {"id": "required-sections", "rule": "requires-sections", "subject": "*",

@@ -792,6 +792,52 @@ headings, and whether « Recommended proof » says « none »), and
 (addressee → team keys), empty by default. `check` stays as the one-rule form;
 `blocked-by-any` calls the same function.
 
+### Writing your own rules — `verify --rules`
+
+`references/semantics.json` holds the rules every workspace shares. Yours (« a Feature
+needs a Proof », « the project needs a staging milestone ») go in a **separate file** of
+the consumer repository, merged onto the base by `verify`. JSON, not YAML: the script is
+standard-library only and `python:alpine` has no YAML parser.
+
+**Guide the person, do not guess.** To write a rule with someone, ask in this order and
+write the answer as one rule:
+
+1. *Which tickets does it constrain?* → `subject`: a type id (`"Proof"`), a role
+   (`"@change"` = Bug, Feature, Improvement, Technical task) or `"*"`.
+2. *What must be true of them?* → pick the kind in the table below.
+3. *Does a closed ticket count?* Rules on state (`closed-requires-blockers-closed`)
+   look at closed subjects on purpose; the others skip nothing unless `--open-only`.
+4. *Give one ticket that would break it*, then run the rule on the real project and
+   check that ticket comes back `FAIL`.
+
+| Kind | Says | Example (made-up ids) |
+|---|---|---|
+| `closed-requires-blockers-closed` | a Done `subject` has no blocker of `objects` that is not Done (canceled blockers are ignored) | Done Proof INV-30 blocked by INV-12 « In Progress » → `FAIL`; blocker in another project → `UNKNOWN` |
+| `grouping-exists` | the project has ≥ `min` (default 1) milestones whose name matches the regex `match` (case-insensitive) | milestones `Lot A`, `Prod` and `match: "staging"` → `FAIL` |
+| `linked-or-waived` | each `subject` blocks or relates to an `object` ticket; `"waivable": false` refuses the « none » waiver | Feature INV-6 with no linked Proof → `FAIL` |
+| `blocked-by-any`, `blocked-by-all-in-grouping`, `attribute-*`, `owned-by-addressee`, `requires-sections` | structure and labels, see above | |
+
+```bash
+# write a commented starter (never overwrites), edit it, run it
+python skills/linear-tracker/scripts/linear_deps.py verify --init-rules .claude/linear/rules.json
+docker run --rm -e LINEAR_API_KEY -v "$PWD":/work -w /work python:3.12-slim \
+  python skills/linear-tracker/scripts/linear_deps.py verify "<project URL>" --rules .claude/linear/rules.json
+```
+
+The first argument is either an exported `deps.json` or a **project URL**, fetched live
+(`LINEAR_API_KEY`, same read-only key as the graph). `.claude/linear/rules.json` is read
+without `--rules` when it exists in the working directory. The file has `rules` (appended;
+the same `id` as a base rule **replaces** it, which is how `"waivable": false` tightens
+`change-recommends-proof`), `disable` (rule ids to drop) and `binding` (merged into the
+Linear binding, e.g. `attributes.addressee.team_keys`). An unknown kind, type, attribute,
+regex or `disable` id is refused at load, so a typo never reads as « all good ». Real
+check, 2026-11-16, on three project exports from `~/linear-graphs/`:
+`done-proof-needs-done-change` passes on all three (13 Proofs checked, no false alarm).
+
+**Hook.** `verify` is hook-ready as it stands: one command, exit 1 on `FAIL`, nothing
+printed on the key. A wrapper hook is not shipped yet (see `specs/GRIEVANCES.md`); until
+then call the command above from the repository's own hook.
+
 ### The API key — where it comes from, where it lives
 
 The script talks to Linear's GraphQL API directly. It does **not** reuse the MCP

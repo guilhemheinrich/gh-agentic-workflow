@@ -661,6 +661,7 @@ class MilestoneBandTests(unittest.TestCase):
 
 SEM_PASS = os.path.join(HERE, "fixtures", "semantics-pass.json")
 SEM_FAIL = os.path.join(HERE, "fixtures", "semantics-fail.json")
+SEM_STATE = os.path.join(HERE, "fixtures", "semantics-state-fail.json")
 SEMANTICS = os.path.join(HERE, "..", "references", "semantics.json")
 TEAM_KEYS = {"Product": ["INV"], "Technical": ["INV"]}
 
@@ -707,11 +708,14 @@ class VerifyTests(unittest.TestCase):
             "waiting-in-addressee-team": ["TT-6"],
             "proof-blocked-by-change": ["INV-11"],
             "proof-blocked-by-whole-lot": ["INV-10", "INV-11"],
+            "done-proof-needs-done-change": [],
             "change-recommends-proof": ["INV-2"],
             "required-sections": ["INV-4"],
         }
         self.assertEqual(set(expected), {r["id"] for r in self.model["generic"]["rules"]})
         for rule, fails in expected.items():
+            if not fails:   # exercised on its own fixture, see the state tests below
+                continue
             with self.subTest(rule=rule):
                 status, failed, _ = self.outcome(SEM_FAIL, rule)
                 self.assertEqual((status, failed), ("FAIL", fails))
@@ -738,7 +742,7 @@ class VerifyTests(unittest.TestCase):
         res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("PASS    one-type  (8 checked, 0 fail, 0 unknown)", res.stdout)
-        self.assertIn("9 rule(s): 9 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
+        self.assertIn("10 rule(s): 10 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
 
     def test_cli_fail_exits_one_and_lists_identifiers(self):
         res = run_cli("verify", self.graph_file(SEM_FAIL), "--semantics", self.semantics_file(self.model))
@@ -761,6 +765,61 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("1 rule(s): 0 pass, 1 fail", res.stdout)
         self.assertNotEqual(run_cli("verify", g, "--rule", "nope").returncode, 0)
+
+    def test_a_done_proof_blocked_by_an_unfinished_dev_issue_fails(self):
+        status, failed, unknown = self.outcome(SEM_STATE, "done-proof-needs-done-change")
+        self.assertEqual((status, failed, unknown), ("FAIL", ["INV-3"], ["INV-5"]))   # INV-5: outside blocker, state unknown
+        (v,) = ld.verify_graph(self.model, self.graph(SEM_STATE), only=["done-proof-needs-done-change"])
+        self.assertIn("blocked by INV-1 (Technical task) still In Progress", dict((n["identifier"], w) for n, w in v.fail)["INV-3"])
+
+    def test_open_only_does_not_hide_the_state_rule(self):
+        (v,) = ld.verify_graph(self.model, self.graph(SEM_STATE), only=["done-proof-needs-done-change"], open_only=True)
+        self.assertEqual([n["identifier"] for n, _ in v.fail], ["INV-3"])
+
+    def overlay(self, **kw):
+        path = os.path.join(self.dir.name, "rules.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(kw, fh)
+        return path
+
+    def test_an_overlay_adds_rules_and_a_milestone_rule_is_project_level(self):
+        rules = self.overlay(rules=[
+            {"id": "staging-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "staging"},
+            {"id": "prod-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "^prod", "min": 1}])
+        model = ld.load_semantics(SEMANTICS, [rules])
+        v = {x.rule["id"]: x for x in ld.verify_graph(model, self.graph(SEM_STATE))}
+        self.assertEqual(v["staging-milestone"].status, "FAIL")   # milestones: Lot A, Prod
+        self.assertEqual(v["prod-milestone"].status, "PASS")
+        good = ld.verify_graph(model, self.graph(SEM_PASS), only=["staging-milestone"])[0]
+        self.assertEqual(good.status, "PASS")                      # « Staging: invitations »
+
+    def test_a_strict_feature_proof_rule_refuses_the_none_waiver(self):
+        rules = self.overlay(rules=[{"id": "change-recommends-proof", "rule": "linked-or-waived", "subject": "Feature",
+                                     "relations": ["blocks", "related"], "object": "Proof", "waivable": False}])
+        model = ld.load_semantics(SEMANTICS, [rules])    # same id: replaces the base rule
+        (v,) = ld.verify_graph(model, self.graph(SEM_STATE), only=["change-recommends-proof"])
+        self.assertEqual(sorted(n["identifier"] for n, _ in v.fail), ["INV-6"])
+
+    def test_disable_and_bad_overlays_are_refused(self):
+        model = ld.load_semantics(SEMANTICS, [self.overlay(disable=["one-type"])])
+        self.assertNotIn("one-type", {r["id"] for r in model["generic"]["rules"]})
+        for bad in (dict(disable=["nope"]), dict(extra=1), dict(rules=[{"rule": "grouping-exists"}]),
+                    dict(rules=[{"id": "x", "rule": "grouping-exists", "grouping": "lot", "match": "("}]),
+                    dict(rules=[{"id": "x", "rule": "blocked-by-any", "objects": "@change"}])):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit):
+                ld.load_semantics(SEMANTICS, [self.overlay(**bad)])
+
+    def test_cli_rules_flag_and_starter_file(self):
+        starter = os.path.join(self.dir.name, "starter.json")
+        self.assertEqual(run_cli("verify", "--init-rules", starter).returncode, 0)
+        self.assertNotEqual(run_cli("verify", "--init-rules", starter).returncode, 0)   # never overwrites
+        res = run_cli("verify", self.graph_file(SEM_PASS), "--rules", starter)
+        self.assertIn("PASS    staging-milestone-exists", res.stdout)
+        self.assertIn("PASS    feature-has-proof", res.stdout)
+        res = run_cli("verify", self.graph_file(SEM_STATE), "--rules", starter)
+        self.assertEqual(res.returncode, 1, res.stdout)
+        self.assertIn("FAIL    staging-milestone-exists", res.stdout)
+        self.assertIn("FAIL    feature-has-proof", res.stdout)
 
     def test_the_vocabulary_is_closed(self):
         self.model["generic"]["rules"].append({"id": "x", "rule": "vibes", "subject": "Bug"})

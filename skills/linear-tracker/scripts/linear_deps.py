@@ -614,12 +614,49 @@ def check_main(argv):
 # --- verify: the semantic model of references/semantics.json run against the exported graph -------
 DEFAULT_SEMANTICS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "references", "semantics.json")
 RULE_KINDS = ("attribute-cardinality", "attribute-required", "attribute-only-on", "owned-by-addressee",
-              "blocked-by-any", "blocked-by-all-in-grouping", "linked-or-waived", "requires-sections")
+              "blocked-by-any", "blocked-by-all-in-grouping", "linked-or-waived", "requires-sections",
+              "closed-requires-blockers-closed", "grouping-exists")
+LOCAL_RULES = os.path.join(".claude", "linear", "rules.json")   # picked up from the working directory
+STATE_RULES = ("closed-requires-blockers-closed",)             # about closed issues: --open-only must not hide them
 
 
-def load_semantics(path):
-    """Read and validate the model: a closed rule vocabulary, known types, roles and attributes."""
+def deep_merge(base, extra):
+    for k, v in extra.items():
+        if isinstance(v, dict) and isinstance(base.get(k), dict):
+            deep_merge(base[k], v)
+        else:
+            base[k] = v
+    return base
+
+
+def apply_overlay(model, overlay, path):
+    """A user's rules file: `rules` are appended (an existing id is replaced), `disable` drops ids by name,
+    `binding` is merged into the tracker binding (e.g. the addressee -> team keys map)."""
+    unknown = sorted(set(overlay) - {"format", "_comment", "rules", "disable", "binding"})
+    if unknown:
+        raise SystemExit("error: %s: unknown key(s) %s (allowed: rules, disable, binding)" % (path, ", ".join(unknown)))
+    rules = model["generic"]["rules"]
+    gone = set(overlay.get("disable", []))
+    missing = sorted(gone - {r["id"] for r in rules} - {r.get("id") for r in overlay.get("rules", [])})
+    if missing:
+        raise SystemExit("error: %s: `disable` names no rule %s" % (path, ", ".join(missing)))
+    rules[:] = [r for r in rules if r["id"] not in gone]
+    for r in overlay.get("rules", []):
+        if "id" not in r:
+            raise SystemExit("error: %s: a rule has no `id`" % path)
+        r.setdefault("source", path)
+        rules[:] = [x for x in rules if x["id"] != r["id"]] + [r]
+    deep_merge(model["binding"], overlay.get("binding", {}))
+    return model
+
+
+def load_semantics(path, overlays=()):
+    """Read and validate the model: a closed rule vocabulary, known types, roles and attributes.
+    `overlays` are the user's rules files, applied before validation so their rules are checked too."""
     model = load_json(path)
+    for extra in overlays:
+        if model.get("generic") and model.get("binding"):
+            apply_overlay(model, load_json(extra), extra)
     gen, bind = model.get("generic"), model.get("binding")
     if not isinstance(gen, dict) or not isinstance(bind, dict):
         raise SystemExit("error: %s needs a `generic` and a `binding` object" % path)
@@ -647,6 +684,15 @@ def load_semantics(path):
                 raise SystemExit("error: %s: %s uses attribute %r with no binding" % (path, where, r[key]))
         if r.get("grouping") and r["grouping"] not in bind.get("groupings", {}):
             raise SystemExit("error: %s: %s uses grouping %r with no binding" % (path, where, r["grouping"]))
+        if r["rule"] == "grouping-exists":
+            try:
+                re.compile(r.get("match", ""))
+            except re.error as err:
+                raise SystemExit("error: %s: %s has a bad `match` regex: %s" % (path, where, err))
+            if not r.get("match") or not r.get("grouping"):
+                raise SystemExit("error: %s: %s needs `grouping` and `match`" % (path, where))
+        elif r["rule"] != "attribute-cardinality" and not any(k in r for k in ("subject", "types")):
+            raise SystemExit("error: %s: %s needs a `subject`" % (path, where))
     for t in gen["types"]:
         for rl in t.get("roles", []):
             if rl not in roles:
@@ -692,7 +738,7 @@ def verify_rule(rule, model, graph, open_only=False):
     def scope(types):
         wanted = resolve_types(types, gen)
         for n in graph["nodes"]:
-            if n["external"] or (open_only and n["state"] in ("completed", "canceled")):
+            if n["external"] or (open_only and kind not in STATE_RULES and n["state"] in ("completed", "canceled")):
                 continue
             if norm(n["type"]) in wanted:
                 yield n
@@ -781,12 +827,42 @@ def verify_rule(rule, model, graph, open_only=False):
             if linked:
                 continue
             waiver = (n.get("body") or {}).get("proof_waiver")
+            if rule.get("waivable", True) is False:
+                v.fail.append((n, "no linked %s (a « none » waiver is not accepted here)" % rule["object"]))
+                continue
             if waiver:
                 continue
             if waiver is None:
                 v.unknown.append((n, "no linked %s, and the body is not in the export, so a « none » waiver cannot be read" % rule["object"]))
             else:
                 v.fail.append((n, "no linked %s and no « none » waiver in its Recommended proof section" % rule["object"]))
+    elif kind == "closed-requires-blockers-closed":
+        done = set(bind.get("states", {}).get("done_kinds", ["completed"]))
+        wanted = resolve_types(rule.get("objects", "*"), gen)
+        for n in scope(rule["subject"]):
+            v.checked.append(n)
+            if n["state"] not in done:
+                continue
+            for b in n["blocked_by"]:
+                m = by_id.get(b) or {}
+                if m.get("state") in done or m.get("state") in ignored:
+                    continue
+                if m.get("external") or m.get("state") is None:
+                    v.unknown.append((n, "%s is outside the project, its state is not in the export" % b))
+                elif m.get("type") is None and "*" not in rule.get("objects", "*"):
+                    v.unknown.append((n, "%s is %s and its type is unreadable" % (b, m.get("state_name") or m["state"])))
+                elif m.get("type") is None or norm(m["type"]) in wanted:
+                    v.fail.append((n, "is %s but blocked by %s (%s) still %s" % (
+                        n["state_name"] or n["state"], b, m.get("type") or "no type", m.get("state_name") or m["state"])))
+    elif kind == "grouping-exists":
+        names = graph.get("project", {}).get("milestones") or []
+        project = {"identifier": "(project)", "state": "-", "title": graph.get("project", {}).get("name", "")}
+        v.checked.append(project)
+        found = [m for m in names if re.search(rule["match"], m, re.I)]
+        if len(found) < rule.get("min", 1):
+            v.fail.append((project, "%d %s matching /%s/ (need %d); the project has: %s" % (
+                len(found), bind["groupings"][rule["grouping"]]["linear"], rule["match"], rule.get("min", 1),
+                " | ".join(names) or "none")))
     elif kind == "requires-sections":
         types = {norm(t["id"]): t for t in gen["types"]}
         for n in scope(rule["subject"]):
@@ -811,18 +887,54 @@ def verify_graph(model, graph, only=None, open_only=False):
     return [verify_rule(r, model, graph, open_only) for r in rules]
 
 
+STARTER_RULES = """{
+  "format": "ticket-semantics-rules/1",
+  "_comment": "Your own rules, merged onto references/semantics.json by `linear_deps.py verify --rules THIS_FILE`. Kinds: see SKILL.md, « Writing your own rules ». Types are ids (\\"Proof\\"), roles (\\"@change\\") or \\"*\\".",
+  "rules": [
+    {"id": "staging-milestone-exists", "rule": "grouping-exists",
+     "grouping": "lot", "match": "staging",
+     "text": "The project has a milestone about staging."},
+    {"id": "feature-has-proof", "rule": "linked-or-waived",
+     "subject": "Feature", "relations": ["blocks", "related"], "object": "Proof", "waivable": false,
+     "text": "Every Feature is linked to at least one Proof, no waiver."}
+  ],
+  "disable": [],
+  "binding": {}
+}
+"""
+
+
 def verify_main(argv):
     ap = argparse.ArgumentParser(
         prog="linear_deps.py verify",
         description="Run every rule of the semantic model (references/semantics.json) against an exported graph, offline.")
-    ap.add_argument("graph", help="JSON written by --json-out")
+    ap.add_argument("graph", nargs="?", help="JSON written by --json-out, or a Linear project URL (fetched live, LINEAR_API_KEY)")
     ap.add_argument("--semantics", default=DEFAULT_SEMANTICS, metavar="FILE", help="semantic model (default: references/semantics.json)")
+    ap.add_argument("--rules", action="append", default=[], metavar="FILE",
+                    help="your own rules file, merged onto the model (repeatable; %s is read when present)" % LOCAL_RULES)
+    ap.add_argument("--init-rules", metavar="FILE", help="write a commented starter rules file and stop")
+    ap.add_argument("--api-url", default=API_URL, help=argparse.SUPPRESS)
     ap.add_argument("--rule", action="append", metavar="ID", help="run only this rule id (repeatable)")
     ap.add_argument("--open-only", action="store_true", help="skip completed and canceled issues")
     ap.add_argument("--strict", action="store_true", help="exit non-zero on UNKNOWN as well as FAIL")
     args = ap.parse_args(argv)
-    model = load_semantics(args.semantics)
-    graph = load_json(args.graph)
+    if args.init_rules:
+        if os.path.exists(args.init_rules):
+            raise SystemExit("error: %s exists, not overwritten" % args.init_rules)
+        with open(args.init_rules, "w", encoding="utf-8") as fh:
+            fh.write(STARTER_RULES)
+        print("wrote %s" % args.init_rules)
+        return 0
+    if not args.graph:
+        ap.error("a graph JSON or a project URL is required")
+    overlays = list(args.rules) + ([LOCAL_RULES] if os.path.isfile(LOCAL_RULES) and LOCAL_RULES not in args.rules else [])
+    model = load_semantics(args.semantics, overlays)
+    if re.match(r"https?://", args.graph):
+        workspace, slug = parse_project_url(args.graph)
+        data = fetch_live(slug, args.api_url, descriptions=True)
+        graph = build_export(data, args.graph.strip(), workspace)
+    else:
+        graph = load_json(args.graph)
     known = {r["id"] for r in model["generic"]["rules"]}
     bad = sorted(set(args.rule or []) - known)
     if bad:
