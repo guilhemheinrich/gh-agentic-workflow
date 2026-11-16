@@ -6,7 +6,7 @@ change is overwritten on the next publish.
 Add the marketplace in Claude Code:
 
 ```
-/plugin marketplace add guilhemheinrich/gh-agentic-workflow#dist
+/plugin marketplace add https://github.com/guilhemheinrich/gh-agentic-workflow.git#dist
 ```
 
 Pull requests go to `main`, never to this branch.
