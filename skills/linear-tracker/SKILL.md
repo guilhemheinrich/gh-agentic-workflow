@@ -760,6 +760,38 @@ readable type: open it before calling it a violation. Exit code 0 when every iss
 passes, 1 otherwise. When no issue has `--type`, a note on stderr lists the types
 present, so a misspelt type is not read as "all good".
 
+### Checking the whole semantic model — `linear_deps.py verify`
+
+`check` tests one typing rule. `verify` runs **every** rule of
+[`references/semantics.json`](references/semantics.json) (JSON because the script is
+standard-library only and `python:alpine` has no YAML parser) against the same
+`deps.json`, offline:
+
+```bash
+docker run --rm -v "$PWD":/work -w /work python:3.12-slim \
+  python skills/linear-tracker/scripts/linear_deps.py verify deps.json
+```
+
+The file has two blocks. `generic` is tool-agnostic: types (definition, test,
+roles, required sections), relations, and rules in a closed vocabulary
+(`attribute-cardinality`, `attribute-required`, `attribute-only-on`,
+`owned-by-addressee`, `blocked-by-any`, `blocked-by-all-in-grouping`,
+`linked-or-waived`, `requires-sections`); types are named by id or by role
+(`@change` = Bug, Feature, Improvement, Technical task). `binding` maps it to
+Linear: label groups (Type, Addressee), template names and files, the milestone
+as the « lot », state kinds. An unknown rule kind or type is refused at load.
+
+Each rule prints `PASS`, `FAIL`, `UNKNOWN` or `N/A` with the issue identifiers
+and the reason. `UNKNOWN` means the export lacks the fact (a description, the
+team mapping), never a violation. Exit 1 on any `FAIL`; `--strict` also on
+`UNKNOWN`. `--rule ID` (repeatable) runs some rules, `--open-only` skips closed
+issues. Two rules need more than the labels: `change-recommends-proof` and
+`requires-sections` read the ticket body, which a live export records (the
+headings, and whether « Recommended proof » says « none »), and
+`waiting-in-addressee-team` needs `binding.attributes.addressee.team_keys`
+(addressee → team keys), empty by default. `check` stays as the one-rule form;
+`blocked-by-any` calls the same function.
+
 ### The API key — where it comes from, where it lives
 
 The script talks to Linear's GraphQL API directly. It does **not** reuse the MCP
