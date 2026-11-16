@@ -233,7 +233,7 @@ Authoritative reference for the migration; the implementer applies this table ve
 | `skills/scroll-mastery/`                            | `frameworks-and-libraries`  | `css`, `web-components`, `frontend`                  |              |
 | `skills/semantic-release-js-ts-pipeline/`           | `tools-and-configurations`  | `ci-cd`, `git`, `npm`, `versioning`                  |              |
 | `skills/sentry-fix-issues/`                         | `quality-assurance`         | `debugging`, `sentry`                                |              |
-| `skills/septeo-keycloak-user-register/`             | `domain-specific`           | `auth`, `keycloak`, `security`                       |              |
+| `skills/keycloak-user-register/`             | `domain-specific`           | `auth`, `keycloak`, `security`                       |              |
 | `skills/sonarqube-config/`                          | `quality-assurance`         | `ci-cd`, `sonarqube`, `testing`                      |              |
 | `skills/spec-reindex/`                              | `workflows-and-processes`   | `spec-kit`                                           |     ✅       |
 | `skills/sql-migration-guidelines/`                  | `tools-and-configurations`  | `sql`                                                |              |

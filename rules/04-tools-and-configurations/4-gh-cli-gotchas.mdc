@@ -1,0 +1,22 @@
+---
+description: Non-interactive `gh` CLI gotchas for scripts, CI and agents (pager, prompts, JSON output, auth, PR flags). Load when running or writing `gh` commands.
+globs:
+alwaysApply: false
+tags:
+  - git
+  - github
+---
+
+# gh CLI — non-interactive gotchas
+
+- Disable the pager and colors in scripts: `GH_PAGER=cat NO_COLOR=1 gh ...` (or `gh config set pager cat`).
+- Disable prompts: `GH_PROMPT_DISABLED=1`. Without it, a missing flag makes `gh` wait on stdin and hang an agent.
+- Prefer structured output over scraping tables: `gh pr list --json number,title,state --jq '.[] | select(.state=="OPEN") | .number'`. `--jq` needs `--json`.
+- `gh pr create` is only non-interactive with `--title` and `--body` (or `--fill`); add `--base <branch>` and `--head <branch>` explicitly, and `--draft` when not ready.
+- Multi-line bodies: use `--body-file <file>` (or `-F -` with a heredoc), never inline shell-escaped strings.
+- Auth in CI: export `GH_TOKEN` (or `GITHUB_TOKEN`); `gh auth login` is interactive. Enterprise hosts also need `GH_HOST`.
+- The default `GITHUB_TOKEN` of a workflow cannot trigger other workflows and needs `permissions:` for `pull-requests: write` / `contents: write`.
+- `gh pr checks --watch` blocks until completion and exits non-zero on failure; add `--fail-fast` or use `gh run watch <id> --exit-status`.
+- `gh api` paginates only with `--paginate`; combine with `--jq` (applied per page) or `--slurp` for one array.
+- `gh pr merge` needs an explicit strategy (`--squash|--merge|--rebase`) when non-interactive; `--auto` queues the merge until checks pass.
+- Inside a repo with several remotes, pass `-R owner/repo` to avoid acting on the wrong one.

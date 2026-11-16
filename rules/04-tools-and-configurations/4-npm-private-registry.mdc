@@ -1,7 +1,8 @@
 ---
 description: >-
   Declarative invariants for private npm scopes: single root .npmrc, token via
-  env, Docker build hygiene, no token in runtime images. Procedures in a skill.
+  a BuildKit secret mount, Docker build hygiene, no token in any image layer.
+  Procedures in a skill.
 globs: '.npmrc,.docker/**/Dockerfile,docker-compose.yaml,compose.yaml,compose.yml,.env.example'
 alwaysApply: false
 tags:
@@ -15,14 +16,14 @@ tags:
 
 ## Desired state
 
-Scoped private packages resolve through a **single** configuration at the workspace root, with **secrets** supplied only via **environment** and **build** arguments — never baked into images or committed files.
+Scoped private packages resolve through a **single** configuration at the workspace root, with the **token** supplied only through a **BuildKit secret mount** — never through `ARG`, `ENV` or `build.args`, never baked into image layers or committed files.
 
 ## Properties
 
 - **P1 (single manifest of registry config)**: One `.npmrc` (or tool-equivalent) at the **monorepo root** — not duplicated per sub-package unless the tool requires an exception documented in the repo.
 - **P2 (token indirection)**: Authentication uses **environment variable placeholders** in `.npmrc` (for example `${NPM_TOKEN}`), not literal tokens.
-- **P3 (Docker build)**: Token is available only in the **dependency-install** stage: `ARG` / `ENV`, file present for install, then **removed** with `ENV` cleared for that stage; the **runtime** image contains **neither** `.npmrc` nor non-empty token variables.
-- **P4 (compose)**: Build-time tokens pass through `build.args` (or equivalent), not as long-lived container `environment` secrets for install-only needs.
+- **P3 (Docker build)**: The token reaches the dependency-install stage only through a BuildKit secret mount (`RUN --mount=type=secret,id=npm_token ...`), read inside that single `RUN`. It is **never** declared as `ARG` or `ENV`, because both are recorded in image metadata and visible in `docker history`. The **runtime** image contains **neither** `.npmrc` nor any token value.
+- **P4 (compose)**: The token passes through `build.secrets` plus a top-level `secrets` entry sourced from the environment (`environment: NPM_TOKEN`), **not** through `build.args` and not as a runtime `environment` entry for install-only needs. In CI use `docker build --secret id=npm_token,env=NPM_TOKEN`.
 - **P5 (documentation)**: `.env.example` lists required token variable names with empty values; real values stay in ignored `.env`.
 - **P6 (dockerignore)**: `.env` is excluded from the build context; `.npmrc` is **not** excluded if the Dockerfile must copy it for install.
 
@@ -31,6 +32,7 @@ Scoped private packages resolve through a **single** configuration at the worksp
 - Committing a token to Git or copying it into a final runtime layer.
 - Per-app `.npmrc` files that disagree with the root.
 - `NPM_TOKEN` in runtime `environment` when only install needs it.
+- Passing the token with `ARG`, `ENV` or `build.args`, even if cleared afterwards: earlier layers and metadata keep it.
 
 ## Skill References
 
@@ -38,5 +40,5 @@ Scoped private packages resolve through a **single** configuration at the worksp
 
 ## Enforcement
 
-- **Detect**: Hardcoded `//registry/..._authToken=npm_...` in repo; `FROM` final image still containing `.npmrc`; token in `docker compose` `environment` for a web service that only needs it at build.
-- **Fix**: Switch to env indirection; multi-stage strip; follow the skill’s checklist.
+- **Detect**: Hardcoded `//registry/..._authToken=npm_...` in repo; `FROM` final image still containing `.npmrc`; token in `docker compose` `environment` or `build.args` for a service that only needs it at build; `ARG NPM_TOKEN` / `ENV NPM_TOKEN` in a Dockerfile.
+- **Fix**: Switch to the secret mount (`--mount=type=secret`) with env indirection in `.npmrc`; multi-stage so the runtime image carries no `.npmrc`; follow the skill’s checklist.

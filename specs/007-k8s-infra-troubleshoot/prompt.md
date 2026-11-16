@@ -1,9 +1,9 @@
 # Original Prompt
 
 Je voudrais faire une commande réutilisable, dont l'objectif est d'identifié et de réglé des problèmes d'infrastructure en k8s.
-Notre devops à mis à disposition un site admin ou je peux récupérer un artefact qui à cette forme /Users/guilhemheinrich/code/MODELO_HUB/modelo-meet/kubeconfig.yaml
+Notre devops à mis à disposition un site admin ou je peux récupérer un artefact qui à cette forme /home/me/code/my-app/kubeconfig.yaml
 
-Parse et synthétise la docs présente ici : https://modelo-dashboard-k8s-preprod.septeo.fr/docs
+Parse et synthétise la docs présente ici : https://<DASHBOARD_HOST>/docs
 
 Normalement, avec les infos présentent dedans, et kubectl, on doit pouvoir agir sur l'infra dans le périmètre de notre scope (par exemple, je ne peux pas set des secrets, ou toucher à l'infra, mais je peux voir et modifié des variables d'env).
 

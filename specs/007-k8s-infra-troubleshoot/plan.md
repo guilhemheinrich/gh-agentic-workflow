@@ -4,7 +4,7 @@
 
 ## Summary
 
-Créer une commande Cursor `/k8s-troubleshoot` et un skill associé permettant de diagnostiquer et résoudre des problèmes d'infrastructure Kubernetes via un conteneur Docker. Le scope est limité aux opérations autorisées par le service account `modelo-debug-only`. Les problèmes hors scope génèrent un rapport structuré pour l'équipe DevOps.
+Créer une commande Cursor `/k8s-troubleshoot` et un skill associé permettant de diagnostiquer et résoudre des problèmes d'infrastructure Kubernetes via un conteneur Docker. Le scope est limité aux opérations autorisées par le service account `debug-only`. Les problèmes hors scope génèrent un rapport structuré pour l'équipe DevOps.
 
 ## Technical Context
 
@@ -133,4 +133,4 @@ docker run --rm \
 
 - Docker installé sur le host
 - Kubeconfig téléchargé depuis le dashboard admin
-- Accès réseau au cluster K8s (`api-kube-compute-lat.septeo.fr`)
+- Accès réseau au cluster K8s (`<K8S_API_HOST>`)

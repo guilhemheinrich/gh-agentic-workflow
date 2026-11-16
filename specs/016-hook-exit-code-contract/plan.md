@@ -35,8 +35,8 @@ Complete. [research.md](./research.md) holds every figure this plan rests on, ea
 
 Three questions the adversarial rounds left open were answered by measurement rather than by design argument:
 
-1. **Which Compose file wins, and which name source.** Do not reimplement Compose's precedence. Ask Compose: `docker compose config --format json` returned `broker-pa` in 103 ms for a checkout whose directory is `modelo-broker-pa`, and `docker compose ls --format json` names the exact `ConfigFiles` it read. This also covers the override file and an explicit file list, which a hand-written rule would have to track forever.
-2. **What proves a container reads this checkout's file.** Its mounts, not the directory Compose was started from. The live broker container carries `.../modelo-broker-pa/apps/backend -> /app` while its `working_dir` label is the repository root — the two differ, which is exactly why the label fails as an identity test.
+1. **Which Compose file wins, and which name source.** Do not reimplement Compose's precedence. Ask Compose: `docker compose config --format json` returned `billing` in 103 ms for a checkout whose directory is `acme-billing`, and `docker compose ls --format json` names the exact `ConfigFiles` it read. This also covers the override file and an explicit file list, which a hand-written rule would have to track forever.
+2. **What proves a container reads this checkout's file.** Its mounts, not the directory Compose was started from. The live broker container carries `.../acme-billing/apps/backend -> /app` while its `working_dir` label is the repository root — the two differ, which is exactly why the label fails as an identity test.
 3. **How to compare two spellings of one path.** Physically, on both sides — and both sides need it. The first draft claimed Docker reports mount sources already resolved; implementation measured that false on macOS, where a bind created under the temporary directory is reported with that spelling while the physical path carries a private prefix.
 
 ## Phase 1 — Design

@@ -6,7 +6,7 @@
 
 - [ ] T001 Créer le répertoire `.agents/skills/k8s-troubleshoot/` avec sous-dossiers `resources/` et `templates/`
 - [ ] T002 Écrire le Dockerfile dans `.agents/skills/k8s-troubleshoot/Dockerfile`
-- [ ] T003 [P] Écrire `.agents/skills/k8s-troubleshoot/resources/kubeconfig-format.md` — doc du format kubeconfig Modelo
+- [ ] T003 [P] Écrire `.agents/skills/k8s-troubleshoot/resources/kubeconfig-format.md` — doc du format kubeconfig
 
 ## Phase 2: Foundational (Skill principal)
 

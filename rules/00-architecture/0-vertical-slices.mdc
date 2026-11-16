@@ -51,10 +51,6 @@ func (h *HTTP) PostQuote(w http.ResponseWriter, r *http.Request) {
 func CalculateAndSave() { http.Get(...); db.Exec(...) }
 ```
 
-## Skill References
-
-- Functional error and effect styles (e.g. fp-ts) when the stack uses them: `skills/fp-ts-*/` as listed in project framework rules.
-
 ## Enforcement
 
 - **Detect**: Business `if/else` trees inside transport handlers; DB calls in the same file as tax calculations without ports; direct imports between slice internals.

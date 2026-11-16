@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: May 2, 2026
-**Feature**: [Link to spec.md](/Users/guilhemheinrich/lab/gh-agentic-workflow/specs/009-multi-tool-install/spec.md)
+**Feature**: [Link to spec.md](./specs/009-multi-tool-install/spec.md)
 
 ## Content Quality
 

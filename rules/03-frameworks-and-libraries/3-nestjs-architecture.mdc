@@ -66,14 +66,6 @@ src/
 3. **HTTP or DB code?** → Rule **R6**, then **R7** for cross-module access.
 4. **Unsure?** → Start with **R4** (pure domain) and **R7** (isolation).
 
-## Skill References
-
-- [fp-ts pragmatic](../../skills/fp-ts-pragmatic/SKILL.md)
-- [fp-ts errors](../../skills/fp-ts-errors/SKILL.md)
-- [fp-ts validation](../../skills/fp-ts-validation/SKILL.md)
-- [fp-ts backend](../../skills/fp-ts-backend/SKILL.md)
-- [fp-ts async practical](../../skills/fp-ts-async-practical/SKILL.md)
-
 ## SpecKit
 
 Planning workflows may reference `.specify/memory/constitution.md` where present; keep backend layout consistent with the rules above.

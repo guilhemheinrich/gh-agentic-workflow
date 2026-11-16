@@ -41,10 +41,10 @@ src/
 
 | ID | File | When to apply |
 |----|------|----------------|
-| R1 | [2-explicit-typing.mdc](../../rules/02-typescript-and-domain-conventions/2-explicit-typing.mdc) | Editing `/domain` types and signatures |
-| R2 | [2-semantic-jsdoc.mdc](../../rules/02-typescript-and-domain-conventions/2-semantic-jsdoc.mdc) | Adding docs / descriptions in domain |
-| R3 | [2-anti-currying.mdc](../../rules/02-typescript-and-domain-conventions/2-anti-currying.mdc) | Simplifying FP style in domain |
-| R4 | [2-pure-domain.mdc](../../rules/02-typescript-and-domain-conventions/2-pure-domain.mdc) | Keeping domain pure; typed errors |
+| R1 | [2-explicit-typing.mdc](../02-programming-languages/2-explicit-typing.mdc) | Editing `/domain` types and signatures |
+| R2 | [2-semantic-jsdoc.mdc](../02-programming-languages/2-semantic-jsdoc.mdc) | Adding docs / descriptions in domain |
+| R3 | [2-anti-currying.mdc](../02-programming-languages/2-anti-currying.mdc) | Simplifying FP style in domain |
+| R4 | [2-pure-domain.mdc](../02-programming-languages/2-pure-domain.mdc) | Keeping domain pure; typed errors |
 | R5 | [3-flat-orchestration.mdc](../../rules/03-frameworks-and-libraries/3-flat-orchestration.mdc) | Use cases and application layer |
 | R6 | [3-typed-boundaries.mdc](../../rules/03-frameworks-and-libraries/3-typed-boundaries.mdc) | Controllers, repos, external APIs |
 | R7 | [3-module-isolation.mdc](../../rules/03-frameworks-and-libraries/3-module-isolation.mdc) | Imports between modules |
@@ -55,16 +55,6 @@ src/
 2. **Editing a Nest service use case?** → Rule **5**, then **6** for DTO validation.
 3. **Editing HTTP or DB code?** → Rule **6**, then **7** for cross-module access.
 4. **Unsure which rule applies?** → Start with **R4** (pure domain) and **R7** (isolation).
-
-## Skills (deep dives)
-
-Functional patterns and examples live under `skills/` (see links inside each rule). Start with:
-
-- [fp-ts pragmatic](../../skills/fp-ts-pragmatic/SKILL.md)
-- [fp-ts errors](../../skills/fp-ts-errors/SKILL.md)
-- [fp-ts validation](../../skills/fp-ts-validation/SKILL.md)
-- [fp-ts backend](../../skills/fp-ts-backend/SKILL.md)
-- [fp-ts async practical](../../skills/fp-ts-async-practical/SKILL.md)
 
 ## SpecKit
 

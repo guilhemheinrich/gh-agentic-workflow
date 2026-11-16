@@ -60,7 +60,7 @@ Refactorer les 21 fichiers `.mdc` existants pour qu'ils décrivent exclusivement
 
 | Fichier actuel | Diagnostic | Action |
 |---|---|---|
-| `5-spec-driven-dev.mdc` | Bon — workflow description | Garder, rendre plus agnostique (enlever les references au roadmap Modelo) |
+| `5-spec-driven-dev.mdc` | Bon — workflow description | Garder, rendre plus agnostique (enlever les references au roadmap interne) |
 | `5-spec-indexing.mdc` | Mix déclaratif + algorithme procédural | Garder l'algorithme en pseudo-code (c'est une règle formelle sur la séquence). |
 
 ### Catégorie 07-quality-assurance

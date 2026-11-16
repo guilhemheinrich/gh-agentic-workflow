@@ -21,7 +21,7 @@ Identify and resolve Kubernetes infrastructure problems within the scope allowed
 ```
 /k8s-troubleshoot [kubeconfig-path] [options]
 /k8s-troubleshoot ./kubeconfig.yaml
-/k8s-troubleshoot /Users/me/code/MODELO_HUB/modelo-meet/kubeconfig.yaml
+/k8s-troubleshoot /home/me/code/my-app/kubeconfig.yaml
 /k8s-troubleshoot ./kubeconfig.yaml my-pod-abc123
 /k8s-troubleshoot --report-only
 ```
@@ -50,7 +50,7 @@ The skill also ships a **Dockerfile** that must be used for all kubectl operatio
    - `../kubeconfig.yaml` (parent)
    - `~/.kube/config-dashboard`
 3. If no file is found, **ask the user for the path**. Explain:
-   > The kubeconfig is downloaded from the K8S Dashboard Septeo (https://modelo-dashboard-k8s-preprod.septeo.fr) — sign in via SSO — select a namespace — click the **Kubeconfig** button in the header bar.
+   > The kubeconfig is downloaded from your organization's Kubernetes dashboard (ask your DevOps team for the URL) — sign in via SSO — select a namespace — click the **Kubeconfig** button in the header bar.
 
 Store the resolved absolute path as `KUBECONFIG_PATH` for subsequent steps.
 
@@ -90,7 +90,7 @@ $K8S_CMD config get-contexts
 |---|---|---|
 | `401 Unauthorized` / `You must be logged in` | Expired token | Ask user to re-download kubeconfig from dashboard |
 | `connection refused` | Invalid kubeconfig | Re-download kubeconfig |
-| `dial tcp: lookup ...` / `i/o timeout` | Network / VPN | Verify the user is connected to the Septeo VPN |
+| `dial tcp: lookup ...` / `i/o timeout` | Network / VPN | Verify the user is connected to the corporate VPN |
 | `namespace not found` | Wrong context | Check `current-context` in the kubeconfig |
 
 **STOP** if connectivity fails — do not continue the diagnosis.

@@ -26,12 +26,12 @@ Approach is purely textual editing of `.mdc` files against the conventions in [`
 
 ## Constitution Check
 
-This repo has no `.specify/memory/constitution.md`. The de-facto constitution for this spec is the rules-structure rule itself plus standing Septeo discipline:
+This repo has no `.specify/memory/constitution.md`. The de-facto constitution for this spec is the rules-structure rule itself plus standing organization discipline:
 
 | Principle | Source | Compliance |
 |-----------|--------|------------|
-| English-only artifacts | Septeo standing rule | PASS — both produced files English. |
-| No personal traces (absolute paths, usernames, `$HOME`) | Septeo standing rule | PASS — only repo-relative paths used. |
+| English-only artifacts | Standing rule | PASS — both produced files English. |
+| No personal traces (absolute paths, usernames, `$HOME`) | Standing rule | PASS — only repo-relative paths used. |
 | P1 (one category per file) | `0-rules-structure.mdc` | PASS — P7 stays inside `05-workflows-and-processes/`; UI rule lives in `07-quality-assurance/`. |
 | P2 (narrow globs) | `0-rules-structure.mdc` | PASS — UI rule globs narrow to frontend extensions only; no `**/*` catch-all. |
 | P3 (no framework-specific syntax in agnostic categories) | `0-rules-structure.mdc` | PASS — UI rule body stays declarative, references no specific framework syntax. |

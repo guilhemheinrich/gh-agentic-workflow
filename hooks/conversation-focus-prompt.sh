@@ -113,7 +113,7 @@ if [[ -n "$meta_doc" ]]; then
       meta_lines+=("- Pinned subject of this session: «${subject:-unset}». Judge the split check against it, not against the latest turns. If the user deliberately redefines the session's subject, re-pin it: $meta_cmd set $meta_h $session_id subject \"<new subject>\".") ;;
     generalist)
       if [[ "${CLAUDE_CODE_ENTRYPOINT:-}" == "claude-desktop" ]]; then
-        place="When the message names the project (e.g. \"côté modelo-calendar\"), start the session there: mcp__ccd_session__start_session with initiation \"user_asked\", context \"fresh\" and cwd set to the project folder as mcp__ccd_session__list_start_targets names it. Otherwise offer it with a title that names the project; if the new session cannot be opened in that folder, tell the user in one line which project to open it in."
+        place="When the message names the project (e.g. \"côté acme-calendar\"), start the session there: mcp__ccd_session__start_session with initiation \"user_asked\", context \"fresh\" and cwd set to the project folder as mcp__ccd_session__list_start_targets names it. Otherwise offer it with a title that names the project; if the new session cannot be opened in that folder, tell the user in one line which project to open it in."
       else
         place='Suggest the new session in one line, naming the project folder to open it in.'
       fi

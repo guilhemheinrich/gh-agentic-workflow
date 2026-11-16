@@ -55,11 +55,6 @@ create(@Body() body: any) {
 }
 ```
 
-## Skill References
-
-- Validation + error accumulation with fp-ts: [fp-ts validation skill](../../skills/fp-ts-validation/SKILL.md).
-- Error channel patterns: [fp-ts errors skill](../../skills/fp-ts-errors/SKILL.md).
-
 ## Enforcement
 
 - **Detect**: `any` / untyped `@Body()`; repository classes in misnamed files; Zod schemas defined inside `/domain` (move to boundary DTO modules).

@@ -10,73 +10,73 @@ tags:
   - infrastructure
 ---
 
-# `/k8s-troubleshoot` — Diagnostic et résolution d'incidents Kubernetes
+# `/k8s-troubleshoot` — Kubernetes Infrastructure Troubleshooting
 
-## Objectif
+## Goal
 
-Identifier et résoudre les problèmes d'infrastructure Kubernetes dans le périmètre autorisé par le compte de service. Pour les problèmes hors scope, générer un rapport DevOps structuré et actionnable.
+Identify and resolve Kubernetes infrastructure problems within the scope allowed by the service account. For out-of-scope problems, generate a structured, actionable DevOps report.
 
 ## Usage
 
 ```
 /k8s-troubleshoot [kubeconfig-path] [options]
 /k8s-troubleshoot ./kubeconfig.yaml
-/k8s-troubleshoot /Users/me/code/MODELO_HUB/modelo-meet/kubeconfig.yaml
-/k8s-troubleshoot ./kubeconfig.yaml mon-pod-abc123
+/k8s-troubleshoot /home/me/code/my-app/kubeconfig.yaml
+/k8s-troubleshoot ./kubeconfig.yaml my-pod-abc123
 /k8s-troubleshoot --report-only
 ```
 
-| Argument | Description | Défaut |
+| Argument | Description | Default |
 |---|---|---|
-| `kubeconfig-path` | Chemin vers le fichier kubeconfig | `./kubeconfig.yaml` (racine du projet courant) |
-| `pod-name` | Nom d'un pod spécifique à diagnostiquer | _(namespace complet)_ |
-| `--report-only` | Diagnostic seul, aucune modification appliquée | _(corrections proposées)_ |
+| `kubeconfig-path` | Path to the kubeconfig file | `./kubeconfig.yaml` (project root) |
+| `pod-name` | Specific pod to diagnose | _(full namespace scan)_ |
+| `--report-only` | Diagnosis only, no modifications applied | _(fixes proposed)_ |
 
 ---
 
-## Prérequis — Lire le skill
+## Prerequisites — Read the skill
 
-**OBLIGATOIRE** : Lire et appliquer le skill `.agents/skills/k8s-troubleshoot/SKILL.md` avant toute action. Il contient les procédures détaillées, les commandes, et les limitations du compte.
+**MANDATORY**: Find and read the **k8s-troubleshoot** skill before taking any action. It contains detailed procedures, commands, the scope permissions matrix, and the DevOps report template/examples.
 
-Consulter aussi :
-- `.agents/skills/k8s-troubleshoot/resources/scope-permissions.md` — matrice des actions autorisées/interdites
-- `.agents/skills/k8s-troubleshoot/resources/dashboard-docs.md` — documentation du K8S Dashboard Septeo
+The skill also ships a **Dockerfile** that must be used for all kubectl operations — never run kubectl on the host.
 
 ---
 
-## Step 1 — Résoudre le chemin du kubeconfig
+## Step 1 — Resolve the kubeconfig path
 
-1. Si l'utilisateur a fourni un chemin, l'utiliser.
-2. Sinon, chercher dans cet ordre :
-   - `./kubeconfig.yaml` (racine du projet courant)
+1. If the user provided a path, use it.
+2. Otherwise, search in this order:
+   - `./kubeconfig.yaml` (current project root)
    - `../kubeconfig.yaml` (parent)
    - `~/.kube/config-dashboard`
-3. Si aucun fichier trouvé, **demander le chemin à l'utilisateur**. Expliquer :
-   > Le kubeconfig se télécharge depuis le K8S Dashboard Septeo (https://modelo-dashboard-k8s-preprod.septeo.fr) → se connecter via SSO → sélectionner un namespace → bouton **Kubeconfig** dans la barre d'en-tête.
+3. If no file is found, **ask the user for the path**. Explain:
+   > The kubeconfig is downloaded from your organization's Kubernetes dashboard (ask your DevOps team for the URL) — sign in via SSO — select a namespace — click the **Kubeconfig** button in the header bar.
 
-Stocker le chemin absolu résolu dans une variable `KUBECONFIG_PATH` pour la suite.
+Store the resolved absolute path as `KUBECONFIG_PATH` for subsequent steps.
 
 ---
 
-## Step 2 — Build de l'image Docker
+## Step 2 — Build the Docker image
+
+Build the image from the Dockerfile shipped alongside the skill:
 
 ```bash
-docker build -t k8s-troubleshoot .agents/skills/k8s-troubleshoot/
+docker build -t k8s-troubleshoot <path-to-skill-dockerfile-directory>/
 ```
 
-Si l'image est déjà buildée (vérifiable avec `docker images k8s-troubleshoot`), sauter cette étape.
+If the image is already built (check with `docker images k8s-troubleshoot`), skip this step.
 
-Définir la variable de commande :
+Define the command variable:
 
 ```bash
 K8S_CMD="docker run --rm -v ${KUBECONFIG_PATH}:/home/.kube/config:ro -e KUBECONFIG=/home/.kube/config k8s-troubleshoot"
 ```
 
-**CRITIQUE** : Toute commande `kubectl` DOIT passer par `$K8S_CMD`. Jamais de `kubectl` exécuté directement sur le host.
+**CRITICAL**: Every `kubectl` command MUST go through `$K8S_CMD`. Never run `kubectl` directly on the host.
 
 ---
 
-## Step 3 — Validation de la connectivité
+## Step 3 — Validate connectivity
 
 ```bash
 $K8S_CMD cluster-info
@@ -84,22 +84,22 @@ $K8S_CMD auth can-i --list
 $K8S_CMD config get-contexts
 ```
 
-### Si échec de connectivité
+### If connectivity fails
 
-| Erreur | Diagnostic | Action |
+| Error | Diagnosis | Action |
 |---|---|---|
-| `401 Unauthorized` / `You must be logged in` | Token expiré | Demander à l'utilisateur de retélécharger le kubeconfig depuis le dashboard |
-| `connection refused` | Kubeconfig invalide | Retélécharger le kubeconfig |
-| `dial tcp: lookup ...` / `i/o timeout` | Réseau / VPN | Vérifier que l'utilisateur est connecté au VPN Septeo |
-| `namespace not found` | Mauvais contexte | Vérifier `current-context` dans le kubeconfig |
+| `401 Unauthorized` / `You must be logged in` | Expired token | Ask user to re-download kubeconfig from dashboard |
+| `connection refused` | Invalid kubeconfig | Re-download kubeconfig |
+| `dial tcp: lookup ...` / `i/o timeout` | Network / VPN | Verify the user is connected to the corporate VPN |
+| `namespace not found` | Wrong context | Check `current-context` in the kubeconfig |
 
-**STOP** si la connectivité échoue — ne pas continuer le diagnostic.
+**STOP** if connectivity fails — do not continue the diagnosis.
 
 ---
 
-## Step 4 — Scan du namespace
+## Step 4 — Scan the namespace
 
-Exécuter les commandes suivantes et afficher un résumé :
+Run the following commands and display a summary:
 
 ```bash
 $K8S_CMD get pods -o wide
@@ -108,55 +108,55 @@ $K8S_CMD get deployments
 $K8S_CMD get svc
 ```
 
-### Classifier les anomalies détectées
+### Classify detected anomalies
 
-Pour chaque pod non-Ready, identifier le statut :
-- **CrashLoopBackOff** → procédure CrashLoop du skill
-- **ImagePullBackOff / ErrImagePull** → procédure ImagePull du skill
-- **OOMKilled** (visible dans describe) → procédure OOM du skill
-- **Pending** → procédure Pending du skill
-- **Error / Unknown** → procédure générique du skill
+For each non-Ready pod, identify the status:
+- **CrashLoopBackOff** — follow the CrashLoop procedure from the skill
+- **ImagePullBackOff / ErrImagePull** — follow the ImagePull procedure
+- **OOMKilled** (visible in describe) — follow the OOM procedure
+- **Pending** — follow the Pending procedure
+- **Error / Unknown** — follow the generic procedure
 
-Pour les events Warning récents :
-- Corréler avec les pods affectés
-- Identifier les patterns récurrents (scheduling, probes, volumes)
+For recent Warning events:
+- Correlate with affected pods
+- Identify recurring patterns (scheduling, probes, volumes)
 
-Si un pod spécifique a été demandé par l'utilisateur, **prioriser** ce pod mais ne pas ignorer les autres anomalies du namespace.
+If the user requested a specific pod, **prioritize** that pod but do not ignore other namespace anomalies.
 
-Afficher un **tableau résumé** :
+Display a **summary table**:
 
 ```
-| Pod | Status | Restarts | Age | Problème identifié |
+| Pod | Status | Restarts | Age | Identified Problem |
 |-----|--------|----------|-----|--------------------|
 | ... | ...    | ...      | ... | ...                |
 ```
 
 ---
 
-## Step 5 — Diagnostic détaillé (pour chaque anomalie)
+## Step 5 — Detailed diagnosis (for each anomaly)
 
-Pour chaque problème identifié, suivre la procédure correspondante du skill (section "Diagnostic Procedures").
+For each identified problem, follow the corresponding procedure from the skill (Diagnostic Procedures section).
 
-**Toujours collecter** :
+**Always collect**:
 1. `$K8S_CMD describe pod <pod>` — events, conditions, exit codes
-2. `$K8S_CMD logs <pod>` (et `--previous` si restarts > 0)
-3. Events corrélés
+2. `$K8S_CMD logs <pod>` (and `--previous` if restarts > 0)
+3. Correlated events
 
-Après diagnostic, **classifier chaque problème** :
+After diagnosis, **classify each problem**:
 
-### Problème IN-SCOPE (corrigeable)
+### IN-SCOPE problem (fixable)
 
-Actions possibles :
-- Modifier un ConfigMap : `$K8S_CMD patch configmap <name> --type merge -p '{"data":{"KEY":"VALUE"}}'`
-- Relancer un déploiement : `$K8S_CMD rollout restart deployment/<name>`
-- Vérifier un rollout : `$K8S_CMD rollout status deployment/<name>`
+Possible actions:
+- Modify a ConfigMap: `$K8S_CMD patch configmap <name> --type merge -p '{"data":{"KEY":"VALUE"}}'`
+- Restart a deployment: `$K8S_CMD rollout restart deployment/<name>`
+- Verify a rollout: `$K8S_CMD rollout status deployment/<name>`
 
-### Problème OUT-OF-SCOPE (rapport DevOps)
+### OUT-OF-SCOPE problem (DevOps report)
 
-Problèmes nécessitant une escalade :
-- Secret manquant ou incorrect
-- Image Docker introuvable ou registry inaccessible
-- Resource limits/requests insuffisants (OOMKilled)
+Problems requiring escalation:
+- Missing or incorrect Secret
+- Docker image not found or registry inaccessible
+- Insufficient resource limits/requests (OOMKilled)
 - Networking / NetworkPolicy
 - Ingress / TLS
 - Scaling (HPA, replicas)
@@ -164,67 +164,67 @@ Problèmes nécessitant une escalade :
 
 ---
 
-## Step 6 — Appliquer les corrections (si pas `--report-only`)
+## Step 6 — Apply fixes (unless `--report-only`)
 
-Pour chaque correction in-scope identifiée :
+For each identified in-scope fix:
 
-1. **Expliquer** clairement ce qui va être modifié et pourquoi
-2. **Montrer** la commande exacte qui sera exécutée
-3. **Demander confirmation** explicite à l'utilisateur avant d'appliquer
-4. **Exécuter** la correction
-5. **Vérifier** le résultat :
-   - `$K8S_CMD rollout status deployment/<name>` après un rollout restart
-   - `$K8S_CMD get pods` pour confirmer que les pods redémarrent correctement
-   - `$K8S_CMD exec <new-pod> -- env | grep KEY` pour valider une variable d'env modifiée
-
----
-
-## Step 7 — Générer le(s) rapport(s) DevOps (si problèmes hors scope)
-
-Pour chaque problème identifié comme hors périmètre :
-
-1. Utiliser le template `.agents/skills/k8s-troubleshoot/templates/devops-report.md`
-2. Consulter les exemples `.agents/skills/k8s-troubleshoot/templates/devops-report-examples.md` pour le ton et le niveau de détail
-3. **OBLIGATOIRE dans le rapport** :
-   - Description factuelle du problème
-   - **Evidence réelle** : extraits de `kubectl describe`, `kubectl logs`, `kubectl get events` (pas d'exemple fictif — des vraies sorties du diagnostic)
-   - Cause probable avec raisonnement
-   - Action demandée au DevOps (commande suggérée si possible)
-   - **Justification** : pourquoi le DevOps doit agir (le DevOps doit comprendre le "pourquoi" sans contexte additionnel)
-   - Impact si non résolu
-4. Écrire le fichier à la racine du projet : `DEVOPS_REPORT_<YYYY-MM-DD>_<résumé-court>.md`
+1. **Explain** clearly what will be modified and why
+2. **Show** the exact command that will be executed
+3. **Ask for explicit confirmation** from the user before applying
+4. **Execute** the fix
+5. **Verify** the result:
+   - `$K8S_CMD rollout status deployment/<name>` after a rollout restart
+   - `$K8S_CMD get pods` to confirm pods are restarting correctly
+   - `$K8S_CMD exec <new-pod> -- env | grep KEY` to validate a modified env var
 
 ---
 
-## Step 8 — Résumé final
+## Step 7 — Generate DevOps report(s) (if out-of-scope problems exist)
 
-Afficher un résumé structuré à l'utilisateur :
+For each problem identified as out-of-scope:
+
+1. Use the DevOps report template shipped with the skill
+2. Consult the report examples shipped with the skill for tone and level of detail
+3. **MANDATORY in the report**:
+   - Factual problem description
+   - **Real evidence**: actual excerpts from `kubectl describe`, `kubectl logs`, `kubectl get events` (no fake output — real diagnostic output only)
+   - Root cause analysis with reasoning
+   - Requested action for DevOps (suggested command if possible)
+   - **Justification**: why the DevOps must act (they must understand the "why" without additional context)
+   - Impact if left unresolved
+4. Write the file at the project root: `DEVOPS_REPORT_<YYYY-MM-DD>_<short-summary>.md`
+
+---
+
+## Step 8 — Final summary
+
+Display a structured summary to the user:
 
 ```
-## Résultat du diagnostic
+## Diagnosis Result
 
-### Namespace : <namespace>
-### Cluster : <cluster>
+### Namespace: <namespace>
+### Cluster: <cluster>
 
-### Problèmes détectés : N
+### Problems detected: N
 
-| # | Ressource | Problème | Statut | Action |
-|---|-----------|----------|--------|--------|
-| 1 | pod/xxx   | CrashLoop (config manquante) | ✅ Corrigé | ConfigMap patché + rollout restart |
-| 2 | pod/yyy   | OOMKilled | 📄 Rapport | DEVOPS_REPORT_2026-04-28_oom-search-indexer.md |
-| 3 | pod/zzz   | ImagePullBackOff | 📄 Rapport | DEVOPS_REPORT_2026-04-28_image-pull-api.md |
+| # | Resource | Problem | Status | Action |
+|---|----------|---------|--------|--------|
+| 1 | pod/xxx  | CrashLoop (missing config) | ✅ Fixed | ConfigMap patched + rollout restart |
+| 2 | pod/yyy  | OOMKilled | 📄 Report | DEVOPS_REPORT_2026-04-28_oom-search-indexer.md |
+| 3 | pod/zzz  | ImagePullBackOff | 📄 Report | DEVOPS_REPORT_2026-04-28_image-pull-api.md |
 
-### Fichiers générés :
+### Generated files:
 - DEVOPS_REPORT_2026-04-28_oom-search-indexer.md
 - DEVOPS_REPORT_2026-04-28_image-pull-api.md
 ```
 
 ---
 
-## Règles critiques
+## Critical rules
 
-- **JAMAIS** exécuter `kubectl` directement sur le host → toujours via le conteneur Docker
-- **JAMAIS** modifier des Secrets, Ingress, Namespace, ClusterRole, images, ou scale
-- **TOUJOURS** demander confirmation avant d'appliquer une modification in-scope
-- **TOUJOURS** inclure des logs/events réels dans les rapports DevOps (pas de placeholders)
-- Si le kubeconfig est expiré ou invalide, **guider** l'utilisateur vers le K8S Dashboard pour en télécharger un nouveau
+- **NEVER** run `kubectl` directly on the host — always via the Docker container
+- **NEVER** modify Secrets, Ingress, Namespace, ClusterRole, images, or scale
+- **ALWAYS** ask for confirmation before applying an in-scope modification
+- **ALWAYS** include real logs/events in DevOps reports (no placeholders)
+- If the kubeconfig is expired or invalid, **guide** the user to the K8S Dashboard to download a fresh one

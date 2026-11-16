@@ -17,7 +17,7 @@ alwaysApply: false
 - Secrets go through Kubernetes Secrets, never ConfigMaps
 - Health probes must match actual application health endpoints
 - Resource requests and limits are mandatory for every container and must fit within namespace quotas
-- Image registry: modelo-registry.septeo.fr/modelo/hub
+- Image registry: registry.example.com/acme/app
 - Image tags must be overridable via --set image.tag
 - Only frontend and backend application services are deployed — databases, caches, and brokers are external
 - Database, cache, and broker services are deployed from a separate infrastructure repository

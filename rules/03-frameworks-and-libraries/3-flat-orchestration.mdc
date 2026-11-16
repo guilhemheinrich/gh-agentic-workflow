@@ -56,11 +56,6 @@ export class CreateInvoiceUseCase {
 }
 ```
 
-## Skill References
-
-- `pipe` / `flow` composition: [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md).
-- Async `TaskEither` pipelines: [fp-ts async practical skill](../../skills/fp-ts-async-practical/SKILL.md).
-
 ## Enforcement
 
 - **Detect**: Large methods with nested `if`/`else` business logic in use cases; direct SQL in use case class.

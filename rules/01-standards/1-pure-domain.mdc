@@ -55,7 +55,6 @@ func MustPositive(n int) int {
 ## Skill References
 
 - TypeScript / fp-ts specifics: [2-pure-domain.mdc](../02-programming-languages/2-pure-domain.mdc)
-- [fp-ts errors](../../skills/fp-ts-errors/SKILL.md) when the stack uses fp-ts
 
 ## Enforcement
 

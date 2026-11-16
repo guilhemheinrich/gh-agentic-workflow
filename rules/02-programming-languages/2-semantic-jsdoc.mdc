@@ -51,10 +51,6 @@ export function applyDiscount(subtotal: number, percentOff: number): number {
 }
 ```
 
-## Skill References
-
-- JSDoc is orthogonal to fp-ts; keep domain wording consistent with [fp-ts pragmatic skill](../../skills/fp-ts-pragmatic/SKILL.md) naming guidance when documenting pipelines.
-
 ## Enforcement
 
 - **Detect**: Missing file banner or missing `@description` on exported domain functions.

@@ -183,7 +183,7 @@ Each diagram must show:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│  NAMESPACE: modelo-<project>-pprod                                  │
+│  NAMESPACE: acme-<project>-pprod                                    │
 │  Source: staging branch → ArgoCD sync                               │
 │  Image tags: rc-<build-number>                                      │
 │                                                                     │
@@ -210,7 +210,7 @@ Each diagram must show:
          ▲ ArgoCD sync (staging branch)
          │
 ┌────────┴────────┐       ┌──────────────────────────┐
-│  Git repository  │       │  modelo-registry.septeo.fr│
+│  Git repository  │       │  registry.example.com     │
 │  (Bitbucket)     │       │  Docker images            │
 └──────────────────┘       └──────────────────────────┘
 ```
@@ -321,7 +321,7 @@ Generate `PRE_KUBIFY_REPORT.md` at the project root (or at `--output` path if sp
 
 Before running `/kubify`:
 
-- [ ] Confirm namespace names with infra team (convention: `modelo-<project>-<env>`)
+- [ ] Confirm namespace names with infra team (convention: `acme-<project>-<env>`)
 - [ ] Provision databases listed in §2 Infrastructure Dependencies
 - [ ] Provision cache/broker instances listed in §2
 - [ ] Prepare connection strings for each environment (pprod / prod)

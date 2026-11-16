@@ -118,7 +118,7 @@
       "id": "INFO-001",
       "axis": "Tasks ↔ Open Questions",
       "location": "tasks.md T011 + spec.md Open Questions",
-      "finding": "T011 correctly carries forward the spec's `[NEEDS CLARIFICATION: priority=P2]` for the future skill slug. Per Septeo policy this is deferred to REVIEW and is NOT a tasks-phase blocker.",
+      "finding": "T011 correctly carries forward the spec's `[NEEDS CLARIFICATION: priority=P2]` for the future skill slug. Per organization policy this is deferred to REVIEW and is NOT a tasks-phase blocker.",
       "action": "None — tasks.md handles it correctly."
     },
     {
