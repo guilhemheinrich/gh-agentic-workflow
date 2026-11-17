@@ -661,12 +661,15 @@ class MilestoneBandTests(unittest.TestCase):
 
 SEM_PASS = os.path.join(HERE, "fixtures", "semantics-pass.json")
 SEM_FAIL = os.path.join(HERE, "fixtures", "semantics-fail.json")
+SEM_STATE = os.path.join(HERE, "fixtures", "semantics-state-fail.json")
+SEM_ENV = os.path.join(HERE, "fixtures", "semantics-env-fail.json")
 SEMANTICS = os.path.join(HERE, "..", "references", "semantics.json")
 TEAM_KEYS = {"Product": ["INV"], "Technical": ["INV"]}
 
 
 class VerifyTests(unittest.TestCase):
-    """`verify` runs references/semantics.json: one passing and one failing fixture per rule."""
+    """The SHIPPED template (references/semantics.json) is one proposal among others: it must load and
+    behave on its fixtures. The engine itself is proven independent of it in EngineTests."""
 
     def setUp(self):
         self.dir = tempfile.TemporaryDirectory()
@@ -707,11 +710,16 @@ class VerifyTests(unittest.TestCase):
             "waiting-in-addressee-team": ["TT-6"],
             "proof-blocked-by-change": ["INV-11"],
             "proof-blocked-by-whole-lot": ["INV-10", "INV-11"],
+            "done-proof-needs-done-change": [],
+            "one-environment-at-most": [], "proof-has-environment": [], "environment-only-on-proof": [],
+            "lot-has-proof": [], "prod-proof-after-staging": [],
             "change-recommends-proof": ["INV-2"],
             "required-sections": ["INV-4"],
         }
         self.assertEqual(set(expected), {r["id"] for r in self.model["generic"]["rules"]})
         for rule, fails in expected.items():
+            if not fails:   # exercised on its own fixture, see the state tests below
+                continue
             with self.subTest(rule=rule):
                 status, failed, _ = self.outcome(SEM_FAIL, rule)
                 self.assertEqual((status, failed), ("FAIL", fails))
@@ -729,16 +737,19 @@ class VerifyTests(unittest.TestCase):
 
     def test_a_waiver_needs_the_word_none_in_the_proof_section(self):
         facts = ld.body_facts("## In plain words, with an example\n\nx\n\n## Recommended proof\n\n« none », internal.")
-        self.assertEqual(facts, {"sections": ["In plain words, with an example", "Recommended proof"], "proof_waiver": True})
-        self.assertFalse(ld.body_facts("## Recommended proof\n\nLink to the Proof, none yet.")["proof_waiver"])
-        self.assertIsNone(ld.body_facts("## Impact\n\nx")["proof_waiver"])
+        self.assertEqual(facts["sections"], ["In plain words, with an example", "Recommended proof"])
+        self.assertEqual(facts["texts"]["Recommended proof"], "none , internal.")
+        waiver = re.compile(next(r["waiver"]["match"] for r in ld.load_json(SEMANTICS)["generic"]["rules"] if "waiver" in r), re.I)
+        self.assertTrue(waiver.search(facts["texts"]["Recommended proof"]))
+        self.assertFalse(waiver.search(ld.body_facts("## Recommended proof\n\nLink to the Proof, none yet.")["texts"]["Recommended proof"]))
+        self.assertNotIn("Recommended proof", ld.body_facts("## Impact\n\nx")["texts"])
         self.assertIsNone(ld.body_facts(None))
 
     def test_cli_pass_exits_zero_and_prints_one_line_per_rule(self):
         res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("PASS    one-type  (8 checked, 0 fail, 0 unknown)", res.stdout)
-        self.assertIn("9 rule(s): 9 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
+        self.assertIn("15 rule(s): 15 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
 
     def test_cli_fail_exits_one_and_lists_identifiers(self):
         res = run_cli("verify", self.graph_file(SEM_FAIL), "--semantics", self.semantics_file(self.model))
@@ -761,6 +772,89 @@ class VerifyTests(unittest.TestCase):
         self.assertEqual(res.returncode, 1)
         self.assertIn("1 rule(s): 0 pass, 1 fail", res.stdout)
         self.assertNotEqual(run_cli("verify", g, "--rule", "nope").returncode, 0)
+
+    def test_a_done_proof_blocked_by_an_unfinished_dev_issue_fails(self):
+        status, failed, unknown = self.outcome(SEM_STATE, "done-proof-needs-done-change")
+        self.assertEqual((status, failed, unknown), ("FAIL", ["INV-3"], ["INV-5"]))   # INV-5: outside blocker, state unknown
+        (v,) = ld.verify_graph(self.model, self.graph(SEM_STATE), only=["done-proof-needs-done-change"])
+        self.assertIn("blocked by INV-1 (Technical task) still In Progress", dict((n["identifier"], w) for n, w in v.fail)["INV-3"])
+
+    def test_the_environment_rules_fail_on_the_right_issues(self):
+        expected = {
+            "one-environment-at-most": ["ENV-6"],
+            "proof-has-environment": ["ENV-4"],
+            "environment-only-on-proof": ["ENV-5"],
+            "lot-has-proof": ["Lot B", "Lot C"],
+            "prod-proof-after-staging": ["ENV-3", "ENV-6"],
+        }
+        for rule, fails in expected.items():
+            with self.subTest(rule=rule):
+                status, failed, _ = self.outcome(SEM_ENV, rule)
+                self.assertEqual((status, failed), ("FAIL", fails))
+
+    def test_the_lot_report_reads_the_environment_from_the_proofs(self):
+        (rp,) = ld.build_reports(self.model, self.graph(SEM_ENV))
+        rows = {r["grouping"]: r["cells"] for r in rp["rows"]}
+        self.assertEqual(rows["Lot A"]["Staging"], {"done": 1, "total": 2, "status": "pending"})
+        self.assertEqual(rows["Lot A"]["Prod"], {"done": 0, "total": 2, "status": "pending"})
+        self.assertEqual(rows["Lot C"]["Staging"]["status"], "none")
+        done = ld.build_reports(self.model, self.graph(SEM_PASS))[0]["rows"][0]["cells"]
+        self.assertEqual((done["Staging"]["total"], done["Prod"]["total"]), (1, 1))
+
+    def test_the_text_report_prints_one_line_per_lot(self):
+        res = run_cli("verify", self.graph_file(SEM_ENV), "--exit-zero")
+        self.assertIn("report lot-environments", res.stdout)
+        self.assertRegex(res.stdout, r"Lot A\s+Staging ⧗ 1/2   Prod ⧗ 0/2")
+        self.assertRegex(res.stdout, r"Lot C\s+Staging - 0/0   Prod - 0/0")
+
+    def test_open_only_does_not_hide_the_state_rule(self):
+        (v,) = ld.verify_graph(self.model, self.graph(SEM_STATE), only=["done-proof-needs-done-change"], open_only=True)
+        self.assertEqual([n["identifier"] for n, _ in v.fail], ["INV-3"])
+
+    def overlay(self, **kw):
+        path = os.path.join(self.dir.name, "rules.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(kw, fh)
+        return path
+
+    def test_an_overlay_adds_rules_and_a_milestone_rule_is_project_level(self):
+        rules = self.overlay(rules=[
+            {"id": "staging-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "staging"},
+            {"id": "prod-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "^prod", "min": 1}])
+        model = ld.load_semantics(SEMANTICS, [rules])
+        v = {x.rule["id"]: x for x in ld.verify_graph(model, self.graph(SEM_STATE))}
+        self.assertEqual(v["staging-milestone"].status, "FAIL")   # milestones: Lot A, Prod
+        self.assertEqual(v["prod-milestone"].status, "PASS")
+        good = ld.verify_graph(model, self.graph(SEM_PASS), only=["staging-milestone"])[0]
+        self.assertEqual(good.status, "PASS")                      # « Staging: invitations »
+
+    def test_a_strict_feature_proof_rule_refuses_the_none_waiver(self):
+        rules = self.overlay(rules=[{"id": "change-recommends-proof", "rule": "linked-or-waived", "subject": "Feature",
+                                     "relations": ["blocks", "related"], "object": "Proof", "waivable": False}])
+        model = ld.load_semantics(SEMANTICS, [rules])    # same id: replaces the base rule
+        (v,) = ld.verify_graph(model, self.graph(SEM_STATE), only=["change-recommends-proof"])
+        self.assertEqual(sorted(n["identifier"] for n, _ in v.fail), ["INV-6"])
+
+    def test_disable_and_bad_overlays_are_refused(self):
+        model = ld.load_semantics(SEMANTICS, [self.overlay(disable=["one-type"])])
+        self.assertNotIn("one-type", {r["id"] for r in model["generic"]["rules"]})
+        for bad in (dict(disable=["nope"]), dict(extra=1), dict(rules=[{"rule": "grouping-exists"}]),
+                    dict(rules=[{"id": "x", "rule": "grouping-exists", "grouping": "lot", "match": "("}]),
+                    dict(rules=[{"id": "x", "rule": "blocked-by-any", "objects": "@change"}])):
+            with self.subTest(bad=bad), self.assertRaises(SystemExit):
+                ld.load_semantics(SEMANTICS, [self.overlay(**bad)])
+
+    def test_cli_rules_flag_and_starter_file(self):
+        starter = os.path.join(self.dir.name, "starter.json")
+        self.assertEqual(run_cli("verify", "--init-rules", starter).returncode, 0)
+        self.assertNotEqual(run_cli("verify", "--init-rules", starter).returncode, 0)   # never overwrites
+        res = run_cli("verify", self.graph_file(SEM_PASS), "--rules", starter)
+        self.assertIn("FAIL    bug-has-proof", res.stdout)      # INV-6 is a Bug with no linked Proof
+        self.assertIn("PASS    feature-has-proof", res.stdout)
+        res = run_cli("verify", self.graph_file(SEM_STATE), "--rules", starter)
+        self.assertEqual(res.returncode, 1, res.stdout)
+        self.assertIn("N/A     bug-has-proof", res.stdout)
+        self.assertIn("FAIL    feature-has-proof", res.stdout)
 
     def test_the_vocabulary_is_closed(self):
         self.model["generic"]["rules"].append({"id": "x", "rule": "vibes", "subject": "Bug"})
@@ -819,3 +913,114 @@ class MilestoneStub(http.server.BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+ENGINE_MODEL = os.path.join(HERE, "fixtures", "engine-model.json")
+ENGINE_RAW = os.path.join(HERE, "fixtures", "engine-raw.json")
+ENGINE_EXPECTED = [
+    ("a-wave-named-go", "(project)", "FAIL"),
+    ("check-done-needs-code-done", "ZZ-5", "FAIL"),
+    ("check-in-wave-of-code", "ZZ-5", "FAIL"),
+    ("spike-under-story", "ZZ-3", "FAIL"),
+    ("story-has-check", "ZZ-7", "FAIL"),
+    ("story-has-spike-or-skip", "ZZ-7", "FAIL"),
+    ("wave-has-check", "Later", "FAIL"),
+]
+VERIFY_FUNCTIONS = ("load_semantics", "apply_overlay", "retype", "resolve_types", "group_labels",
+                    "verify_rule", "verify_graph", "verify_main")
+BUSINESS_WORDS = ("proof", "feature", "bug", "addressee", "recommended", "lot", "improvement",
+                  "question", "research", "technical", "waiting")
+
+
+class EngineTests(unittest.TestCase):
+    """The engine is independent of the model: a vocabulary shared with nothing in the shipped file
+    (types Story/Spike/Check, label group Kind, grouping « wave ») yields an exact, deterministic list."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.graph_path = os.path.join(self.dir.name, "g.json")
+        with open(self.graph_path, "w", encoding="utf-8") as fh:
+            json.dump(ld.build_export(load(ENGINE_RAW), URL, "acme"), fh)
+
+    def run_json(self, *extra):
+        res = run_cli("verify", self.graph_path, "--semantics", ENGINE_MODEL, "--json", *extra)
+        return res, json.loads(res.stdout)
+
+    def test_the_list_of_inconsistencies_is_exact_and_deterministic(self):
+        res, first = self.run_json()
+        self.assertEqual([(f["rule"], f["issue"], f["status"]) for f in first["inconsistencies"]], ENGINE_EXPECTED)
+        self.assertEqual(self.run_json()[1], first)
+        self.assertEqual(res.stdout, self.run_json()[0].stdout)
+
+    def test_a_report_is_declared_by_the_model(self):
+        _, out = self.run_json()
+        (rp,) = out["reports"]
+        self.assertEqual((rp["id"], rp["by"]), ("wave-stages", ["Alpha", "Live"]))
+        rows = {r["grouping"]: r["cells"] for r in rp["rows"]}
+        self.assertEqual(rows["Wave 1"]["Live"], {"done": 1, "total": 1, "status": "done"})
+        self.assertEqual(rows["Wave 1"]["Alpha"]["status"], "none")
+        self.assertEqual(rows["Later"]["Live"]["status"], "none")
+
+    def test_an_issue_typed_with_another_vocabulary_is_not_judged(self):
+        _, out = self.run_json()
+        self.assertNotIn("ZZ-6", {f["issue"] for f in out["inconsistencies"]})   # label Type=Proof means nothing here
+
+    def test_a_finding_says_what_is_wrong(self):
+        _, out = self.run_json()
+        why = {(f["rule"], f["issue"]): f["reason"] for f in out["inconsistencies"]}
+        self.assertEqual(why[("check-done-needs-code-done", "ZZ-5")], "is Done but blocked by ZZ-2 (Story) still Doing")
+        self.assertEqual(why[("spike-under-story", "ZZ-3")], "no linked Story")
+        self.assertIn("Wave 1 | Later", why[("a-wave-named-go", "(project)")])
+
+    def test_it_reports_without_blocking_when_asked(self):
+        self.assertEqual(self.run_json()[0].returncode, 1)
+        self.assertEqual(self.run_json("--exit-zero")[0].returncode, 0)
+
+    def test_the_text_report_names_the_model_it_ran(self):
+        res = run_cli("verify", self.graph_path, "--semantics", ENGINE_MODEL, "--exit-zero")
+        self.assertIn("model: " + ENGINE_MODEL, res.stdout)
+
+    def test_the_engine_only_speaks_linear(self):
+        model = load(ENGINE_MODEL)
+        for label, edit in (
+                ("relation", lambda m: m["generic"]["rules"][1].update(relations=["depends"])),
+                ("grouping field", lambda m: m["binding"]["groupings"]["wave"].update(node_field="sprint")),
+                ("state kind", lambda m: m["binding"]["states"].update(done_kinds=["shipped"]))):
+            with self.subTest(label):
+                broken = json.loads(json.dumps(model))
+                edit(broken)
+                path = os.path.join(self.dir.name, "m.json")
+                with open(path, "w", encoding="utf-8") as fh:
+                    json.dump(broken, fh)
+                res = run_cli("verify", self.graph_path, "--semantics", path)
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn("Linear", res.stderr)
+
+    def test_a_waiver_is_declared_by_the_rule_not_known_to_the_engine(self):
+        model = load(ENGINE_MODEL)
+        model["generic"]["rules"][3]["waiver"]["match"] = "^because"      # now ZZ-2 is waived and ZZ-1 is not
+        path = os.path.join(self.dir.name, "m.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(model, fh)
+        _, out = self.run_json("--semantics", path)   # the later --semantics wins
+        waived = [f["issue"] for f in out["inconsistencies"] if f["rule"] == "story-has-spike-or-skip"]
+        self.assertEqual(waived, ["ZZ-1"])            # ZZ-7 now says « because » (waived); ZZ-1 says « skip » (no longer)
+
+    def test_verify_code_names_no_business_word(self):
+        import ast
+        import inspect
+        for name in VERIFY_FUNCTIONS:
+            tree = ast.parse(inspect.getsource(getattr(ld, name)).lstrip())
+            doc = {id(n.body[0]) for n in ast.walk(tree)
+                   if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and n.body and isinstance(n.body[0], ast.Expr)}
+            for node in ast.walk(tree):
+                words = []
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in doc:
+                    words.append(node.value)
+                if isinstance(node, ast.Name):
+                    words.append(node.id)
+                for text in words:
+                    for bad in BUSINESS_WORDS:
+                        with self.subTest(function=name, text=text, word=bad):
+                            self.assertNotIn(bad, text.lower())

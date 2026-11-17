@@ -1,0 +1,96 @@
+{
+ "project": {
+  "name": "State fail (made up)",
+  "milestones": [
+   "Lot A",
+   "Prod"
+  ]
+ },
+ "issues": [
+  {
+   "identifier": "INV-1",
+   "title": "Dev not done",
+   "state": "started",
+   "state_name": "In Progress",
+   "milestone": "Lot A",
+   "labels": [
+    "Technical task"
+   ]
+  },
+  {
+   "identifier": "INV-2",
+   "title": "Dev done",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Lot A",
+   "labels": [
+    "Feature"
+   ]
+  },
+  {
+   "identifier": "INV-3",
+   "title": "Proof done too early",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Lot A",
+   "labels": [
+    "Proof"
+   ]
+  },
+  {
+   "identifier": "INV-4",
+   "title": "Proof done, devs done",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Lot A",
+   "labels": [
+    "Proof"
+   ]
+  },
+  {
+   "identifier": "INV-5",
+   "title": "Proof done, outside blocker",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Lot A",
+   "labels": [
+    "Proof"
+   ]
+  },
+  {
+   "identifier": "INV-6",
+   "title": "Feature without proof",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Lot A",
+   "labels": [
+    "Feature"
+   ]
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "INV-1",
+   "to": "INV-3"
+  },
+  {
+   "type": "blocks",
+   "from": "INV-2",
+   "to": "INV-4"
+  },
+  {
+   "type": "blocks",
+   "from": "OUT-9",
+   "to": "INV-5"
+  }
+ ],
+ "external": {
+  "OUT-9": "outside"
+ },
+ "external_labels": {
+  "OUT-9": [
+   "Technical task"
+  ]
+ }
+}

@@ -15,7 +15,7 @@ lot, including the code tickets that recommended it, and sits in the lot's miles
 
 ## What is proved
 
-* Environment: staging | prod
+* Environment: the **Environment** label, Staging | Prod (one value)
 * Lot: <the milestone> — this proof is « blocked by » every issue of the lot
 * Expected version: <tag, SHA, or « the one of the lot's last merge »>
 

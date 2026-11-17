@@ -1,0 +1,122 @@
+{
+ "project": {
+  "name": "Engine fixture (made up)",
+  "milestones": [
+   "Wave 1",
+   "Later"
+  ]
+ },
+ "issues": [
+  {
+   "identifier": "ZZ-1",
+   "title": "Story with all",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Wave 1",
+   "labels": [
+    {
+     "name": "Story",
+     "group": "Kind"
+    }
+   ],
+   "description": "## Why\n\nskip the spike."
+  },
+  {
+   "identifier": "ZZ-2",
+   "title": "Story alone",
+   "state": "started",
+   "state_name": "Doing",
+   "milestone": "Wave 1",
+   "labels": [
+    {
+     "name": "Story",
+     "group": "Kind"
+    }
+   ],
+   "description": "## Why\n\nbecause."
+  },
+  {
+   "identifier": "ZZ-3",
+   "title": "Orphan spike",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Later",
+   "labels": [
+    {
+     "name": "Spike",
+     "group": "Kind"
+    }
+   ]
+  },
+  {
+   "identifier": "ZZ-4",
+   "title": "Spike under story",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Wave 1",
+   "parent": "ZZ-2",
+   "labels": [
+    {
+     "name": "Spike",
+     "group": "Kind"
+    }
+   ]
+  },
+  {
+   "identifier": "ZZ-5",
+   "title": "Check done too early",
+   "state": "completed",
+   "state_name": "Done",
+   "milestone": "Wave 1",
+   "labels": [
+    {
+     "name": "Check",
+     "group": "Kind"
+    },
+    {
+     "name": "Live",
+     "group": "Stage"
+    }
+   ]
+  },
+  {
+   "identifier": "ZZ-6",
+   "title": "Typed with the shipped vocabulary",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": null,
+   "labels": [
+    {
+     "name": "Proof",
+     "group": "Type"
+    }
+   ]
+  },
+  {
+   "identifier": "ZZ-7",
+   "title": "Story with nothing",
+   "state": "unstarted",
+   "state_name": "Todo",
+   "milestone": "Later",
+   "labels": [
+    {
+     "name": "Story",
+     "group": "Kind"
+    }
+   ],
+   "description": "## Why\n\nbecause."
+  }
+ ],
+ "relations": [
+  {
+   "type": "blocks",
+   "from": "ZZ-1",
+   "to": "ZZ-5"
+  },
+  {
+   "type": "blocks",
+   "from": "ZZ-2",
+   "to": "ZZ-5"
+  }
+ ]
+}
