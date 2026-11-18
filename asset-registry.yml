@@ -1227,7 +1227,8 @@ assets:
       read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline whether every issue of one type (every Proof)
       is blocked by an issue of other types (a development task). `linear_deps.py verify` lists the semantic
       inconsistencies of a project (a Done Proof blocked by an open change, a Feature without a Proof, a lot without a
-      staging Proof) against a user-written JSON ontology, never blocking, with a per-lot staging/prod report. `publish` is a verb of the `grievances` skill; this
+      staging Proof) against a user-written JSON ontology, never blocking, with a per-lot staging/prod report.
+      `linear_deps.py serve` runs a local page that draws one of your projects with live milestone, label and priority filters, backed by a SQLite cache of the Linear entities kept fresh by a differential pull. `publish` is a verb of the `grievances` skill; this
       skill is one backend that answers it, and it never writes a ledger. Use when wiring a repository to a Linear
       project, when a finding must leave a repository and become an issue someone can own, when auditing which findings
       are already tracked, or when deciding what a tracker can and cannot hold. It also proposes eight issue types (Bug,
