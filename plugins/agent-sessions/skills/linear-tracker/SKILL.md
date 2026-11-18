@@ -22,6 +22,7 @@ description: >-
   inconsistencies of a project (a Done Proof blocked by an open change, a Feature
   without a Proof, a lot without a staging Proof) against a user-written JSON
   ontology, never blocking, with a per-lot staging/prod report.
+  `linear_deps.py serve` runs a local page that draws one of your projects with live milestone, label and priority filters, backed by a SQLite cache of the Linear entities kept fresh by a differential pull.
   `publish` is a verb of the `grievances`
   skill; this skill is one backend that answers it, and it never writes a
   ledger. Use when wiring a repository to a Linear project, when a finding must
@@ -627,6 +628,69 @@ the command line. Python standard library only; Docker is the execution rule.
 | `--no-descriptions` | do not fetch or embed description excerpts (no text in the hover preview, `description_excerpt: null` in the JSON). Use it for an SVG that will be shared: descriptions can be sensitive |
 | `--from-json FILE` | no API call; read the normalized data from FILE (see below) |
 
+### Interactive page — `linear_deps.py serve`
+
+A local daemon that draws the same SVG in a web page with live filters. It lists the
+projects the key's user belongs to (member or lead); you pick **one** project at a
+time, then filter it by milestone (tick the ones to keep) and by label (any of the
+ticked ones). Priority is a third filter (Urgent, High, Medium, Low, No priority), and each card
+carries it as a left-to-right background tint of the priority's colour (red, orange,
+yellow, blue; none: no tint), in the CLI's SVG as well. The Milestones and Priority
+headings each have an "all / none" checkbox.
+A filter alone would cut the context, so **keep direct neighbors** (on by default)
+also draws the issues one blocking link away from the filtered ones, with only the
+links that touch a filtered issue. Two more toggles hide issues without dependency and
+show outside links.
+Each change re-renders the SVG server side with the CLI's own renderer; the page
+shows it in an iframe so the hover preview keeps working. The project is fetched
+once and reused for 60 s; **Refresh** refetches it from Linear.
+
+```bash
+mkdir -p ~/.cache/linear-tracker
+docker run --rm -e LINEAR_API_KEY -p 127.0.0.1:4420:4420 \
+  -v "$PWD/skills/linear-tracker/scripts":/s:ro -v ~/.cache/linear-tracker:/data -w /s python:3.12-slim \
+  python -B -I linear_deps.py serve --host 0.0.0.0 --port 4420 --db /data/linear.sqlite
+open http://localhost:4420
+```
+
+The key never leaves the process. `--host 0.0.0.0` is for inside the container only:
+the `-p 127.0.0.1:` mapping keeps the page on your machine, and the server refuses any
+`Host` header other than `localhost`, `127.0.0.1` or `[::1]` with its port.
+Outside Docker, plain `python3 linear_deps.py serve` binds `127.0.0.1:4420`.
+
+#### The local cache
+
+`serve` keeps what it reads in a SQLite file (`--db`, default `~/.cache/linear-tracker/linear.sqlite`,
+or `$LINEAR_TRACKER_DB`; `--no-db` goes back to reading Linear live). The scripts are mounted `:ro`,
+so in Docker the file needs its own writable volume, as above: without it the cache dies with the
+container. The API key is never written to the file.
+
+The tables follow Linear's entities and association tables: `teams`, `users`, `workflow_states`,
+`projects` (+ `project_teams`, `project_members`), `milestones`, `labels`, `issues` (+ `issue_labels`),
+`issue_relations`, and `sync_state` (the watermarks and the last error). `linear_store.py` returns the
+same dict as the live fetch, so the renderer cannot tell the difference (checked on a 216-issue project:
+identical issues, links, external issues and labels).
+
+A project is read in full the first time you open it (**backfill**), then kept fresh by a **differential
+pull** every `--sync-interval` seconds (default 60): the issues updated since a per-team watermark, archived
+ones included. The watermark is the highest server `updatedAt` seen, never the local clock; the pull
+re-reads five seconds before it and every write is an upsert. An issue moved out of a tracked project
+leaves the graph; one moved in appears.
+
+What a delta cannot see, and the **reconcile** that covers it (a full re-read of each tracked project every
+`--full-every` pulls, default 30, and on the page's **Refresh**): `issueRelations` has no `updatedAt`
+filter, so a "blocks" link added or removed without touching either issue can stay stale for up to
+`--full-every` x `--sync-interval` (30 min by default); and an issue that was *deleted* (not archived)
+never comes back in a delta, so only a reconcile drops it. The header shows when the project was last
+pulled, and the last error if the API could not be reached (the page keeps serving the cache).
+
+Out of scope: comments, cycles, history, webhooks, schema migrations. The file is a cache: delete it to
+start over.
+
+A project you are neither member nor lead of is not listed. Pin it with `--project
+<slugId>` (the hex tail of its URL, repeatable): `serve ... --project 5842ed0c2bcd`
+adds "Broker PA · Run & évolutions — courant".
+
 ### How to read the picture
 
 - **Milestone bands.** The picture is cut into vertical bands, one per project
@@ -1050,7 +1114,7 @@ by `lw wait`, the graph rebuild, and `lw doctor`:
 against a live project** (2026-11-09; JSON export, `check`, legend and richer cards
 2026-11-10):
 
-- `scripts/linear_deps.py`, `tests/linear_deps_test.py`,
+- `scripts/linear_deps.py`, `scripts/linear_serve.py`, `scripts/linear_store.py`, `scripts/linear_sync.py`, `tests/linear_deps_test.py`,
   `tests/run-linear-deps-in-docker.sh`, four made-up fixtures, one sample SVG.
 - 51 tests in Docker. The upstream chains: direct and transitive blockers, outside
   blockers only when drawn, a cycle that ends without listing the issue itself, the

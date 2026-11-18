@@ -31,7 +31,12 @@ MARGIN = 24
 TITLE_CHARS = 33
 CHIP_W, CHIP_H = 96, 24
 
-PROJECT_URL_RE = re.compile(r"^https?://linear\.app/([^/]+)/project/([^/?#]+)")
+# Linear's priority numbers: 0 none, 1 urgent, 2 high, 3 medium, 4 low. A card gets a left-to-right
+# tint of the priority's colour (none: no tint); the number is the one the API returns.
+PRIORITY_NAMES = {0: "No priority", 1: "Urgent", 2: "High", 3: "Medium", 4: "Low"}
+PRIORITY_COLORS = {1: "#e5484d", 2: "#f76b15", 3: "#e6b800", 4: "#3e8ed0"}
+
+PROJECT_URL_RE =re.compile(r"^https?://linear\.app/([^/]+)/project/([^/?#]+)")
 
 QUERY_PROJECT_BY_FILTER = """
 query($slug: String!) {
@@ -50,6 +55,7 @@ query($id: String!, $after: String) {
       pageInfo { hasNextPage endCursor }
       nodes {
         identifier title
+        priority priorityLabel
         description
         state { type name color }
         assignee { displayName }
@@ -143,6 +149,8 @@ def fetch_live(slug, api_url, descriptions=True):
                 "body": body_facts(n.get("description")) if descriptions else None,
                 "parent": (n.get("parent") or {}).get("identifier"),
                 "milestone": (n.get("projectMilestone") or {}).get("name"),
+                "priority": n.get("priority") or 0,
+                "priority_name": n.get("priorityLabel") or PRIORITY_NAMES[0],
                 "labels": gql_labels(n),
             })
             if n["relations"]["pageInfo"]["hasNextPage"] or n["inverseRelations"]["pageInfo"]["hasNextPage"]:
@@ -1193,6 +1201,7 @@ def card_tooltip(ident, n):
     kind, rest = card_labels(n)
     lines = ["%s: %s" % (ident, n["title"] or "(outside this project)")]
     facts = [("State", n.get("state_name") or n.get("state")), ("Type", kind),
+             ("Priority", n.get("priority_name") if n.get("priority") else None),
              ("Assignee", n.get("assignee")), ("Milestone", n.get("milestone")), ("Parent", n.get("parent")),
              ("Labels", ", ".join(rest))]
     lines += ["%s: %s" % (k, v) for k, v in facts if v]
@@ -1440,7 +1449,10 @@ def render_svg(data, graph, workspace, hide_isolated):
       '<path class="arrow-c" d="M0 0 L10 5 L0 10 z"/></marker>'
       '<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
       '<rect width="6" height="6" style="fill:var(--card)"/><rect width="2.2" height="6" style="fill:var(--hatch)"/>'
-      '</pattern></defs>')
+      '</pattern>%s</defs>' % "".join(
+          '<linearGradient id="pr%d" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="%s" stop-opacity=".42"/>'
+          '<stop offset="1" stop-color="%s" stop-opacity="0"/></linearGradient>' % (p, c, c)
+          for p, c in sorted(PRIORITY_COLORS.items())))
     w('<rect class="bg" width="100%" height="100%"/>')
     w('<text class="h" x="%d" y="28">%s</text>' % (MARGIN, escape(data["project"]["name"])))
     n_edges = len(graph["block"])
@@ -1509,6 +1521,9 @@ def render_svg(data, graph, workspace, hide_isolated):
         w('<title>%s</title>' % escape(card_tooltip(ident, n)))
         stroke = ' style="stroke:%s"' % color if color else ""
         w('<rect class="box" x="%.1f" y="%.1f" width="%d" height="%d" rx="8"%s/>' % (x, y, BOX_W, BOX_H, stroke))
+        if n.get("priority") in PRIORITY_COLORS and not n.get("external"):
+            w('<rect x="%.1f" y="%.1f" width="%d" height="%d" rx="8" fill="url(#pr%d)" pointer-events="none"/>'
+              % (x, y, BOX_W, BOX_H, n["priority"]))
         if color:
             w('<rect x="%.1f" y="%.1f" width="4" height="%d" rx="2" style="fill:%s"/>'
               % (x + 1.5, y + 8, BOX_H - 16, color))
@@ -1579,6 +1594,11 @@ def main(argv=None):
         return check_main(argv[1:])
     if argv[:1] == ["verify"]:
         return verify_main(argv[1:])
+    if argv[:1] == ["serve"]:
+        # `python -I` drops the script's directory from sys.path; the sibling module needs it back.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import linear_serve  # imported late: it imports this module back
+        return linear_serve.serve_main(argv[1:])
     ap = argparse.ArgumentParser(
         description="Render a Linear project's issue dependencies as a clickable SVG (and JSON with --json-out).",
         epilog='Then: linear_deps.py check deps.json --type Proof --blocked-by "Technical task,Feature" '
