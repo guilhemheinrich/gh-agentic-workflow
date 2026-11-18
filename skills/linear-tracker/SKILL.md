@@ -633,7 +633,11 @@ the command line. Python standard library only; Docker is the execution rule.
 A local daemon that draws the same SVG in a web page with live filters. It lists the
 projects the key's user belongs to (member or lead); you pick **one** project at a
 time, then filter it by milestone (tick the ones to keep) and by label (any of the
-ticked ones). A filter alone would cut the context, so **keep direct neighbors** (on by default)
+ticked ones). Priority is a third filter (Urgent, High, Medium, Low, No priority), and each card
+carries it as a left-to-right background tint of the priority's colour (red, orange,
+yellow, blue; none: no tint), in the CLI's SVG as well. The Milestones and Priority
+headings each have an "all / none" checkbox.
+A filter alone would cut the context, so **keep direct neighbors** (on by default)
 also draws the issues one blocking link away from the filtered ones, with only the
 links that touch a filtered issue. Two more toggles hide issues without dependency and
 show outside links.

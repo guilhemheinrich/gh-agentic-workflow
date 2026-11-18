@@ -6,6 +6,7 @@ import http.client
 import http.server
 import json
 import os
+import re
 import sys
 import threading
 import unittest
@@ -28,6 +29,8 @@ def labelled():
     data = load()
     for n, issue in enumerate(data["issues"]):
         issue["labels"] = [{"name": "api" if n % 2 else "ui", "group": "Area"}]
+        issue["priority"] = n % 5                      # 0 none, 1 urgent ... 4 low
+        issue["priority_name"] = ld.PRIORITY_NAMES[n % 5]
     return data
 
 
@@ -73,6 +76,33 @@ class FilterTest(unittest.TestCase):
         pairs = {(r["from"], r["to"]) for r in near["relations"]}
         self.assertIn(("MS-3", "MS-6"), pairs)          # seed to neighbor: kept
         self.assertNotIn(("MS-2", "MS-5"), pairs)       # neither end is a seed: left out
+
+    def test_priority_filter_keeps_only_the_ticked_priorities(self):
+        data = labelled()
+        out = ls.filter_data(data, None, None, priorities={1, 2})
+        self.assertEqual({i["priority"] for i in out["issues"]}, {1, 2})
+        self.assertEqual(len(ls.filter_data(data, None, None, priorities={0})["issues"]),
+                         len([i for i in data["issues"] if i["priority"] == 0]))
+
+    def test_facets_list_priorities_urgent_first_and_none_last(self):
+        f = ls.facets(labelled())
+        self.assertEqual([p["value"] for p in f["priorities"]], [1, 2, 3, 4, 0])
+        self.assertEqual(f["priorities"][0]["name"], "Urgent")
+        self.assertEqual(sum(p["count"] for p in f["priorities"]), len(load()["issues"]))
+
+    def test_issues_without_priority_data_count_as_none(self):
+        f = ls.facets(load())                          # the fixture predates priorities
+        self.assertEqual([p["value"] for p in f["priorities"]], [0])
+
+    def test_priority_tints_the_card_background(self):
+        data = labelled()
+        graph = ld.build_graph(data, False, "drop", bands=True)
+        svg = ld.render_svg(data, graph, "acme", False)
+        minidom.parseString(svg)
+        self.assertIn('id="pr1"', svg)                 # gradients are defined
+        self.assertIn('fill="url(#pr1)"', svg)          # an urgent card uses it
+        self.assertNotIn("url(#pr0)", svg)              # no priority: no tint
+        self.assertIn("Priority: Urgent", svg)          # and the tooltip says it
 
     def test_neighbors_without_a_filter_change_nothing(self):
         data = load()
@@ -153,6 +183,14 @@ class ServerTest(unittest.TestCase):
         self.assertIn("MS-3", one)
         self.assertNotIn('data-id="MS-1"', one)
         self.assertIn('data-id="MS-1"', full)
+
+    def test_graph_priority_param_filters(self):
+        _, _, svg = self.get("/graph.svg?project=p&priority=1&neighbors=0")
+        minidom.parseString(svg)
+        ids = set(re.findall(r'data-id="([^"]+)"', svg))
+        urgent = {i["identifier"] for i in labelled()["issues"] if i["priority"] == 1}
+        self.assertTrue(urgent)
+        self.assertEqual(ids, urgent)
 
     def test_graph_requires_a_project(self):
         self.assertEqual(self.get("/graph.svg")[0], 400)

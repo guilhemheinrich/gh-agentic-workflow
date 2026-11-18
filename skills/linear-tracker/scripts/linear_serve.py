@@ -61,10 +61,15 @@ def facets(data):
             e = lb.setdefault(l["name"], {"name": l["name"], "group": l.get("group"), "count": 0})
             e["count"] += 1
     labels = sorted(lb.values(), key=lambda e: ((e["group"] or "~").lower(), e["name"].lower()))
-    return {"milestones": milestones, "labels": labels}
+    pr = {}
+    for i in data["issues"]:
+        pr[i.get("priority") or 0] = pr.get(i.get("priority") or 0, 0) + 1
+    priorities = [{"value": p, "name": ld.PRIORITY_NAMES.get(p, str(p)), "count": pr[p]}
+                  for p in sorted(pr, key=lambda p: (p == 0, p))]   # urgent first, "no priority" last
+    return {"milestones": milestones, "labels": labels, "priorities": priorities}
 
 
-def filter_data(data, milestones, labels, neighbors=False):
+def filter_data(data, milestones, labels, neighbors=False, priorities=None):
     """Keep the issues in one of `milestones` ("" means none) AND carrying one of `labels`; None = no filter.
     With `neighbors`, also keep the issues one blocking link away from a kept one (the context a filter
     would otherwise cut), and only the links that touch a kept issue. Links to issues that are not shown
@@ -74,6 +79,8 @@ def filter_data(data, milestones, labels, neighbors=False):
         if milestones is not None and (i.get("milestone") or "") not in milestones:
             continue
         if labels is not None and not ({l["name"] for l in i.get("labels") or []} & labels):
+            continue
+        if priorities is not None and (i.get("priority") or 0) not in priorities:
             continue
         seeds.append(i)
     seed_ids = {i["identifier"] for i in seeds}
@@ -117,8 +124,9 @@ class ProjectCache:
         return data
 
 
-def render_filtered(data, workspace, milestones, labels, hide_isolated, show_external, neighbors=False):
-    shown = filter_data(data, milestones, labels, neighbors)
+def render_filtered(data, workspace, milestones, labels, hide_isolated, show_external, neighbors=False,
+                    priorities=None):
+    shown = filter_data(data, milestones, labels, neighbors, priorities)
     graph = ld.build_graph(shown, False, "show" if show_external else "drop", bands=True)
     return ld.render_svg(shown, graph, workspace, hide_isolated)
 
@@ -126,6 +134,13 @@ def render_filtered(data, workspace, milestones, labels, hide_isolated, show_ext
 def multi(params, name):
     """None when the parameter is absent (no filter), else the set of its values."""
     return set(params[name]) if name in params else None
+
+
+def ints(values):
+    """The integer values of a parameter set (non-numbers ignored); None stays None."""
+    if values is None:
+        return None
+    return {int(v) for v in values if v.lstrip("-").isdigit()}
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -172,7 +187,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                           issues=len(data["issues"]))), "application/json")
                 svg = render_filtered(data, self.workspace, multi(params, "milestone"), multi(params, "label"),
                                       one("hide_isolated") == "1", one("external") == "1",
-                                      one("neighbors", "1") == "1")
+                                      one("neighbors", "1") == "1", ints(multi(params, "priority")))
                 return self.send(200, svg, "image/svg+xml")
         except SystemExit as exc:  # fetch_live and gql report API trouble this way
             return self.fail(502, str(exc))
@@ -247,7 +262,7 @@ label small{color:var(--mute);margin-left:auto}
 </main>
 <script>
 const $ = id => document.getElementById(id);
-const state = {milestones: new Set(), labels: new Set(), facets: null};
+const state = {milestones: new Set(), priorities: new Set(), labels: new Set(), facets: null};
 const say = (t, err) => { $('msg').textContent = t || ''; $('msg').className = err ? 'err' : ''; };
 async function api(path) {
   const r = await fetch(path);
@@ -260,6 +275,7 @@ function query(refresh) {
   const f = state.facets;
   // an untouched category sends nothing (no filter); a partly ticked one sends only the ticked values
   if (state.milestones.size < f.milestones.length) state.milestones.forEach(m => q.append('milestone', m));
+  if (state.priorities.size < f.priorities.length) state.priorities.forEach(p => q.append('priority', p));
   if (state.labels.size) state.labels.forEach(l => q.append('label', l));
   if ($('iso').checked) q.set('hide_isolated', '1');
   if ($('ext').checked) q.set('external', '1');
@@ -270,27 +286,44 @@ function query(refresh) {
 function draw(refresh) {
   if (!state.facets) return;
   if (state.milestones.size === 0 && state.facets.milestones.length) { $('view').srcdoc = ''; say('No milestone ticked.'); return; }
+  if (state.priorities.size === 0 && state.facets.priorities.length) { $('view').srcdoc = ''; say('No priority ticked.'); return; }
   say('Drawing…');
   $('view').onload = () => say('');
   $('view').src = '/graph.svg?' + query(refresh);
 }
-function box(kind, value, text, count, on) {
+function box(kind, value, text, count, on, onchange) {
   const l = document.createElement('label');
   const c = document.createElement('input'); c.type = 'checkbox'; c.checked = on;
-  c.onchange = () => { const s = state[kind]; c.checked ? s.add(value) : s.delete(value); draw(false); };
+  c.onchange = () => { const s = state[kind]; c.checked ? s.add(value) : s.delete(value); if (onchange) onchange(); draw(false); };
   const s = document.createElement('span'); s.textContent = text;
   const n = document.createElement('small'); n.textContent = count;
   l.append(c, s, n); return l;
+}
+// A heading with a master "all / none" checkbox (milestones, priorities): ticks or unticks every
+// box of the section in one redraw; it shows the in-between state when only some are ticked.
+function section(a, title, kind, items) {
+  const h = document.createElement('h2'), master = document.createElement('input');
+  master.type = 'checkbox'; master.checked = true; master.title = 'Tick / untick all';
+  const t = document.createElement('span'); t.textContent = title;
+  h.append(master, t); h.style.display = 'flex'; h.style.gap = '6px'; h.style.alignItems = 'center'; a.append(h);
+  const inputs = [];
+  const sync = () => { const n = state[kind].size; master.checked = n === items.length; master.indeterminate = n > 0 && n < items.length; };
+  items.forEach(it => { const b = box(kind, it.value, it.text, it.count, true, sync); inputs.push(b.firstChild); a.append(b); });
+  master.onchange = () => {
+    state[kind] = new Set(master.checked ? items.map(it => it.value) : []);
+    inputs.forEach(i => { i.checked = master.checked; }); master.indeterminate = false; draw(false);
+  };
 }
 async function load(refresh) {
   const slug = $('project').value; if (!slug) return;
   say('Loading the project from Linear…');
   try {
     const f = await api('/api/facets?project=' + encodeURIComponent(slug) + (refresh ? '&refresh=1' : ''));
-    state.facets = f; state.milestones = new Set(f.milestones.map(m => m.name)); state.labels = new Set();
+    state.facets = f; state.milestones = new Set(f.milestones.map(m => m.name));
+    state.priorities = new Set(f.priorities.map(p => String(p.value))); state.labels = new Set();
     const a = $('filters'); a.replaceChildren();
-    const h1 = document.createElement('h2'); h1.textContent = 'Milestones'; a.append(h1);
-    f.milestones.forEach(m => a.append(box('milestones', m.name, m.name || '(no milestone)', m.count, true)));
+    section(a, 'Milestones', 'milestones', f.milestones.map(m => ({value: m.name, text: m.name || '(no milestone)', count: m.count})));
+    section(a, 'Priority', 'priorities', f.priorities.map(p => ({value: String(p.value), text: p.name, count: p.count})));
     const h2 = document.createElement('h2'); h2.textContent = 'Labels (any of)'; a.append(h2);
     let group = Symbol();
     f.labels.forEach(l => {
