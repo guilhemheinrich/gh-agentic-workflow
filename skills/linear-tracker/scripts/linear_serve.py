@@ -28,7 +28,11 @@ query($after: String) {
   }
 }"""
 
+QUERY_ONE_PROJECT = """
+query($id: String!) { project(id: $id) { name slugId url state } }"""
+
 INACTIVE_PROJECT_STATES = ("completed", "canceled")
+PINNED = []  # slugIds given with --project: listed even when the key's user is neither member nor lead
 
 
 def list_my_projects(api_url):
@@ -38,13 +42,25 @@ def list_my_projects(api_url):
     out, after = [], None
     while True:
         page = ld.gql(api_url, key, QUERY_MY_PROJECTS, {"after": after})["projects"]
-        for p in page["nodes"]:
-            out.append({"name": p["name"], "slug": p["slugId"], "url": p["url"],
-                        "state": p.get("state") or "",
-                        "active": (p.get("state") or "") not in INACTIVE_PROJECT_STATES})
+        out.extend(project_row(p) for p in page["nodes"])
         if not page["pageInfo"]["hasNextPage"]:
-            return sorted(out, key=lambda p: (not p["active"], p["name"].lower()))
+            break
         after = page["pageInfo"]["endCursor"]
+    seen = {p["slug"] for p in out}
+    for slug in PINNED:
+        if slug not in seen:
+            node = ld.gql(api_url, key, QUERY_ONE_PROJECT, {"id": slug}).get("project")
+            if not node:
+                raise SystemExit("error: pinned project %r not found" % slug)
+            out.append(project_row(node))
+            seen.add(node["slugId"])
+    return sorted(out, key=lambda p: (not p["active"], p["name"].lower()))
+
+
+def project_row(p):
+    state = p.get("state") or ""
+    return {"name": p["name"], "slug": p["slugId"], "url": p["url"], "state": state,
+            "active": state not in INACTIVE_PROJECT_STATES}
 
 
 def facets(data):
@@ -203,11 +219,14 @@ def serve_main(argv):
     ap.add_argument("--host", default="127.0.0.1",
                     help="address to bind (default 127.0.0.1; use 0.0.0.0 only inside a container with a localhost-only port mapping)")
     ap.add_argument("--port", type=int, default=4420)
+    ap.add_argument("--project", action="append", default=[], metavar="SLUG",
+                    help="also list this project (its slugId, the hex tail of its URL) even if you are not a member; repeatable")
     ap.add_argument("--api-url", default=ld.API_URL, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     if not os.environ.get("LINEAR_API_KEY", "").strip():
         raise SystemExit("error: LINEAR_API_KEY is not set")
 
+    PINNED[:] = args.project
     workspace = args.workspace
     if not workspace:
         projects = list_my_projects(args.api_url)

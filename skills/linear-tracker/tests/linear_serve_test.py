@@ -228,6 +228,30 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([p["slug"] for p in json.loads(body)], ["bb", "aa"])
 
+    def test_pinned_project_is_listed_even_when_not_a_member(self):
+        mine = {"projects": {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": [
+            {"name": "Mine", "slugId": "aa", "url": "https://linear.app/acme/project/mine-aa", "state": "started"}]}}
+        extra = {"project": {"name": "Shared", "slugId": "cc", "url": "https://linear.app/acme/project/shared-cc", "state": "started"}}
+        asked = []
+
+        def fake(api, key, q, v):
+            asked.append(v)
+            return extra if "project(id" in q else mine
+        saved, saved_key = ld.gql, os.environ.get("LINEAR_API_KEY")
+        ld.gql, ls.PINNED[:] = fake, ["cc", "aa"]      # "aa" is already mine: not fetched twice
+        os.environ["LINEAR_API_KEY"] = "k"
+        try:
+            rows = ls.list_my_projects("x")
+        finally:
+            ld.gql, ls.PINNED[:] = saved, []
+            if saved_key is None:
+                del os.environ["LINEAR_API_KEY"]
+            else:
+                os.environ["LINEAR_API_KEY"] = saved_key
+        self.assertEqual([r["slug"] for r in rows], ["aa", "cc"])   # active first, then by name
+        self.assertIn({"id": "cc"}, asked)
+        self.assertNotIn({"id": "aa"}, asked)
+
 
 if __name__ == "__main__":
     unittest.main()

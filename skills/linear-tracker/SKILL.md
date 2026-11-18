@@ -657,6 +657,10 @@ the `-p 127.0.0.1:` mapping keeps the page on your machine, and the server refus
 `Host` header other than `localhost`, `127.0.0.1` or `[::1]` with its port.
 Outside Docker, plain `python3 linear_deps.py serve` binds `127.0.0.1:4420`.
 
+A project you are neither member nor lead of is not listed. Pin it with `--project
+<slugId>` (the hex tail of its URL, repeatable): `serve ... --project 5842ed0c2bcd`
+adds "Broker PA · Run & évolutions — courant".
+
 ### How to read the picture
 
 - **Milestone bands.** The picture is cut into vertical bands, one per project
