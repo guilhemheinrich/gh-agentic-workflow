@@ -31,6 +31,7 @@ query($after: String) {
 QUERY_ONE_PROJECT = """
 query($id: String!) { project(id: $id) { name slugId url state } }"""
 
+DEFAULT_DB = os.path.join(os.path.expanduser("~"), ".cache", "linear-tracker", "linear.sqlite")
 INACTIVE_PROJECT_STATES = ("completed", "canceled")
 PINNED = []  # slugIds given with --project: listed even when the key's user is neither member nor lead
 
@@ -61,6 +62,14 @@ def project_row(p):
     state = p.get("state") or ""
     return {"name": p["name"], "slug": p["slugId"], "url": p["url"], "state": state,
             "active": state not in INACTIVE_PROJECT_STATES}
+
+
+def sync_info(store, slug):
+    """What the page shows about the cache's freshness: last pull time and the last error, if any."""
+    row = store.project_row(slug) or {}
+    state = store.get_state("project:" + (row.get("slug_id") or slug))
+    return {"synced_at": row.get("synced_at"), "last_full_at": state.get("last_full_at"),
+            "error": state.get("last_error")}
 
 
 def facets(data):
@@ -125,15 +134,21 @@ def filter_data(data, milestones, labels, neighbors=False, priorities=None):
 
 
 class ProjectCache:
-    def __init__(self, api_url, fetch=None):
+    """In-memory reuse of a built project dict. `fetch(slug)` produces it (the live API, or the store);
+    `on_refresh(slug)` runs first when the page's Refresh asks for a re-read (the store reconciles)."""
+
+    def __init__(self, api_url, fetch=None, ttl=CACHE_TTL, on_refresh=None):
         self.api_url, self.fetch = api_url, fetch or (lambda slug: ld.fetch_live(slug, api_url))
+        self.ttl, self.on_refresh = ttl, on_refresh
         self.items, self.lock = {}, threading.Lock()
 
     def get(self, slug, refresh=False):
         with self.lock:
             hit = self.items.get(slug)
-            if hit and not refresh and time.time() - hit[0] < CACHE_TTL:
+            if hit and not refresh and time.time() - hit[0] < self.ttl:
                 return hit[1]
+        if refresh and self.on_refresh:
+            self.on_refresh(slug)
         data = self.fetch(slug)  # outside the lock: one slow project must not block the others
         with self.lock:
             self.items[slug] = (time.time(), data)
@@ -164,6 +179,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     cache = None
     workspace = None
     allowed_hosts = ()
+    sync_info = None   # slug -> {"synced_at", "last_full_at", "error"}; set when the cache is on
 
     def log_message(self, fmt, *args):
         pass
@@ -199,8 +215,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     return self.fail(400, "missing ?project=<slugId>")
                 data = self.cache.get(slug, refresh=one("refresh") == "1")
                 if url.path == "/api/facets":
-                    return self.send(200, json.dumps(dict(facets(data), name=data["project"]["name"],
-                                                          issues=len(data["issues"]))), "application/json")
+                    body = dict(facets(data), name=data["project"]["name"], issues=len(data["issues"]))
+                    if self.sync_info:
+                        body["sync"] = self.sync_info(slug)
+                    return self.send(200, json.dumps(body), "application/json")
                 svg = render_filtered(data, self.workspace, multi(params, "milestone"), multi(params, "label"),
                                       one("hide_isolated") == "1", one("external") == "1",
                                       one("neighbors", "1") == "1", ints(multi(params, "priority")))
@@ -221,6 +239,14 @@ def serve_main(argv):
     ap.add_argument("--port", type=int, default=4420)
     ap.add_argument("--project", action="append", default=[], metavar="SLUG",
                     help="also list this project (its slugId, the hex tail of its URL) even if you are not a member; repeatable")
+    ap.add_argument("--db", default=os.environ.get("LINEAR_TRACKER_DB") or DEFAULT_DB, metavar="PATH",
+                    help="SQLite cache of the Linear data (default %s, or $LINEAR_TRACKER_DB); in Docker, mount "
+                         "a writable volume there or the cache dies with the container" % DEFAULT_DB)
+    ap.add_argument("--no-db", action="store_true", help="no cache: read Linear live on every refresh, as before")
+    ap.add_argument("--sync-interval", type=int, default=60, metavar="SECONDS",
+                    help="differential pull period (default 60; 0 = no background pull, Refresh still works)")
+    ap.add_argument("--full-every", type=int, default=30, metavar="N",
+                    help="every N-th pull re-reads each tracked project in full (default 30; 0 = never)")
     ap.add_argument("--api-url", default=ld.API_URL, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     if not os.environ.get("LINEAR_API_KEY", "").strip():
@@ -231,7 +257,20 @@ def serve_main(argv):
     if not workspace:
         projects = list_my_projects(args.api_url)
         workspace = ld.parse_project_url(projects[0]["url"])[0] if projects else ""
-    Handler.cache = ProjectCache(args.api_url)
+    if args.no_db:
+        Handler.cache = ProjectCache(args.api_url)
+    else:
+        import linear_store
+        import linear_sync
+        store = linear_store.Store(args.db)
+        syncer = linear_sync.Syncer(store, args.api_url, args.sync_interval, args.full_every)
+        Handler.cache = ProjectCache(
+            args.api_url, ttl=5,
+            fetch=lambda slug: (syncer.ensure(slug), store.project_dict(slug))[1],
+            on_refresh=syncer.backfill)
+        Handler.sync_info = staticmethod(lambda slug: sync_info(store, slug))
+        syncer.start()
+        print("linear_deps serve: cache %s, pull every %ss" % (args.db, args.sync_interval or "never"))
     Handler.workspace = workspace
     Handler.allowed_hosts = tuple("%s:%d" % (h, args.port) for h in ("localhost", "127.0.0.1", "[::1]"))
     srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
@@ -273,6 +312,7 @@ label small{color:var(--mute);margin-left:auto}
   <label title="Also draw the issues one blocking link away from the filtered ones"><input type="checkbox" id="nb" checked> keep direct neighbors</label>
   <label><input type="checkbox" id="ext"> show outside links</label>
   <button id="refresh" title="Refetch from Linear">Refresh</button>
+  <span id="sync" title="Last pull from Linear into the local cache"></span>
   <span id="msg"></span>
 </header>
 <main>
@@ -338,6 +378,8 @@ async function load(refresh) {
   say('Loading the project from Linear…');
   try {
     const f = await api('/api/facets?project=' + encodeURIComponent(slug) + (refresh ? '&refresh=1' : ''));
+    $('sync').textContent = f.sync ? (f.sync.error ? '⚠ ' + f.sync.error + ' · ' : '') +
+      (f.sync.synced_at ? 'synced ' + new Date(f.sync.synced_at).toLocaleTimeString() : '') : '';
     state.facets = f; state.milestones = new Set(f.milestones.map(m => m.name));
     state.priorities = new Set(f.priorities.map(p => String(p.value))); state.labels = new Set();
     const a = $('filters'); a.replaceChildren();
