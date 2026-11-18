@@ -22,6 +22,7 @@ description: >-
   inconsistencies of a project (a Done Proof blocked by an open change, a Feature
   without a Proof, a lot without a staging Proof) against a user-written JSON
   ontology, never blocking, with a per-lot staging/prod report.
+  `linear_deps.py serve` runs a local page that draws one of your projects with live milestone and label filters.
   `publish` is a verb of the `grievances`
   skill; this skill is one backend that answers it, and it never writes a
   ledger. Use when wiring a repository to a Linear project, when a finding must
@@ -626,6 +627,31 @@ the command line. Python standard library only; Docker is the execution rule.
 | `--hide-isolated` | hide issues without dependency. Default: a strip of clickable chips below the graph |
 | `--no-descriptions` | do not fetch or embed description excerpts (no text in the hover preview, `description_excerpt: null` in the JSON). Use it for an SVG that will be shared: descriptions can be sensitive |
 | `--from-json FILE` | no API call; read the normalized data from FILE (see below) |
+
+### Interactive page — `linear_deps.py serve`
+
+A local daemon that draws the same SVG in a web page with live filters. It lists the
+projects the key's user belongs to (member or lead); you pick **one** project at a
+time, then filter it by milestone (tick the ones to keep) and by label (any of the
+ticked ones). A filter alone would cut the context, so **keep direct neighbors** (on by default)
+also draws the issues one blocking link away from the filtered ones, with only the
+links that touch a filtered issue. Two more toggles hide issues without dependency and
+show outside links.
+Each change re-renders the SVG server side with the CLI's own renderer; the page
+shows it in an iframe so the hover preview keeps working. The project is fetched
+once and reused for 60 s; **Refresh** refetches it from Linear.
+
+```bash
+docker run --rm -e LINEAR_API_KEY -p 127.0.0.1:4420:4420 \
+  -v "$PWD/skills/linear-tracker/scripts":/s:ro -w /s python:3.12-slim \
+  python -B -I linear_deps.py serve --host 0.0.0.0 --port 4420
+open http://localhost:4420
+```
+
+The key never leaves the process. `--host 0.0.0.0` is for inside the container only:
+the `-p 127.0.0.1:` mapping keeps the page on your machine, and the server refuses any
+`Host` header other than `localhost`, `127.0.0.1` or `[::1]` with its port.
+Outside Docker, plain `python3 linear_deps.py serve` binds `127.0.0.1:4420`.
 
 ### How to read the picture
 

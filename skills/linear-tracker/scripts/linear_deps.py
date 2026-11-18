@@ -1579,6 +1579,11 @@ def main(argv=None):
         return check_main(argv[1:])
     if argv[:1] == ["verify"]:
         return verify_main(argv[1:])
+    if argv[:1] == ["serve"]:
+        # `python -I` drops the script's directory from sys.path; the sibling module needs it back.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import linear_serve  # imported late: it imports this module back
+        return linear_serve.serve_main(argv[1:])
     ap = argparse.ArgumentParser(
         description="Render a Linear project's issue dependencies as a clickable SVG (and JSON with --json-out).",
         epilog='Then: linear_deps.py check deps.json --type Proof --blocked-by "Technical task,Feature" '
