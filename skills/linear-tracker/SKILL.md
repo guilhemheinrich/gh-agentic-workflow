@@ -759,7 +759,7 @@ Made-up sample, trimmed to two nodes and two edges
  "format": "linear-deps/1",
  "project": {"name": "Invitations lot, broken (made up)",
              "url": "https://linear.app/acme/project/invitations-0123456789ab",
-             "milestones": ["Staging: invitations"]},
+             "milestones": ["Invitations"]},
  "nodes": [
   {"identifier": "INV-1", "title": "Invitation API", "url": "https://linear.app/acme/issue/INV-1",
    "external": false, "state": "started", "state_name": null, "state_color": null, "assignee": null,
@@ -876,7 +876,7 @@ state type `shipped`), so a typo never reads as « all good ».
 #### `references/semantics.json` is a template, not the norm
 
 It holds **one coherent proposal**: the eight ticket types of
-[`references/ticket-types.md`](references/ticket-types.md) and ten rules on them. A
+[`references/ticket-types.md`](references/ticket-types.md) and the rules on them. A
 project that works differently does not have to follow it: copy the file, change types,
 roles, binding and rules, and point `--semantics` at the copy. Do not assume the shipped
 rules apply to a project before asking its owner which ones it wants. `--rules` is for
@@ -895,6 +895,10 @@ Rule kinds (the closed vocabulary; types are an id, a list, `@role` or `*`):
 | `closed-requires-blockers-closed` | a closed `subject` has no `objects` blocker that is not closed (ignored states do not count; a blocker outside the project is `UNKNOWN`) |
 | `grouping-exists` | the project has ≥ `min` (default 1) groupings (milestones) whose name matches the regex `match`, case-insensitive |
 | `grouping-contains` | each grouping (milestone) holds ≥ `min` (default 1) tickets of `subject` |
+| `grouping-covers-attribute` | each grouping (milestone) holds a `subject` ticket for every value of `attribute` (default: all bound values, narrow with `values`), e.g. a Proof on Staging and on Prod |
+| `grouping-name-forbids` | no grouping (milestone) name matches the regex `match`, or, with `attribute`, contains a value or an alias of that attribute (binding), e.g. a lot never named after an environment |
+
+Any rule may carry `"severity": "warning"` (default `error`): its findings print and export as `WARN`, are counted apart, and never set the exit code, not even with `--strict`. The two environment rules of the template are warnings.
 | `linked-to` | each `subject` has a `relations` link (`blocks`, `related`, `parent`, `child`) to a ticket of `object` |
 | `linked-or-waived` | the same, unless the section named by `waiver.section` starts with `waiver.match` (a regex); `"waivable": false` removes the waiver |
 | `blocked-by-any` / `blocked-by-all-in-grouping` | a `subject` is blocked by at least one / by every `objects` ticket of its grouping; `where` / `objects_where` (`{attribute, value}`) narrow either side, e.g. Prod Proofs blocked by the Staging Proofs of their lot |
@@ -1035,7 +1039,7 @@ Three rules carry most of the weight:
   task; « `node --version` returns `v22` in the staging pod » is its Proof.
 - **A Proof is blocked by every dev issue of its lot**, and a Delivery is the
   lot's milestone, reached when its last Proof is closed. Example (made up):
-  milestone « Staging: invitations » holds the two dev issues of the lot and
+  milestone « Invitations » holds the two dev issues of the lot and
   two Proofs, each blocked by both.
 
 ## Linear watcher — waking a session when Linear changes

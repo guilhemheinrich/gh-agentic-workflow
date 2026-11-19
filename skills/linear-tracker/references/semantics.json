@@ -12,7 +12,7 @@
     },
 
     "groupings": {
-      "lot": {"definition": "A deliverable slice of the project: the tickets that ship together and are proved together. It says what it delivers in its description, holds at least one Proof, and is done on an environment when the Proofs of that environment are Done. It is not named after an environment: staging or prod is read from its Proofs (see the report)."}
+      "lot": {"definition": "A product lot: one or several observable, measurable feature elements, and the tickets that ship and are proved together. The granularity is deliberately loose and depends on the project. It says what it delivers in its description, never names or scopes an environment (no « Deposit on staging » / « Deposit on prod » pair: the one lot is « Deposit files »), holds a Proof on each environment it concerns, and is done on an environment when the Proofs of that environment are Done. Staging or prod is read from its Proofs (see the report)."}
     },
 
     "types": [
@@ -85,6 +85,11 @@
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "Environment is used on Proofs only."},
       {"id": "lot-has-proof", "rule": "grouping-contains", "grouping": "lot", "subject": "Proof", "min": 1,
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "Every lot holds at least one Proof."},
+      {"id": "lot-not-named-after-environment", "rule": "grouping-name-forbids", "grouping": "lot", "attribute": "environment", "severity": "warning",
+       "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A lot is about the product, never named after a deployment environment (the environments are the values and aliases of the environment attribute in the binding)."},
+      {"id": "lot-proved-on-each-environment", "rule": "grouping-covers-attribute", "grouping": "lot", "subject": "Proof", "attribute": "environment", "severity": "warning",
+       "source": "ticket-types.md#proof-and-delivery-as-a-milestone",
+       "text": "Every lot holds a Proof on each environment it concerns (default: every environment of the binding; narrow it with `values` in a rules overlay)."},
       {"id": "prod-proof-after-staging", "rule": "blocked-by-all-in-grouping", "subject": "Proof", "where": {"attribute": "environment", "value": "Prod"},
        "objects": "Proof", "objects_where": {"attribute": "environment", "value": "Staging"}, "grouping": "lot",
        "source": "ticket-types.md#proof-and-delivery-as-a-milestone", "text": "A Prod Proof is blocked by every Staging Proof of its lot."},
@@ -118,7 +123,9 @@
       "addressee": {"label_group": "Addressee", "scope": "workspace",
                     "values": ["Product", "Technical", "Security / legal", "External", "Organisation"],
                     "team_keys": {}},
-      "environment": {"label_group": "Environment", "scope": "workspace", "values": ["Staging", "Prod"]}
+      "environment": {"label_group": "Environment", "scope": "workspace", "values": ["Staging", "Prod"],
+                      "aliases": {"Staging": ["stage", "recette", "pprod", "preprod", "pre-prod"], "Prod": ["production"]},
+                      "_comment": "The environments of YOUR project: list them here (values) and the words a milestone name might use for them (aliases). The rules lot-proved-on-each-environment and lot-not-named-after-environment read this list; override it in a rules file under `binding`."}
     },
 
     "groupings": {
