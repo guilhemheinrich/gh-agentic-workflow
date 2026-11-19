@@ -21,6 +21,10 @@ dist/plugins/<plugin>/.claude-plugin/plugin.json      # name, description, autho
 dist/plugins/<plugin>/{skills,agents,commands,hooks}/ # as applicable
 ```
 
+## Versioning
+
+CI (`publish-dist.yml`) computes the version on every publish with `scripts/plugin-builder/next-version.mjs`: latest `v*` tag + Conventional Commits since it (`feat` = minor, `fix`/`perf`/`revert` = patch, `!`/`BREAKING CHANGE` = major, anything else = patch, since a publish always changes content). It is passed to the builder with `--version`, and the tag `vX.Y.Z` is pushed after the publish. `config.json` `version` is only the seed used when no tag exists (first release = seed + patch).
+
 ## Why Node and not Python
 
 The registry is 2,000 lines of YAML (folded `>-` scalars, flow lists, quoted

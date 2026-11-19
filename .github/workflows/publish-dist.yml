@@ -39,8 +39,17 @@ jobs:
       - name: Run builder tests
         run: npm run test:plugins
 
+      # Claude Code only offers an update when the plugin `version` string
+      # changes, so each publish gets a new semver derived from the v* tags and
+      # Conventional Commits (see scripts/plugin-builder/next-version.mjs).
+      - name: Compute plugin version
+        run: |
+          VERSION="$(node scripts/plugin-builder/next-version.mjs)"
+          echo "PLUGIN_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Plugin version: $VERSION"
+
       - name: Build public marketplace
-        run: node scripts/build-plugins.mjs --out "$BUILD_DIR"
+        run: node scripts/build-plugins.mjs --out "$BUILD_DIR" --version "$PLUGIN_VERSION"
 
       - name: Validate marketplace
         run: |
@@ -97,5 +106,19 @@ jobs:
             echo "dist: no change, nothing to publish"
             exit 0
           fi
-          git -C "$WT" commit -m "chore(dist): publish $SHORT_SHA"
+          git -C "$WT" commit -m "chore(dist): publish v$PLUGIN_VERSION ($SHORT_SHA)"
           git -C "$WT" push origin dist
+
+      # Tag only after a successful publish, so the next run bumps from it.
+      - name: Tag release
+        run: |
+          set -euo pipefail
+          TAG="v$PLUGIN_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            echo "$TAG already exists, nothing to tag"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Plugins $TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"

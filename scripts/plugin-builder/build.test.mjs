@@ -7,6 +7,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 import { assertNoPrivateOutput, buildPlugins } from './build.mjs';
+import { commitBump, nextVersion } from './next-version.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const realConfig = JSON.parse(fs.readFileSync(path.join(repo, 'scripts/plugin-builder/config.json'), 'utf8'));
@@ -437,4 +438,19 @@ test('README public naming contract lists every public plugin and skill of the r
     for (const skill of fs.existsSync(skillsDir) ? fs.readdirSync(skillsDir) : []) assert.ok(block.includes(`\`${skill}\``), `README contract lacks ${p.name}:${skill}`);
   }
   for (const priv of realConfig.publication.privatePlugins) assert.ok(!section.includes(`### \`${priv}\``), `README contract must not list private plugin ${priv}`);
+});
+
+test('commitBump follows Conventional Commits', () => {
+  assert.equal(commitBump('feat(x): add y'), 'minor');
+  assert.equal(commitBump('fix: z'), 'patch');
+  assert.equal(commitBump('feat!: drop q'), 'major');
+  assert.equal(commitBump('chore: tidy\n\nBREAKING CHANGE: gone'), 'major');
+  assert.equal(commitBump('docs: words'), 'none');
+});
+
+test('nextVersion takes the highest bump and never stays below a patch', () => {
+  assert.equal(nextVersion('0.1.0', ['chore: a', 'docs: b']), '0.1.1');
+  assert.equal(nextVersion('0.1.4', ['fix: a', 'feat: b']), '0.2.0');
+  assert.equal(nextVersion('1.2.3', ['feat: a', 'fix!: b']), '2.0.0');
+  assert.throws(() => nextVersion('x', []));
 });

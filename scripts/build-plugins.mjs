@@ -14,7 +14,7 @@ const opt = (name, def) => {
   return i === -1 ? def : args[i + 1];
 };
 if (args.includes('--help')) {
-  console.log('Usage: node scripts/build-plugins.mjs [--out dist] [--report-only] [--fail-on-drift] [--visibility public|all]');
+  console.log('Usage: node scripts/build-plugins.mjs [--out dist] [--report-only] [--fail-on-drift] [--visibility public|all] [--version X.Y.Z]');
   process.exit(0);
 }
 
@@ -25,9 +25,14 @@ if (!['public', 'all'].includes(visibility)) {
 }
 
 const config = JSON.parse(fs.readFileSync(path.join(root, 'scripts/plugin-builder/config.json'), 'utf8'));
+const version = opt('--version', undefined);
+if (version !== undefined && !/^\d+\.\d+\.\d+$/.test(version)) {
+  console.error(`Invalid --version '${version}' (expected: X.Y.Z)`);
+  process.exit(2);
+}
 const result = buildPlugins({
   root,
-  config,
+  config: version ? { ...config, version } : config,
   out: path.resolve(root, opt('--out', 'dist')),
   visibility,
   write: !args.includes('--report-only'),
