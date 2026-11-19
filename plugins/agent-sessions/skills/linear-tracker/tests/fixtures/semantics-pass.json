@@ -2,7 +2,7 @@
  "project": {
   "name": "Semantics pass (made up)",
   "milestones": [
-   "Staging: invitations"
+   "Invitations"
   ]
  },
  "issues": [
@@ -11,7 +11,7 @@
    "title": "Feature INV-1",
    "state": "completed",
    "parent": null,
-   "milestone": "Staging: invitations",
+   "milestone": "Invitations",
    "labels": [
     {
      "name": "Feature",
@@ -25,7 +25,7 @@
    "title": "Technical task INV-2",
    "state": "completed",
    "parent": null,
-   "milestone": "Staging: invitations",
+   "milestone": "Invitations",
    "labels": [
     {
      "name": "Technical task",
@@ -39,7 +39,7 @@
    "title": "Proof INV-3",
    "state": "unstarted",
    "parent": null,
-   "milestone": "Staging: invitations",
+   "milestone": "Invitations",
    "labels": [
     {
      "name": "Proof",
@@ -57,7 +57,7 @@
    "title": "Proof INV-4",
    "state": "unstarted",
    "parent": null,
-   "milestone": "Staging: invitations",
+   "milestone": "Invitations",
    "labels": [
     {
      "name": "Proof",
@@ -125,7 +125,7 @@
    "title": "Technical task INV-8",
    "state": "canceled",
    "parent": null,
-   "milestone": "Staging: invitations",
+   "milestone": "Invitations",
    "labels": [
     {
      "name": "Technical task",

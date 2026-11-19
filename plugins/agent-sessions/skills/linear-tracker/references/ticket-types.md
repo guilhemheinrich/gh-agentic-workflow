@@ -124,11 +124,25 @@ for.
   seems to prove: a later merge in the same lot can break a proof that held on
   its own. Adding an issue to a lot already proved means reopening its Proofs,
   or moving the issue to the next lot.
-- A **lot is a project milestone**: a deliverable slice, the issues that ship
-  together and are proved together. Its description says what it delivers. It
-  holds the dev issues, the Technical tasks for infrastructure prerequisites
-  (Helm values, secrets, migrations, feature flags) and **at least one Proof**.
-  It is **not named after an environment**: the environment lives on the Proofs.
+- A **lot is a project milestone**: at product level, one or several
+  observable, measurable feature elements, and the issues that ship together
+  and are proved together. The granularity is deliberately loose (it depends on
+  the project): do not argue about what size a lot should be. Its description
+  says what it delivers. It holds the dev issues, the Technical tasks for
+  infrastructure prerequisites (Helm values, secrets, migrations, feature
+  flags) and a **Proof on each environment it concerns**.
+  It is **never named after, or split by, an environment**: « Deposit files on
+  staging » and « Deposit files on prod » are not two lots; the lot is
+  « Deposit files », and the environment lives on its Proofs.
+  `linear_deps.py verify` raises both as **warnings**, never as errors: a
+  warning advises, a person acts on it, it never fails a run (exit code 0).
+  `lot-not-named-after-environment` (a milestone name contains an environment
+  of the project or one of its aliases) and `lot-proved-on-each-environment`
+  (a lot with no Proof on Staging or on Prod comes back
+  `WARN: no Proof on Prod (lot: 3 issue(s))`). The environments are not
+  hardcoded: they are the `values` and `aliases` of the `environment` attribute
+  in the binding of `semantics.json`, so a project with Dev / Pprod / Live
+  lists its own there (in a rules file, under `binding`).
 - A Proof carries one **Environment** label (Staging or Prod, a workspace label
   group, single choice, Proofs only). A Prod Proof is blocked by every Staging
   Proof of its lot. A lot is « in staging » when its Staging Proofs are all

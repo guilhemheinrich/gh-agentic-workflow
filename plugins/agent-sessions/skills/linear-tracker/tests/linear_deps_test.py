@@ -713,6 +713,7 @@ class VerifyTests(unittest.TestCase):
             "done-proof-needs-done-change": [],
             "one-environment-at-most": [], "proof-has-environment": [], "environment-only-on-proof": [],
             "lot-has-proof": [], "prod-proof-after-staging": [],
+            "lot-not-named-after-environment": [], "lot-proved-on-each-environment": [],
             "change-recommends-proof": ["INV-2"],
             "required-sections": ["INV-4"],
         }
@@ -749,7 +750,7 @@ class VerifyTests(unittest.TestCase):
         res = run_cli("verify", self.graph_file(SEM_PASS), "--semantics", self.semantics_file(self.model))
         self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
         self.assertIn("PASS    one-type  (8 checked, 0 fail, 0 unknown)", res.stdout)
-        self.assertIn("15 rule(s): 15 pass, 0 fail, 0 unknown, 0 n/a", res.stdout)
+        self.assertIn("17 rule(s): 17 pass, 0 warn, 0 fail, 0 unknown, 0 n/a", res.stdout)
 
     def test_cli_fail_exits_one_and_lists_identifiers(self):
         res = run_cli("verify", self.graph_file(SEM_FAIL), "--semantics", self.semantics_file(self.model))
@@ -770,7 +771,7 @@ class VerifyTests(unittest.TestCase):
         g = self.graph_file(SEM_FAIL)
         res = run_cli("verify", g, "--rule", "one-addressee-at-most")
         self.assertEqual(res.returncode, 1)
-        self.assertIn("1 rule(s): 0 pass, 1 fail", res.stdout)
+        self.assertIn("1 rule(s): 0 pass, 0 warn, 1 fail", res.stdout)
         self.assertNotEqual(run_cli("verify", g, "--rule", "nope").returncode, 0)
 
     def test_a_done_proof_blocked_by_an_unfinished_dev_issue_fails(self):
@@ -791,6 +792,56 @@ class VerifyTests(unittest.TestCase):
             with self.subTest(rule=rule):
                 status, failed, _ = self.outcome(SEM_ENV, rule)
                 self.assertEqual((status, failed), ("FAIL", fails))
+
+    def test_a_lot_without_a_proof_on_each_environment_is_raised(self):
+        (v,) = ld.verify_graph(self.model, self.graph(SEM_ENV), only=["lot-proved-on-each-environment"])
+        self.assertEqual(v.status, "WARN")
+        self.assertEqual([(n["identifier"], why) for n, why in v.fail], [
+            ("Lot B", "no Proof on Staging, Prod (lot: 2 issue(s))"), ("Lot C", "no Proof on Staging, Prod (lot: 0 issue(s))")])
+
+    def test_the_environments_a_lot_concerns_can_be_narrowed(self):
+        rules = self.overlay(rules=[{"id": "lot-proved-on-each-environment", "rule": "grouping-covers-attribute", "grouping": "lot",
+                                     "subject": "Proof", "attribute": "environment", "values": ["Staging"]}])
+        model = ld.load_semantics(SEMANTICS, [rules])
+        (v,) = ld.verify_graph(model, self.graph(SEM_ENV), only=["lot-proved-on-each-environment"])
+        self.assertEqual([(n["identifier"], why) for n, why in v.fail][-1][1], "no Proof on Staging (lot: 0 issue(s))")
+        bad = self.overlay(rules=[{"id": "x", "rule": "grouping-covers-attribute", "grouping": "lot",
+                                   "subject": "Proof", "attribute": "environment", "values": ["Moon"]}])
+        with self.assertRaises(SystemExit):
+            ld.load_semantics(SEMANTICS, [bad])
+
+    def test_a_lot_named_after_an_environment_warns_from_the_configured_environments(self):
+        g = self.graph(SEM_PASS)
+        g["project"]["milestones"] = ["Invitations", "Deposit on staging", "Prod rollout", "Recette finale", "Productivity"]
+        (v,) = ld.verify_graph(self.model, g, only=["lot-not-named-after-environment"])
+        self.assertEqual(v.status, "WARN")
+        self.assertEqual([n["identifier"] for n, _ in v.fail], ["Deposit on staging", "Prod rollout", "Recette finale"])
+        (ok,) = ld.verify_graph(self.model, self.graph(SEM_PASS), only=["lot-not-named-after-environment"])
+        self.assertEqual(ok.status, "PASS")
+        # another environment list, another vocabulary: nothing hardcoded in the engine
+        self.model["binding"]["attributes"]["environment"]["values"] = ["Dev", "Live"]
+        self.model["binding"]["attributes"]["environment"]["aliases"] = {"Live": ["go-live"]}
+        (v,) = ld.verify_graph(self.model, g, only=["lot-not-named-after-environment"])
+        self.assertEqual(v.status, "PASS")
+        g["project"]["milestones"] = ["Go-live of deposits"]
+        (v,) = ld.verify_graph(self.model, g, only=["lot-not-named-after-environment"])
+        self.assertEqual(v.status, "WARN")
+
+    def test_warnings_never_set_a_failing_exit_code(self):
+        ONLY = ("--rule", "lot-not-named-after-environment", "--rule", "lot-proved-on-each-environment")
+        g = self.graph(SEM_PASS)
+        g["project"]["milestones"] = ["Invitations", "Deposit on staging"]
+        path = os.path.join(self.dir.name, "w.json")
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(g, fh)
+        res = run_cli("verify", path, "--semantics", self.semantics_file(self.model), *ONLY)
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        self.assertIn("WARN", res.stdout)
+        self.assertIn("2 warn", res.stdout)
+        res = run_cli("verify", path, "--semantics", self.semantics_file(self.model), *ONLY, "--json")
+        self.assertIn('"status": "WARN"', res.stdout)
+        res = run_cli("verify", path, "--semantics", self.semantics_file(self.model), *ONLY, "--strict")
+        self.assertEqual(res.returncode, 0)
 
     def test_the_lot_report_reads_the_environment_from_the_proofs(self):
         (rp,) = ld.build_reports(self.model, self.graph(SEM_ENV))
@@ -819,14 +870,14 @@ class VerifyTests(unittest.TestCase):
 
     def test_an_overlay_adds_rules_and_a_milestone_rule_is_project_level(self):
         rules = self.overlay(rules=[
-            {"id": "staging-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "staging"},
-            {"id": "prod-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "^prod", "min": 1}])
+            {"id": "staging-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "staging|invit"},
+            {"id": "prod-milestone", "rule": "grouping-exists", "grouping": "lot", "match": "^release", "min": 1}])
         model = ld.load_semantics(SEMANTICS, [rules])
         v = {x.rule["id"]: x for x in ld.verify_graph(model, self.graph(SEM_STATE))}
-        self.assertEqual(v["staging-milestone"].status, "FAIL")   # milestones: Lot A, Prod
+        self.assertEqual(v["staging-milestone"].status, "FAIL")   # milestones: Lot A, Release
         self.assertEqual(v["prod-milestone"].status, "PASS")
         good = ld.verify_graph(model, self.graph(SEM_PASS), only=["staging-milestone"])[0]
-        self.assertEqual(good.status, "PASS")                      # « Staging: invitations »
+        self.assertEqual(good.status, "PASS")                      # « Invitations »
 
     def test_a_strict_feature_proof_rule_refuses_the_none_waiver(self):
         rules = self.overlay(rules=[{"id": "change-recommends-proof", "rule": "linked-or-waived", "subject": "Feature",

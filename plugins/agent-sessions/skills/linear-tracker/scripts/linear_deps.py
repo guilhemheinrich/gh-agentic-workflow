@@ -620,7 +620,8 @@ def check_main(argv):
 DEFAULT_SEMANTICS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "references", "semantics.json")
 RULE_KINDS = ("attribute-cardinality", "attribute-required", "attribute-only-on", "team-matches-attribute",
               "blocked-by-any", "blocked-by-all-in-grouping", "linked-or-waived", "linked-to", "requires-sections",
-              "closed-requires-blockers-closed", "grouping-exists", "grouping-contains")
+              "closed-requires-blockers-closed", "grouping-exists", "grouping-contains",
+              "grouping-covers-attribute", "grouping-name-forbids")
 # The ONLY facts the engine reads from Linear: the low-level ontology every business model sits on.
 # A binding or a rule naming anything else (a `sprint` field, a `depends` relation) is refused at load.
 LINEAR_LAYER = {
@@ -630,6 +631,15 @@ LINEAR_LAYER = {
 }
 LOCAL_RULES = os.path.join(".claude", "linear", "rules.json")   # picked up from the working directory
 STATE_RULES = ("closed-requires-blockers-closed",)             # about closed issues: --open-only must not hide them
+
+
+def attribute_words_regex(spec):
+    """Whole-word regex over the values of an attribute and their `aliases` (binding): the vocabulary
+    comes from the model, so a project with Dev / Pprod / Live lists its own."""
+    words = set(spec.get("values", []))
+    for alias in (spec.get("aliases") or {}).values():
+        words |= set(alias)
+    return r"(?<![\w])(%s)(?![\w])" % "|".join(sorted((re.escape(w) for w in words), key=len, reverse=True))
 
 
 def deep_merge(base, extra):
@@ -686,6 +696,8 @@ def load_semantics(path, overlays=()):
         if r.get("id") in seen:
             raise SystemExit("error: %s: duplicate %s" % (path, where))
         seen.add(r.get("id"))
+        if r.get("severity", "error") not in ("error", "warning"):
+            raise SystemExit("error: %s: %s has severity %r (expected error or warning)" % (path, where, r.get("severity")))
         if r.get("rule") not in RULE_KINDS:
             raise SystemExit("error: %s: %s uses unknown kind %r (known: %s)" % (path, where, r.get("rule"), ", ".join(RULE_KINDS)))
         for key in ("subject", "objects", "types", "object"):
@@ -708,9 +720,18 @@ def load_semantics(path, overlays=()):
                 spec = bind["attributes"].get(w.get("attribute")) if isinstance(w, dict) else None
                 if not spec or norm(w.get("value")) not in {norm(x) for x in spec.get("values", [])}:
                     raise SystemExit("error: %s: %s `%s` needs an attribute of the binding and one of its values" % (path, where, key))
-        if r["rule"] == "grouping-contains" and (not r.get("grouping") or "subject" not in r):
+        if r["rule"] in ("grouping-contains", "grouping-covers-attribute") and (not r.get("grouping") or "subject" not in r):
             raise SystemExit("error: %s: %s needs `grouping` and `subject`" % (path, where))
-        if r["rule"] == "grouping-exists":
+        if r["rule"] == "grouping-covers-attribute":
+            spec = bind["attributes"].get(r.get("attribute")) or {}
+            bad = sorted({norm(x) for x in r.get("values", [])} - {norm(x) for x in spec.get("values", [])})
+            if not r.get("attribute") or bad:
+                raise SystemExit("error: %s: %s needs an `attribute` of the binding and `values` among its values (unknown: %s)" % (
+                    path, where, ", ".join(bad) or "no attribute"))
+        if r["rule"] == "grouping-name-forbids" and r.get("attribute") and not r.get("match"):
+            if not r.get("grouping"):
+                raise SystemExit("error: %s: %s needs a `grouping`" % (path, where))
+        elif r["rule"] in ("grouping-exists", "grouping-name-forbids"):
             try:
                 re.compile(r.get("match", ""))
             except re.error as err:
@@ -780,8 +801,13 @@ class Verdict:
         self.rule, self.checked, self.fail, self.unknown = rule, [], [], []
 
     @property
+    def warns(self):
+        """A rule declared `severity: warning` reports as WARN: it advises, a human acts, it never fails a run."""
+        return self.rule.get("severity") == "warning"
+
+    @property
     def status(self):
-        return "FAIL" if self.fail else "UNKNOWN" if self.unknown else "PASS" if self.checked else "N/A"
+        return ("WARN" if self.warns else "FAIL") if self.fail else "UNKNOWN" if self.unknown else "PASS" if self.checked else "N/A"
 
 
 def verify_rule(rule, model, graph, open_only=False):
@@ -952,6 +978,37 @@ def verify_rule(rule, model, graph, open_only=False):
                 v.fail.append((holder, "%d of %s (need %d) among %d issue(s)" % (
                     len(found), "/".join(sorted({t["id"] for t in gen["types"] if norm(t["id"]) in wanted})) or "?",
                     rule.get("min", 1), len(members))))
+    elif kind == "grouping-covers-attribute":
+        # every grouping (milestone) holds a `subject` ticket for each value of `attribute` (default: every bound value)
+        field = bind["groupings"][rule["grouping"]]["node_field"]
+        wanted = resolve_types(rule["subject"], gen)
+        spec = bind["attributes"][rule["attribute"]]
+        values = rule.get("values") or spec["values"]
+        names = list(graph.get("project", {}).get("milestones") or []) if field == "milestone" else []
+        names += sorted({n.get(field) for n in graph["nodes"] if n.get(field) and n.get(field) not in names})
+        for name in names:
+            members = [m for m in graph["nodes"] if not m["external"] and m.get(field) == name and m["state"] not in ignored]
+            holder = {"identifier": name, "state": "-", "title": rule["grouping"]}
+            v.checked.append(holder)
+            missing = [val for val in values if not any(
+                norm(m["type"]) in wanted and has_value(m, {"attribute": rule["attribute"], "value": val}) for m in members)]
+            blind = [m["identifier"] for m in members if not m["type"]]
+            if missing and blind:
+                v.unknown.append((holder, "no %s on %s, but %s has no readable type" % (rule["subject"], ", ".join(missing), ", ".join(blind))))
+            elif missing:
+                v.fail.append((holder, "no %s on %s (%s: %d issue(s))" % (rule["subject"], ", ".join(missing), rule["grouping"], len(members))))
+    elif kind == "grouping-name-forbids":
+        # a grouping (milestone) name must not match `match`: e.g. a lot is never named after an environment
+        field = bind["groupings"][rule["grouping"]]["node_field"]
+        names = list(graph.get("project", {}).get("milestones") or []) if field == "milestone" else []
+        names += sorted({n.get(field) for n in graph["nodes"] if n.get(field) and n.get(field) not in names})
+        pattern = rule.get("match") or attribute_words_regex(bind["attributes"][rule["attribute"]])
+        for name in names:
+            holder = {"identifier": name, "state": "-", "title": rule["grouping"]}
+            v.checked.append(holder)
+            hit = re.search(pattern, name, re.I)
+            if hit:
+                v.fail.append((holder, "%s name %r contains %r, a value of the %s attribute" % (rule["grouping"], name, hit.group(0), rule.get("attribute", "match"))))
     elif kind == "requires-sections":
         types = {norm(t["id"]): t for t in gen["types"]}
         for n in scope(rule["subject"]):
@@ -1060,13 +1117,14 @@ def verify_main(argv):
     if bad:
         raise SystemExit("error: unknown rule id(s) %s; known: %s" % (", ".join(bad), ", ".join(sorted(known))))
     verdicts = verify_graph(model, graph, args.rule, args.open_only)
-    fails = sum(1 for v in verdicts if v.fail)
+    fails = sum(1 for v in verdicts if v.fail and not v.warns)
+    warns = sum(1 for v in verdicts if v.fail and v.warns)
     unknowns = sum(1 for v in verdicts if not v.fail and v.unknown)
     code = 0 if args.exit_zero else 1 if fails or (args.strict and unknowns) else 0
     if args.json:
         found = [{"rule": v.rule["id"], "status": label, "issue": n["identifier"], "state": n["state"],
                   "title": n["title"], "reason": why}
-                 for v in verdicts for label, items in (("FAIL", v.fail), ("UNKNOWN", v.unknown)) for n, why in items]
+                 for v in verdicts for label, items in (("WARN" if v.warns else "FAIL", v.fail), ("UNKNOWN", v.unknown)) for n, why in items]
         found.sort(key=lambda f: (f["rule"], sort_key(f["issue"]), f["status"]))
         json.dump({"semantics": args.semantics, "rules_files": overlays, "inconsistencies": found,
                    "reports": build_reports(model, graph)},
@@ -1075,13 +1133,13 @@ def verify_main(argv):
         return code
     print("model: %s%s" % (args.semantics, "".join("  +  " + o for o in overlays)))
     for v in verdicts:
-        print("%-7s %s  (%d checked, %d fail, %d unknown)  %s" % (
-            v.status, v.rule["id"], len(v.checked), len(v.fail), len(v.unknown), v.rule.get("text", "")))
-        for label, items in (("FAIL", v.fail), ("UNKNOWN", v.unknown)):
+        print("%-7s %s  (%d checked, %d %s, %d unknown)  %s" % (
+            v.status, v.rule["id"], len(v.checked), len(v.fail), "warn" if v.warns else "fail", len(v.unknown), v.rule.get("text", "")))
+        for label, items in (("WARN" if v.warns else "FAIL", v.fail), ("UNKNOWN", v.unknown)):
             for n, why in items:
                 print("    %-8s %s  [%s] %s  %s" % (label, n["identifier"], n["state"], n["title"], why))
-    print("%d rule(s): %d pass, %d fail, %d unknown, %d n/a" % (
-        len(verdicts), sum(v.status == "PASS" for v in verdicts), fails, unknowns, sum(v.status == "N/A" for v in verdicts)))
+    print("%d rule(s): %d pass, %d warn, %d fail, %d unknown, %d n/a" % (
+        len(verdicts), sum(v.status == "PASS" for v in verdicts), warns, fails, unknowns, sum(v.status == "N/A" for v in verdicts)))
     glyph = {"done": "✔", "pending": "⧗", "none": "-"}
     for rp in build_reports(model, graph):
         print("\nreport %s  %s" % (rp["id"], rp["text"]))
