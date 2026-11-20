@@ -104,6 +104,19 @@ class FilterTest(unittest.TestCase):
         self.assertNotIn("url(#pr0)", svg)              # no priority: no tint
         self.assertIn("Priority: Urgent", svg)          # and the tooltip says it
 
+    def test_cards_have_an_open_chip_and_the_click_pins_the_connections(self):
+        data = labelled()
+        graph = ld.build_graph(data, False, "drop", bands=True)
+        svg = ld.render_svg(data, graph, "acme", False)
+        minidom.parseString(svg)
+        chips = re.findall(r'<g class="open" data-href="([^"]+)">', svg)
+        self.assertTrue(chips)
+        self.assertTrue(all(c.startswith("https://linear.app/acme/issue/") for c in chips))
+        self.assertIn("Open in Linear", svg)
+        self.assertIn("function pin(", svg)                 # the click focuses the connections
+        self.assertIn("setTimeout", svg)                    # animated with timers: rAF stops in a hidden tab
+        self.assertEqual(svg.count("<a "), svg.count('target="_blank"'))   # no script: still a plain link
+
     def test_neighbors_without_a_filter_change_nothing(self):
         data = load()
         self.assertEqual(ls.filter_data(data, None, None, neighbors=True)["issues"], data["issues"])
@@ -163,6 +176,11 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("text/html", ctype)
         self.assertIn("graph.svg", body)
+
+    def test_page_clears_a_srcdoc_before_drawing_again(self):
+        """After "untick all" the iframe holds an empty srcdoc, which wins over src until it is removed."""
+        _, _, body = self.get("/")
+        self.assertLess(body.index("removeAttribute('srcdoc')"), body.index("$('view').src ="))
 
     def test_foreign_host_header_is_refused(self):
         self.assertEqual(self.get("/", host="evil.example")[0], 403)

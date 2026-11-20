@@ -9,55 +9,55 @@
       "name": "agent-sessions",
       "source": "./plugins/agent-sessions",
       "description": "Run and steer agent sessions: pilot sessions, session titles, conversation focus hooks, PR and tracker watching, grievances, usage tracking.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "agent-tooling",
       "source": "./plugins/agent-tooling",
       "description": "Tooling for building and maintaining agent setups: plugin release, static-validation hooks, LSP over MCP, ESLint standards for NestJS.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "backend-and-data",
       "source": "./plugins/backend-and-data",
       "description": "Backend and data practices: SQL migrations, pg-boss with Drizzle, data-first philosophy, OpenAPI client generation, API collection conversion, MCP spec templates.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "docker-and-k8s",
       "source": "./plugins/docker-and-k8s",
       "description": "Containers and clusters: Dockerfile patterns, hot-reload volumes, Compose port management, Kubernetes troubleshooting, private npm registries in images.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "frontend",
       "source": "./plugins/frontend",
       "description": "Frontend building blocks: Lit web components, cursor glow canvas effect, text clip effects, live Web Component demos in Starlight.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "git-and-delivery",
       "source": "./plugins/git-and-delivery",
       "description": "Git workflows and delivery pipelines: commits, merges, activity reports, CI/CD design, semantic-release, Makefile conventions, SonarQube, version surfaces.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "review-and-projection",
       "source": "./plugins/review-and-projection",
       "description": "Adversarial multi-model review and pre-implementation projections of a change onto files and data.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "speckit",
       "source": "./plugins/speckit",
       "description": "Spec-driven development on top of GitHub Spec Kit (requires spec-kit installed): orchestration agents, specify/plan/tasks pipeline, spec indexing, E2E specs, Notion sync.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     },
     {
       "name": "testing-and-debugging",
       "source": "./plugins/testing-and-debugging",
       "description": "Testing and investigation: Playwright end-to-end suites, auth fixtures, per-environment test targeting, web analysis, scraping, debugging.",
-      "version": "0.1.1"
+      "version": "0.2.0"
     }
   ]
 }

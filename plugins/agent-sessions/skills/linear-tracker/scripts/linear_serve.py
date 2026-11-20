@@ -348,6 +348,7 @@ function draw(refresh) {
   if (state.priorities.size === 0 && state.facets.priorities.length) { $('view').srcdoc = ''; say('No priority ticked.'); return; }
   say('Drawing…');
   $('view').onload = () => say('');
+  $('view').removeAttribute('srcdoc');   // a srcdoc attribute, even empty, wins over src: the graph would never come back
   $('view').src = '/graph.svg?' + query(refresh);
 }
 function box(kind, value, text, count, on, onchange) {
