@@ -1079,6 +1079,12 @@ Install, every command, the subscription lifecycle, the procedure when woken
 by `lw wait`, the graph rebuild, and `lw doctor`:
 [references/linear-watch.md](references/linear-watch.md).
 
+## Windows (Docker)
+
+launchd is macOS-only. On Windows, run `lw daemon run` in a container with the files in
+[scripts/watchers-docker/](../../scripts/watchers-docker/README.md): state in a named volume,
+and `lw` wrappers that run inside the container.
+
 ## Boundaries
 
 | Not this skill's job | Where it belongs |

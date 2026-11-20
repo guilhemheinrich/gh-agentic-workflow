@@ -1,0 +1,64 @@
+# pr-watch and linear-watch daemons in containers. Every host-specific value
+# comes from the unversioned .env next to this file (see .env.example).
+name: watchers
+
+services:
+  prw:
+    build:
+      context: ../..
+      dockerfile: scripts/watchers-docker/Dockerfile
+    image: watchers:local
+    command: ["bash", "/opt/watchers/pr-watch/scripts/prw", "daemon", "run"]
+    init: true
+    restart: unless-stopped
+    environment:
+      PRW_ENV_FILE: /run/credentials/pr-watch.env
+      PRW_POLL_SECONDS: ${PRW_POLL_SECONDS:-}
+      PRW_SETTLE_SECONDS: ${PRW_SETTLE_SECONDS:-}
+    volumes:
+      - prw-state:/var/lib/watchers/prw
+      - type: bind
+        source: ${PRW_ENV_FILE_HOST:?set PRW_ENV_FILE_HOST in .env}
+        target: /run/credentials/pr-watch.env
+        read_only: true
+    healthcheck:
+      test: ["CMD", "bash", "/opt/watchers/pr-watch/scripts/prw", "daemon", "alive"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  lw:
+    build:
+      context: ../..
+      dockerfile: scripts/watchers-docker/Dockerfile
+    image: watchers:local
+    command: ["python3", "/opt/watchers/linear-tracker/scripts/lw", "daemon", "run"]
+    init: true
+    restart: unless-stopped
+    environment:
+      LW_DESKTOP_DIR: /desktop-sessions
+      LW_POLL_SECONDS: ${LW_POLL_SECONDS:-}
+      LW_TTL_DAYS: ${LW_TTL_DAYS:-}
+    volumes:
+      - lw-state:/var/lib/watchers/lw
+      - type: bind
+        source: ${LINEAR_ENV_FILE_HOST:?set LINEAR_ENV_FILE_HOST in .env}
+        target: /home/watcher/.config/linear/env
+        read_only: true
+      - type: bind
+        source: ${LW_DESKTOP_DIR_HOST:?set LW_DESKTOP_DIR_HOST in .env}
+        target: /desktop-sessions
+        read_only: true
+    healthcheck:
+      test: ["CMD", "python3", "/opt/watchers/linear-tracker/scripts/lw", "daemon", "alive"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# Named volumes, not bind mounts: SQLite WAL and mkdir locks are unreliable
+# across the Windows/Linux file-system boundary.
+volumes:
+  prw-state:
+  lw-state:

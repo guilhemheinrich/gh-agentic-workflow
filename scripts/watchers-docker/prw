@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Git Bash wrapper: run prw inside the watchers container (state lives there).
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Git Bash: hand docker a Windows path, and keep it from rewriting /opt/... args.
+here="$(cygpath -m "$here" 2>/dev/null || printf '%s' "$here")"
+export MSYS_NO_PATHCONV=1
+exec docker compose -f "$here/compose.yml" exec -T prw bash /opt/watchers/pr-watch/scripts/prw "$@"
