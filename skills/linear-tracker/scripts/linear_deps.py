@@ -1135,6 +1135,10 @@ a:hover .box { stroke-width: 2.6; }
 .focus a.hl0 > g, .focus a.hl1 > g, .focus path.hl1 { opacity: 1; } .focus a.hl2 > g, .focus path.hl2 { opacity: .7; }
 a.hl0 .box { stroke-width: 3.2; } a.hl1 .box { stroke-width: 2.6; }
 path.hl1 { stroke: var(--fg); stroke-width: 2.8; opacity: 1; } path.hl2 { stroke-width: 2; }
+.pinned a[data-id]:not(.hl0):not(.hl1):not(.hl2) > g, .pinned path[data-to]:not(.hl1):not(.hl2) { opacity: .06; }
+.open { cursor: pointer; } .open rect { fill: var(--chip); stroke: var(--muted); stroke-width: .8; }
+.open path { fill: none; stroke: var(--fg); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.open:hover rect { fill: var(--fg); } .open:hover path { stroke: var(--bg); }
 """
 CHAR_W = 6.1        # rough width of one 10-11px character, to fit text without a layout engine
 CHIP_CHAR_W = 5.5   # the same for the 10px chip text
@@ -1304,16 +1308,16 @@ PEEK_JS = """(function () {
     fo.appendChild(box); svg.appendChild(fo);
     var h = box.offsetHeight + 2; fo.setAttribute('height', h);
     var a = toSvg(0, 0), b = toSvg(window.innerWidth, window.innerHeight), p = toSvg(ev.clientX, ev.clientY);
-    var right = Math.min(b.x, vb.width), bottom = Math.min(b.y, vb.height);
+    var right = Math.min(b.x, base[2]), bottom = Math.min(b.y, base[1]);
     var x = p.x + 16, y = p.y + 16;
     if (x + 380 > right) x = p.x - 396; if (y + h > bottom) y = bottom - h - 8;
     x = Math.max(a.x + 8, x); y = Math.max(a.y + 8, y);
     fo.setAttribute('x', x); fo.setAttribute('y', y);
     if (y + h + 8 > vb.height) grow(y + h + 8);   // a small graph: let the drawing grow under the panel
   }
-  var vb = svg.viewBox.baseVal, base = [svg.getAttribute('height'), vb.height];
-  function grow(hgt) { svg.setAttribute('height', hgt); svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + hgt); }
-  function shrink() { if (svg.getAttribute('height') != base[0]) { svg.setAttribute('height', base[0]);
+  var vb = svg.viewBox.baseVal, base = [svg.getAttribute('height'), vb.height, vb.width], saved = null, pinned = null, cam = 0;
+  function grow(hgt) { if (saved) return; svg.setAttribute('height', hgt); svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + hgt); }
+  function shrink() { if (!saved && svg.getAttribute('height') != base[0]) { svg.setAttribute('height', base[0]);
     svg.setAttribute('viewBox', '0 0 ' + vb.width + ' ' + base[1]); } }
   var cards = {}, links = Array.prototype.slice.call(document.querySelectorAll('path[data-to]'));
   Array.prototype.forEach.call(document.querySelectorAll('a[data-id]'), function (a) { cards[a.getAttribute('data-id')] = a; });
@@ -1329,14 +1333,80 @@ PEEK_JS = """(function () {
       if (t === id && one[f]) mark(e, 'hl1'); else if ((one[t] || two[t]) && (one[f] || two[f])) mark(e, 'hl2'); });
   }
   function unfocus() { svg.classList.remove('focus'); lit.forEach(function (x) { x[0].classList.remove(x[1]); }); lit = []; }
+  // Click on a card: pin its connections (what blocks it and what it blocks, along the whole chain), fade the
+  // rest and move the viewBox so they all sit centred in the window, as one camera move. Click again, click the
+  // background or press Escape to go back where the page was.
+  var next = {};
+  links.forEach(function (e) { if (!e.hasAttribute('data-blocks')) return;
+    var f = e.getAttribute('data-from'); (next[f] = next[f] || []).push(e.getAttribute('data-to')); });
+  function downstream(id) {
+    var direct = (next[id] || []).filter(function (x) { return x !== id; }), seen = {}, todo = direct.slice(), rest = [];
+    direct.forEach(function (x) { seen[x] = 1; });
+    while (todo.length) { (next[todo.pop()] || []).forEach(function (x) {
+      if (!seen[x] && x !== id) { seen[x] = 1; rest.push(x); todo.push(x); } }); }
+    return {direct: direct, rest: rest};
+  }
+  function view() { var v = svg.viewBox.baseVal; return [v.x, v.y, v.width, v.height]; }
+  function go(to, done) {
+    clearTimeout(cam); var from = view(), t0 = null;   // timers, not requestAnimationFrame: that one stops in a hidden tab
+    function step(t) {
+      if (t0 === null) t0 = t; var k = Math.min(1, (t - t0) / 380);
+      k = k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+      svg.setAttribute('viewBox', from.map(function (a, i) { return a + (to[i] - a) * k; }).join(' '));
+      if (k < 1) cam = setTimeout(function () { step(performance.now()); }, 16); else if (done) done();
+    }
+    step(performance.now());
+  }
+  function fit(ids) {   // the viewBox that centres these cards; never magnified past 1:1
+    var x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, pad = 48;
+    ids.forEach(function (i) { var r = cards[i].querySelector('rect.box').getBBox();
+      x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x + r.width); y1 = Math.max(y1, r.y + r.height); });
+    var W = window.innerWidth || 1280, H = window.innerHeight || 800, w = Math.max(x1 - x0 + 2 * pad, W), h = w * H / W;   // 0 in a hidden pane
+    if (h < y1 - y0 + 2 * pad) { h = y1 - y0 + 2 * pad; w = h * W / H; }
+    return [(x0 + x1) / 2 - w / 2, (y0 + y1) / 2 - h / 2, w, h];
+  }
+  function pin(id, d) {
+    hide(); unfocus(); focus(id, d);
+    var dn = downstream(id), ids = [id].concat(d.blockers, d.upstream, dn.direct, dn.rest), set = {};
+    ids.forEach(function (i) { set[i] = 1; });
+    dn.direct.forEach(function (b) { if (cards[b]) mark(cards[b], 'hl1'); });
+    dn.rest.forEach(function (b) { if (cards[b]) mark(cards[b], 'hl2'); });
+    links.forEach(function (e) { if (!e.hasAttribute('data-blocks') || e.classList.contains('hl1')) return;
+      var f = e.getAttribute('data-from'), t = e.getAttribute('data-to');
+      if (f === id && set[t]) mark(e, 'hl1'); else if (set[f] && set[t]) mark(e, 'hl2'); });
+    if (!saved) { saved = {x: window.scrollX, y: window.scrollY, w: svg.getAttribute('width'), h: svg.getAttribute('height'),
+        vb: svg.getAttribute('viewBox')};
+      svg.setAttribute('width', window.innerWidth); svg.setAttribute('height', window.innerHeight);
+      svg.setAttribute('viewBox', [saved.x, saved.y, window.innerWidth, window.innerHeight].join(' ')); }
+    svg.classList.add('pinned'); pinned = id;
+    go(fit(ids.filter(function (i) { return cards[i]; })));
+  }
+  function leave() {
+    if (!pinned) return; pinned = null; unfocus(); svg.classList.remove('pinned');
+    var s = saved; go([s.x, s.y, window.innerWidth, window.innerHeight], function () {
+      svg.setAttribute('width', s.w); svg.setAttribute('height', s.h); svg.setAttribute('viewBox', s.vb);
+      window.scrollTo(s.x, s.y); saved = null; });
+  }
+  svg.addEventListener('click', function (ev) { if (pinned && !(ev.target.closest && ev.target.closest('a[data-id]'))) leave(); });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') leave(); });
+  Array.prototype.forEach.call(document.querySelectorAll('.open'), function (g) {
+    g.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation();
+      window.open(g.getAttribute('data-href'), '_blank', 'noopener'); });
+  });
   Array.prototype.forEach.call(document.querySelectorAll('a[data-id]'), function (a) {
     var d = data[a.getAttribute('data-id')]; if (!d) return;
     var t = a.querySelector('title'); if (t) t.remove();   // the panel replaces the native tooltip
     var last = null;
-    a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer); focus(d.id, d);
+    a.addEventListener('mouseenter', function (ev) { last = ev; clearTimeout(timer); if (!pinned) focus(d.id, d);
       timer = setTimeout(function () { show(d, last); }, %d); });
     a.addEventListener('mousemove', function (ev) { last = ev; });
-    a.addEventListener('mouseleave', function () { hide(); unfocus(); });
+    a.addEventListener('mouseleave', function () { hide(); if (!pinned) unfocus(); });
+    a.addEventListener('click', function (ev) {
+      if (ev.metaKey || ev.ctrlKey || ev.shiftKey) return;                 // a modified click still opens the issue
+      if (pinned === d.id) { ev.preventDefault(); leave(); return; }
+      if (!d.blockers.length && !(next[d.id] || []).length) return;        // nothing connected: follow the link as before
+      ev.preventDefault(); pin(d.id, d);
+    });
   });
 })();""" % PEEK_DELAY_MS
 
@@ -1531,7 +1601,7 @@ def render_svg(data, graph, workspace, hide_isolated):
         w('<text class="id" x="%.1f" y="%.1f">%s</text>' % (x + (30 if color else 12), y + 18, escape(ident)))
         if n.get("parent"):
             w('<text class="tag" x="%.1f" y="%.1f" text-anchor="end">↳ %s</text>'
-              % (x + BOX_W - 10, y + 18, escape(n["parent"])))
+              % (x + BOX_W - 34, y + 18, escape(n["parent"])))
         w('<text class="ttl" x="%.1f" y="%.1f">%s</text>'
           % (x + 12, y + 36, escape(clip(n["title"], TITLE_CHARS) if n["title"] else "outside this project")))
         meta = " · ".join(v for v in (n.get("state_name"), n.get("assignee"), n.get("milestone")) if v)
@@ -1547,6 +1617,11 @@ def render_svg(data, graph, workspace, hide_isolated):
             w('<g class="%s"><rect x="%.1f" y="%.1f" width="%.1f" height="16" rx="8"/>'
               '<text x="%.1f" y="%.1f">%s</text></g>' % (cls, cx, y + 62, cw, cx + CHIP_PAD, y + 74, escape(label)))
             cx += cw + 4
+        # The click on the card focuses its connections (see PEEK_JS); this chip is how to open the issue.
+        w('<g class="open" data-href=%s><title>Open in Linear</title><rect x="%.1f" y="%.1f" width="20" height="20" rx="5"/>'
+          '<path d="M%.1f %.1f L%.1f %.1f M%.1f %.1f H%.1f V%.1f"/></g>'
+          % (quoteattr(url), x + BOX_W - 28, y + 6, x + BOX_W - 22, y + 20, x + BOX_W - 14, y + 12,
+             x + BOX_W - 20, y + 12, x + BOX_W - 14, y + 18))
         w("</g></a>")
 
     for ident, (x, y) in sorted(pos.items(), key=lambda kv: sort_key(kv[0])):

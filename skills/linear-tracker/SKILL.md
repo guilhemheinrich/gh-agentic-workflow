@@ -730,10 +730,19 @@ adds "Broker PA · Run & évolutions — courant".
   faded. Downstream issues are not lit: the question is what stands in the way of
   this one. The chains are computed when the SVG is generated (a cycle ends, an issue
   is never its own blocker); the legend's last two lines show the two strengths.
+- **Click a card that has links** to pin its connections: what blocks it and what it
+  blocks, along the whole chain, stay lit, everything else fades, and the view moves
+  and zooms out in one smooth camera move so all of them sit centred in the window
+  (never magnified past 1:1, so a long chain shows small). Click it again, click the
+  background or press Escape to go back where you were. A card with no link, and a
+  ctrl/cmd/shift-click, still open the issue; every other card has a small arrow chip
+  at its top right that opens the issue in Linear. Without scripts the whole box
+  remains a plain link. The pin needs the SVG opened directly in a browser or in the
+  `serve` page, like the preview.
 - **Hover a card for a fifth of a second (200 ms)** to get a preview, like Linear's issue peek:
   state icon, identifier, full title, state · assignee · milestone, type and label
   chips, and the beginning of the description (about 500 characters, markdown noise
-  stripped). The click still opens the issue. The text is embedded **when the SVG is
+  stripped). The text is embedded **when the SVG is
   generated**: the picture never calls Linear when viewed, so it is a snapshot, and
   it holds the descriptions of the project until you regenerate it with
   `--no-descriptions`. The preview needs the SVG opened directly in a browser (a
