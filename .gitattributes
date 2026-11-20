@@ -3,3 +3,9 @@
 
 # Extensionless scripts under skills must keep LF line endings
 skills/*/scripts/* text eol=lf
+
+# Docker watchers: bash wrappers and the image files must stay LF, batch wrappers CRLF
+scripts/watchers-docker/prw text eol=lf
+scripts/watchers-docker/lw text eol=lf
+scripts/watchers-docker/Dockerfile text eol=lf
+scripts/watchers-docker/*.cmd text eol=crlf
