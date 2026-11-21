@@ -9,7 +9,6 @@ services:
       dockerfile: scripts/watchers-docker/Dockerfile
     image: watchers:local
     command: ["bash", "/opt/watchers/pr-watch/scripts/prw", "daemon", "run"]
-    init: true
     restart: unless-stopped
     environment:
       PRW_ENV_FILE: /run/credentials/pr-watch.env
@@ -34,7 +33,6 @@ services:
       dockerfile: scripts/watchers-docker/Dockerfile
     image: watchers:local
     command: ["python3", "/opt/watchers/linear-tracker/scripts/lw", "daemon", "run"]
-    init: true
     restart: unless-stopped
     environment:
       LW_DESKTOP_DIR: /desktop-sessions

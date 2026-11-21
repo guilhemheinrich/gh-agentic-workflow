@@ -15,8 +15,8 @@ a healthcheck) plays the supervisor.
   jq, git, python3, tini and the `linear` CLI, plus `skills/pr-watch` and
   `skills/linear-tracker` **copied** to `/opt/watchers/` (so the "refusing: git
   checkout" guards are not involved).
-- Two services, `prw` and `lw`, from `compose.yml`, both with `init: true` and
-  tini as entrypoint.
+- Two services, `prw` and `lw`, from `compose.yml`, both with tini as the image
+  entrypoint (no compose `init: true`: a second tini would only warn).
 - State lives in **named volumes** (`prw-state`, `lw-state`), never bind mounts:
   SQLite WAL and `mkdir` locks are unreliable across the Windows/Linux
   boundary.
