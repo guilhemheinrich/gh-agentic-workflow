@@ -290,7 +290,11 @@ UNREAD
   fi
 
   env_file="$(prw_env_file)"
-  if [ -f "$env_file" ]; then
+  if [ -f "$env_file" ] && [ -n "${PRW_IN_CONTAINER:-}" ]; then
+    # A bind-mounted host file reports a synthetic mode (777 on Docker Desktop
+    # for Windows): it says nothing about the host ACL, so do not judge it.
+    report skip "env file mode not checked in a container (protect the host file)"
+  elif [ -f "$env_file" ]; then
     mode="$(file_mode "$env_file")"
     if [ "$mode" = 600 ]; then report ok "env file mode 600"; else report FAIL "env file mode $mode (want 600): chmod 600 $env_file"; fi
   fi
@@ -308,7 +312,10 @@ EOF
     fi
   else report skip "daemon check"; fi
 
-  if [ "$(type -t claude_hooks_wired 2>/dev/null)" = "function" ]; then
+  if [ -n "${PRW_IN_CONTAINER:-}" ]; then
+    # The Claude settings live on the host, not in the container.
+    report skip "claude hooks are host-side; not checked in a container"
+  elif [ "$(type -t claude_hooks_wired 2>/dev/null)" = "function" ]; then
     if claude_hooks_wired; then report ok "claude hooks"; else report skip "claude hooks not wired (prw setup --claude)"; fi
   else report skip "claude hooks check"; fi
 
