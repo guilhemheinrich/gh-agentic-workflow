@@ -321,6 +321,12 @@ said `ok`. Now:
 - `prw doctor` reports the subscriptions that keep failing or never got a
   snapshot, not only the heartbeat.
 
+## Windows (Docker)
+
+launchd is macOS-only. On Windows, run the daemon in a container with the files in
+[scripts/watchers-docker/](../../scripts/watchers-docker/README.md): state in a named volume,
+and `prw` wrappers that run inside the container.
+
 ## 10. A failed diff holds the change back
 
 On 2026-11-02 the host's jq 1.7 parsed `A + "#" + B as $id | …` as
