@@ -4,7 +4,7 @@
   "author": {
     "name": "guilhemheinrich"
   },
-  "version": "0.3.0",
+  "version": "0.3.1",
   "dependencies": [
     "git-and-delivery",
     "testing-and-debugging"
