@@ -43,6 +43,7 @@ RUN useradd --create-home --uid 10001 --shell /bin/bash watcher \
 ENV PRW_STATE_DIR=/var/lib/watchers/prw \
     LW_STATE_DIR=/var/lib/watchers/lw \
     LW_LINEAR_BIN=/usr/local/bin/linear \
+    PRW_IN_CONTAINER=1 \
     PYTHONUNBUFFERED=1
 
 USER watcher
