@@ -8,3 +8,6 @@ __pycache__/
 
 # Generated plugin marketplace (scripts/build-plugins.mjs)
 /dist/
+
+# Local settings of the Docker watchers (host paths; never commit)
+scripts/watchers-docker/.env
