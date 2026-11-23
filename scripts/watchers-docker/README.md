@@ -13,7 +13,7 @@ a healthcheck) plays the supervisor.
 
 - One image (`Dockerfile`, build context = repository root) holds bash, curl,
   jq, git, python3, tini and the `linear` CLI, plus `skills/pr-watch` and
-  `skills/linear-tracker` **copied** to `/opt/watchers/` (so the "refusing: git
+  `skills/linear-atlas` and `skills/linear-semantics` **copied** to `/opt/watchers/` (so the "refusing: git
   checkout" guards are not involved).
 - Two services, `prw` and `lw`, from `compose.yml`, both with tini as the image
   entrypoint (no compose `init: true`: a second tini would only warn).
@@ -57,7 +57,7 @@ version with `docker compose build --build-arg LINEAR_CLI_VERSION=vX.Y.Z`.
 ## Using the wrappers from the skills
 
 The Claude hooks are bash scripts. `adapters/claude/find-prw.sh` resolves `prw`
-from `$PRW_BIN` first (it must be an existing file), and the linear-tracker
+from `$PRW_BIN` first (it must be an existing file), and the linear-atlas
 session-start hook resolves `lw` from `$LW_BIN`. Point them at the
 extensionless Git Bash wrappers, for example
 `PRW_BIN=/d/code/gh-agentic-workflow/scripts/watchers-docker/prw` and

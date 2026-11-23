@@ -1203,6 +1203,51 @@ assets:
       logins that fail after a user was created through the API.
     category: domain-specific
     plugin: modelo-internal
+  - path: skills/linear-atlas/
+    type: skill
+    tags:
+      - linear
+      - mcp
+      - process
+      - workflow
+    description: >-
+      The tooling around a Linear workspace: draw a project's dependency graph ("blocks / blocked by" between its issues) as
+      a clickable SVG for humans and a JSON graph for agents (`linear_deps.py`), run the semantic check of a project against
+      the model of the `linear-semantics` skill (`linear_deps.py verify`: a Proof not blocked by every dev ticket of its
+      feature, a dev ticket without complexity, a bug without Technical task, an oversized feature), serve a local page that
+      draws a project with live filters over a SQLite cache (`linear_deps.py serve`, `linear_serve.py`), and wake agent
+      sessions when Linear changes with `lw`, the Linear watcher, also exposed as a local MCP server (`mcp/lw_mcp.py`) so an
+      agent never calls Docker or a shell. Use when drawing or querying a Linear dependency graph, when running or tuning
+      the semantic check, when a session must be woken by a Linear comment or state change, or when installing or checking
+      the watcher. The meaning of the tickets (types, complexity, features, proofs) is the `linear-semantics` skill; how a
+      repository publishes findings and follows a spec in Linear is the `linear-tracker` skill. Triggers on "dependency
+      graph", "dependency tree", "draw Linear tickets", "what blocks this issue", "is every proof blocked", "semantic check
+      of a Linear project", "inconsistent tickets", "what is in staging", "LINEAR_API_KEY", "linear watch", "lw subscribe",
+      "lw wait", "lw MCP", "watch this ticket", "réveiller la session sur Linear", "surveiller le projet Linear", "linear-
+      atlas".
+    category: workflows-and-processes
+    plugin: agent-sessions
+  - path: skills/linear-semantics/
+    type: skill
+    tags:
+      - linear
+      - process
+      - workflow
+    description: >-
+      What a Linear ticket means, in this workspace: six issue types (Bug, Blocker, Question, Research, Proof, Technical
+      task), the order of questions that picks one, a template body for each, and the rules around them, written as data in
+      `references/semantics.json`. A milestone is a feature (no Feature or Improvement type); every Technical task carries a
+      complexity from 1 to 5 that both suggests a model (haiku, sonnet, opus, configurable) and forces a split above 3; a
+      Bug describes the problem and is fixed by Technical tasks as sub-issues; a feature stays small (about 8 dev tickets at
+      most); each feature has a Proof per environment, blocked by every dev ticket of the milestone (never partial), whose
+      observations live in sub-issue Proofs that each answer exactly one fact or question. Use when choosing which ticket
+      type to open, setting or reading a complexity, splitting a ticket or a milestone, creating Linear templates, planning
+      a feature's proofs, or changing the vocabulary the `linear-atlas` check enforces. Triggers on "ticket type", "Linear
+      template", "complexity", "complexité", "estimate", "split a ticket", "découper", "milestone", "feature", "proof
+      ticket", "sub-issue proof", "preuve staging", "preuve prod", "Question or Blocker", "which model for this ticket",
+      "semantics.json".
+    category: workflows-and-processes
+    plugin: agent-sessions
   - path: skills/linear-tracker/
     type: skill
     tags:
@@ -1213,37 +1258,21 @@ assets:
       - spec-kit
       - workflow
     description: >-
-      Use Linear as the tracker a repository publishes findings to, through the Linear MCP, and wake agent sessions on
-      Linear changes with `lw`, its watcher. Covers how a repository knows its Linear team (`team` in the lifecycle
-      `phases.json`) and why the project is never a repository property (it is given per call, or recorded per spec),
-      the mapping from a grievance record to a Linear issue and the two mappings that silently corrupt data if taken
-      literally, the publish contract this skill answers on behalf of the `grievances` skill, and read-only triage
-      across a workspace. It also installs, once, a repo-local advisory Stop hook and per-phase templates that follow a
-      spec-kit change in Linear — issue at specify, In Progress at the first ticked task, In Review when a PR opens,
-      Done once the merged PR is deployed (every pipeline of the merge commit green; ticket read from the spec or from
-      `<teamKey>-<n>` in the branch name) — from file, git and PR facts only, asking once per fact and never blocking.
-      It also draws the dependency graph of a Linear project ("blocks / blocked by" between its issues) as a clickable
-      SVG for humans and exports it as a JSON graph agents can query, with `scripts/linear_deps.py` and a Linear API key
-      read from `LINEAR_API_KEY`; `linear_deps.py check` answers offline whether every issue of one type (every Proof)
-      is blocked by an issue of other types (a development task). `linear_deps.py verify` lists the semantic
-      inconsistencies of a project (a Done Proof blocked by an open change, a Feature without a Proof, a lot without a
-      staging Proof) against a user-written JSON ontology, never blocking, with a per-lot staging/prod report.
-      `linear_deps.py serve` runs a local page that draws one of your projects with live milestone, label and priority filters, backed by a SQLite cache of the Linear entities kept fresh by a differential pull. `publish` is a verb of the `grievances` skill; this
-      skill is one backend that answers it, and it never writes a ledger. Use when wiring a repository to a Linear
-      project, when a finding must leave a repository and become an issue someone can own, when auditing which findings
-      are already tracked, or when deciding what a tracker can and cannot hold. It also proposes eight issue types (Bug,
-      Blocker, Question, Research, Feature, Improvement, Proof, Technical task), the order of questions that picks one,
-      and a workspace template body for each. Use it too when choosing which ticket type to open, telling a Question
-      from a Blocker, proving a merged lot on an environment, or drafting Linear templates. It also ships `lw`, the
-      Linear watcher: a launchd daemon that polls Linear every 5 minutes and wakes the agent sessions subscribed to a
-      Linear project or issue with each new comment or state transition (`lw subscribe`, then `lw wait` in the
-      background), subscriptions ending on their own when the session is archived or the watched issue is finished. Use
-      it when a session must be woken by a Linear comment or state change, or when installing or checking the watcher
-      (`lw setup --claude`, `lw daemon start`, `lw doctor`). Triggers on "Linear", "phases.json", "publish a grievance",
-      "tracker", "issue from a finding", "which project does this spec belong to", "follow a spec in Linear", "spec-kit
-      lifecycle", "ticket type", "Linear template", "proof ticket", "dependency tree", "dependency graph", "draw Linear
-      tickets", "what blocks this issue", "is every proof blocked", "semantic check of a Linear project", "inconsistent tickets", "what is in staging", "LINEAR_API_KEY", "linear watch", "lw subscribe",
-      "lw wait", "watch this ticket", "réveiller la session sur Linear", "surveiller le projet Linear".
+      Use Linear as the tracker a repository publishes findings to, through the Linear MCP. Covers how a repository knows
+      its Linear team (`team` in the lifecycle `phases.json`) and why the project is never a repository property (it is
+      given per call, or recorded per spec), the mapping from a grievance record to a Linear issue and the two mappings that
+      silently corrupt data if taken literally, the publish contract this skill answers on behalf of the `grievances` skill,
+      and read-only triage across a workspace. It also installs, once, a repo-local advisory Stop hook and per-phase
+      templates that follow a spec-kit change in Linear: issue at specify, In Progress at the first ticked task, In Review
+      when a PR opens, Done once the merged PR is deployed (every pipeline of the merge commit green; ticket read from the
+      spec or from `<teamKey>-<n>` in the branch name), from file, git and PR facts only, asking once per fact and never
+      blocking. `publish` is a verb of the `grievances` skill; this skill is one backend that answers it, and it never
+      writes a ledger. Use when wiring a repository to a Linear project, when a finding must leave a repository and become
+      an issue someone can own, when auditing which findings are already tracked, or when deciding what a tracker can and
+      cannot hold. What the tickets mean (types, complexity, features, proofs) is the `linear-semantics` skill; the
+      dependency graph, the semantic check and the `lw` watcher (and its MCP server) are the `linear-atlas` skill. Triggers
+      on "Linear", "phases.json", "publish a grievance", "tracker", "issue from a finding", "which project does this spec
+      belong to", "follow a spec in Linear", "spec-kit lifecycle".
     category: workflows-and-processes
     plugin: agent-sessions
   - path: skills/lit-web-components/
@@ -1460,7 +1489,7 @@ assets:
       which tokens exist, launchd or not, a legacy instance), `prw migrate` carries a legacy `bitbucket-pr-watch`
       instance over, `prw setup` stores read-only tokens in one 0600 env file, `prw daemon start` installs the poller,
       `prw setup --claude` registers the hooks. Ships `scripts/prw` (bash, curl, jq), the Bitbucket and GitHub providers
-      with their worked examples, the provider contract for adding a host, and the Claude Code adapter. Use when a
+      with their worked examples, the provider contract for adding a host, the Claude Code adapter, and `mcp/prw_mcp.py`, a local MCP server so an agent calls `prw_subscribe` / `prw_wait` as tools. Use when a
       session must learn about its PR without the human checking the Git host, when instantiating or repairing the
       watcher on a machine, when adding GitHub to a machine that already watches Bitbucket (or the reverse), when adding
       a third host, or when a session is woken by a `prw wait` exit. Triggers on "pr watch", "prw", "réagir aux PR",

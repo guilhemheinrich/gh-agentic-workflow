@@ -122,7 +122,8 @@ so they need the `install.sh` copy even if you use the plugins for everything el
 - `conversation-focus` — split proposals and closing summary (Stop and prompt hooks).
 - `pilot-session` — pilot role; arms the reminder hook through `session-meta`.
 - `pr-watch` — the `prw` poller runs from the installed copy.
-- `linear-tracker` — the `lw` watcher and lifecycle installer.
+- `linear-atlas` — the `lw` watcher (and its MCP server), the dependency graph and the semantic check.
+- `linear-tracker` — the lifecycle installer and the grievance publish backend.
 
 All other skills work either way.
 

@@ -118,7 +118,7 @@ never one change in it. Two kinds, plus the forbidden one (made-up paths):
 
 The reason for the line: a graph or a roadmap is a picture of the whole body
 of work, worth reopening every turn, and it is rebuilt in place (the `lw`
-watcher of the `linear-tracker` skill rewrites `~/linear-graphs/<slug>.svg` on
+watcher of the `linear-atlas` skill rewrites `~/linear-graphs/<slug>.svg` on
 every ticket state change). A code file is one detail of one change: the
 reader gets it from the diff or the PR.
 
