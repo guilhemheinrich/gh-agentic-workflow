@@ -21,6 +21,15 @@ dist/plugins/<plugin>/.claude-plugin/plugin.json      # name, description, autho
 dist/plugins/<plugin>/{skills,agents,commands,hooks}/ # as applicable
 ```
 
+## MCP servers shipped by a skill
+
+A skill entry may declare `mcp` (array of `{name, command, args, env}`) when it ships a local MCP
+server. The builder writes them to `dist/plugins/<plugin>/.mcp.json` (`{"mcpServers": {...}}`), which
+Claude Code loads when the plugin is enabled, so users need no `claude mcp add`. Write script paths as
+`${CLAUDE_PLUGIN_ROOT}/skills/<skill>/...`: the build fails if the plugin does not ship that file, if
+two servers of one plugin share a name, or if `mcp` is set on a non-skill. Today: `lw`
+(`linear-atlas`) and `prw` (`pr-watch`), both in `agent-sessions`.
+
 ## Versioning
 
 CI (`publish-dist.yml`) computes the version on every publish with `scripts/plugin-builder/next-version.mjs`: latest `v*` tag + Conventional Commits since it (`feat` = minor, `fix`/`perf`/`revert` = patch, `!`/`BREAKING CHANGE` = major, anything else = patch, since a publish always changes content). It is passed to the builder with `--version`, and the tag `vX.Y.Z` is pushed after the publish. `config.json` `version` is only the seed used when no tag exists (first release = seed + patch).

@@ -310,7 +310,7 @@ prw subscribe --commit "$(git rev-parse HEAD)" --branch staging --session "$SESS
 or a merge commit), `prw_unsubscribe`, `prw_ignore_comment`, `prw_list`, `prw_status`, `prw_wait`,
 `prw_doctor` and `prw_daemon` (`once`, `alive`, `start`, `stop`; never `run`, the foreground loop).
 Each tool runs one `prw` subcommand and returns `exit_code`, `stdout` and `stderr`. Register it once
-per machine from the installed copy:
+Installed through the Claude plugin (`agent-sessions`), it is declared in the plugin's `.mcp.json` and needs no registration. Otherwise, register it once per machine from the installed copy:
 
 ```bash
 claude mcp add prw -- python3 ~/.agents/skills/pr-watch/mcp/prw_mcp.py

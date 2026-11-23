@@ -36,7 +36,7 @@ function fixture(files, assets, extraRegistry = '') {
     fs.writeFileSync(path.join(root, rel), content);
   }
   const yamlAssets = assets
-    .map((a) => `  - path: ${a.path}\n    type: ${a.type}\n    category: ${a.category}\n${a.plugin ? `    plugin: ${a.plugin}\n` : ''}    tags: [x]\n    description: d`)
+    .map((a) => `  - path: ${a.path}\n    type: ${a.type}\n    category: ${a.category}\n${a.plugin ? `    plugin: ${a.plugin}\n` : ''}${a.mcp ? `    mcp: ${JSON.stringify(a.mcp)}\n` : ''}    tags: [x]\n    description: d`)
     .join('\n');
   fs.writeFileSync(path.join(root, 'asset-registry.yml'), `version: 1.0.0\nx-category-descriptions:\n  cat-a: Alpha things\n  cat-b: Beta things\n${extraRegistry}assets:\n${yamlAssets}\n`);
   return root;
@@ -453,4 +453,40 @@ test('nextVersion takes the highest bump and never stays below a patch', () => {
   assert.equal(nextVersion('0.1.4', ['fix: a', 'feat: b']), '0.2.0');
   assert.equal(nextVersion('1.2.3', ['feat: a', 'fix!: b']), '2.0.0');
   assert.throws(() => nextVersion('x', []));
+});
+
+const mcpServer = (script) => [{ name: 'srv', command: 'python3', args: [`\${CLAUDE_PLUGIN_ROOT}/skills/one/${script}`] }];
+
+test('a skill that declares an MCP server gets a .mcp.json in its plugin', () => {
+  const root = fixture(
+    { 'skills/one/SKILL.md': '---\nname: one\n---\nhi\n', 'skills/one/mcp/srv.py': 'print(1)\n' },
+    [{ path: 'skills/one/', type: 'skill', category: 'cat-a', mcp: mcpServer('mcp/srv.py') }],
+  );
+  const out = tmp();
+  const r = buildPlugins({ root, config: miniConfig(), out, write: true });
+  assert.deepEqual(r.errors, []);
+  const mcp = JSON.parse(fs.readFileSync(path.join(out, 'plugins/cat-a/.mcp.json'), 'utf8'));
+  assert.deepEqual(mcp, { mcpServers: { srv: { command: 'python3', args: ['${CLAUDE_PLUGIN_ROOT}/skills/one/mcp/srv.py'] } } });
+});
+
+test('an MCP server whose script the plugin does not ship fails the build', () => {
+  const root = fixture(
+    { 'skills/one/SKILL.md': '---\nname: one\n---\nhi\n' },
+    [{ path: 'skills/one/', type: 'skill', category: 'cat-a', mcp: mcpServer('mcp/missing.py') }],
+  );
+  const r = buildPlugins({ root, config: miniConfig(), out: tmp(), write: false });
+  assert.equal(r.errors.length, 1);
+  assert.match(r.errors[0], /does not ship/);
+});
+
+test('real repo: the lw and prw MCP servers ship in agent-sessions with scripts that exist', () => {
+  const out = tmp();
+  const r = buildPlugins({ root: repo, config: realConfig, out, write: true });
+  assert.deepEqual(r.errors, []);
+  const mcp = JSON.parse(fs.readFileSync(path.join(out, 'plugins/agent-sessions/.mcp.json'), 'utf8'));
+  assert.deepEqual(Object.keys(mcp.mcpServers).sort(), ['lw', 'prw']);
+  for (const srv of Object.values(mcp.mcpServers)) {
+    const script = srv.args[0].replace('${CLAUDE_PLUGIN_ROOT}/', '');
+    assert.ok(fs.existsSync(path.join(out, 'plugins/agent-sessions', script)), script);
+  }
 });

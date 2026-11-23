@@ -469,6 +469,22 @@
           "pattern": "^[a-z][a-z0-9-]*$",
           "description": "Optional plugin this asset is published in. Defaults to the category when absent."
         },
+        "mcp": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Skills only. Local MCP servers this skill ships, declared in the plugin's .mcp.json by the plugin builder. Write script paths with ${CLAUDE_PLUGIN_ROOT}/skills/<skill>/...; the builder checks the file exists.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "command"],
+            "properties": {
+              "name": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$"},
+              "command": {"type": "string", "minLength": 1},
+              "args": {"type": "array", "items": {"type": "string"}},
+              "env": {"type": "object", "additionalProperties": {"type": "string"}}
+            }
+          }
+        },
         "bundles": {
           "type": "array",
           "items": {

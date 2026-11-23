@@ -114,6 +114,7 @@ export function resolveAssets(root, registry, config) {
       isDir: chosen.isDir,
       category: chosen.entry.category,
       plugin: chosen.entry.plugin,
+      mcp: chosen.entry.mcp ?? [],
       tags: chosen.entry.tags ?? [],
       description: chosen.entry.description ?? '',
     });
