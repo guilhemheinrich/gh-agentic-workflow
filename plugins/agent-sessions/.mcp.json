@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "lw": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/skills/linear-atlas/mcp/lw_mcp.py"
+      ]
+    },
+    "prw": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/skills/pr-watch/mcp/prw_mcp.py"
+      ]
+    }
+  }
+}
