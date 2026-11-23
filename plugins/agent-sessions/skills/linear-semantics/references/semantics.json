@@ -1,0 +1,467 @@
+{
+  "format": "ticket-semantics/1",
+  "_comment": "JSON, not YAML: linear_deps.py is standard-library only and runs in python:alpine, which has no YAML parser. Prose version: ticket-types.md. Checker: `linear_deps.py verify`.",
+  "generic": {
+    "_comment": "Tool-agnostic project-management vocabulary. Nothing here names Linear: an attribute is a single-choice tag, a lot is whatever groups issues that ship together, a body section is a heading in the ticket text.",
+    "attributes": {
+      "type": {
+        "definition": "What kind of work the ticket is. Single choice, exactly one per ticket."
+      },
+      "addressee": {
+        "definition": "Who must answer or act. Single choice, only on tickets that wait on someone outside the team."
+      },
+      "environment": {
+        "definition": "Where a Proof was run: staging or prod. Single choice, only on top-level Proofs (the sub-proofs inherit it from their parent). The environment of a feature is never declared on the feature: it is read from its Proofs."
+      },
+      "complexity": {
+        "definition": "How hard a development ticket is, on a 1 to 5 scale. Read from the tracker's numeric estimate. Only on Technical tasks. It drives two things: which model may be given the ticket, and whether the ticket must be split."
+      }
+    },
+    "groupings": {
+      "feature": {
+        "definition": "A feature: one or several observable, measurable capabilities a user or client gets, and the tickets that ship and are proved together. In the tracker it is a project milestone. It says what it delivers in its description (the acceptance criteria live there), stays small enough to digest (a milestone that holds many dev tickets is cut too coarsely), never names or scopes an environment (no « Deposit on staging » / « Deposit on prod » pair: the one feature is « Deposit files »), holds a Proof on each environment it concerns, and is done on an environment when the Proofs of that environment are Done."
+      }
+    },
+    "types": [
+      {
+        "id": "Bug",
+        "roles": [
+          "problem"
+        ],
+        "definition": "Something delivered fails to do what was promised, and the promise can be cited. The Bug describes the problem; the fix is done by Technical tasks, its sub-issues.",
+        "test": "Can you fill « Expected » by citing a source: a spec, an API contract, a doc, or the behaviour before?",
+        "required_sections": [
+          "In plain words, with an example"
+        ]
+      },
+      {
+        "id": "Blocker",
+        "roles": [
+          "waiting"
+        ],
+        "definition": "Someone outside the team must do something: grant an access, deliver a piece of work, intervene.",
+        "test": "Can you name who must act, what, and who waits?",
+        "required_attributes": [
+          "addressee"
+        ],
+        "required_sections": [
+          "In plain words, with an example"
+        ]
+      },
+      {
+        "id": "Question",
+        "roles": [
+          "waiting"
+        ],
+        "definition": "Someone must tell us something: a decision or an information.",
+        "test": "Can you write it in one sentence and name who decides?",
+        "required_attributes": [
+          "addressee"
+        ],
+        "required_sections": [
+          "In plain words, with an example"
+        ]
+      },
+      {
+        "id": "Research",
+        "roles": [],
+        "definition": "We do not know yet what to do, it is ours to find out, within a time-box; the deliverable is a written decision or a proof of concept, never shipped code.",
+        "test": "Is the deliverable a written decision or a proof of concept?",
+        "required_sections": [
+          "In plain words, with an example"
+        ]
+      },
+      {
+        "id": "Proof",
+        "roles": [
+          "evidence"
+        ],
+        "definition": "Show that one thing works on one environment, by running something and looking at the result, with no code to write. A top-level Proof is the human face (context, what will be proved, where we stand) and has sub-issue Proofs; each sub-issue Proof answers exactly one fact or one question.",
+        "test": "Is the work to run something and look at the result?",
+        "required_sections": [
+          "In plain words, with an example"
+        ]
+      },
+      {
+        "id": "Technical task",
+        "roles": [
+          "change"
+        ],
+        "definition": "Work that ends in a merge: a slice of a feature, the fix of a Bug, an upgrade, debt, tooling, infra, a data migration. It carries a complexity.",
+        "test": "Does it end in a merge?",
+        "required_sections": [
+          "In plain words, with an example"
+        ]
+      }
+    ],
+    "decision_order": [
+      "Bug",
+      "Blocker",
+      "Question",
+      "Research",
+      "Proof",
+      "Technical task"
+    ],
+    "roles": {
+      "change": "A ticket that ends in a merge: Technical task. Also called a dev ticket. The Bug is not one: it describes the problem and its Technical tasks fix it.",
+      "problem": "A ticket describing something broken, fixed by the Technical tasks that are its sub-issues: Bug.",
+      "waiting": "A ticket that waits on someone outside the team: Question, Blocker.",
+      "evidence": "A ticket whose work is to observe and report: Proof."
+    },
+    "relations": {
+      "blocks": {
+        "directed": true,
+        "inverse": "blocked-by",
+        "meaning": "A blocks B: B cannot be closed before A is. It says what stops the work; the ticket type never does."
+      },
+      "related": {
+        "directed": false,
+        "meaning": "A and B concern the same thing; no ordering."
+      },
+      "parent": {
+        "directed": true,
+        "meaning": "A is a sub-issue of B (a Technical task split out of a Feature)."
+      }
+    },
+    "reports": [
+      {
+        "id": "feature-environments",
+        "grouping": "feature",
+        "subject": "Proof",
+        "by": "environment",
+        "top_level": true,
+        "text": "Per feature and per environment: top-level Proofs Done / Proofs. ✔ = all Done, ⧗ = some open, - = none."
+      }
+    ],
+    "rules": [
+      {
+        "id": "one-type",
+        "rule": "attribute-cardinality",
+        "attribute": "type",
+        "min": 1,
+        "max": 1,
+        "source": "ticket-types.md#labels",
+        "text": "Every issue carries exactly one Type."
+      },
+      {
+        "id": "one-addressee-at-most",
+        "rule": "attribute-cardinality",
+        "attribute": "addressee",
+        "min": 0,
+        "max": 1,
+        "source": "ticket-types.md#labels",
+        "text": "The Addressee is a single choice."
+      },
+      {
+        "id": "one-environment-at-most",
+        "rule": "attribute-cardinality",
+        "attribute": "environment",
+        "min": 0,
+        "max": 1,
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "The Environment is a single choice."
+      },
+      {
+        "id": "proof-has-environment",
+        "rule": "attribute-required",
+        "subject": "Proof",
+        "top_level": true,
+        "attribute": "environment",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A top-level Proof proves things on one environment: it carries its Environment."
+      },
+      {
+        "id": "environment-only-on-proof",
+        "rule": "attribute-only-on",
+        "attribute": "environment",
+        "types": "Proof",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "Environment is used on Proofs only."
+      },
+      {
+        "id": "feature-has-proof",
+        "rule": "grouping-contains",
+        "grouping": "feature",
+        "subject": "Proof",
+        "min": 1,
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "Every feature holds at least one Proof."
+      },
+      {
+        "id": "feature-not-named-after-environment",
+        "rule": "grouping-name-forbids",
+        "grouping": "feature",
+        "attribute": "environment",
+        "severity": "warning",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A feature is about the product, never named after a deployment environment (the environments are the values and aliases of the environment attribute in the binding)."
+      },
+      {
+        "id": "feature-proved-on-each-environment",
+        "rule": "grouping-covers-attribute",
+        "grouping": "feature",
+        "subject": "Proof",
+        "attribute": "environment",
+        "severity": "warning",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "Every feature holds a Proof on each environment it concerns (default: every environment of the binding; narrow it with `values` in a rules overlay)."
+      },
+      {
+        "id": "prod-proof-after-staging",
+        "rule": "blocked-by-all-in-grouping",
+        "subject": "Proof",
+        "top_level": true,
+        "where": {
+          "attribute": "environment",
+          "value": "Prod"
+        },
+        "objects": "Proof",
+        "objects_where": {
+          "attribute": "environment",
+          "value": "Staging"
+        },
+        "grouping": "feature",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A Prod Proof is blocked by every Staging Proof of its feature."
+      },
+      {
+        "id": "proof-blocked-by-change",
+        "rule": "blocked-by-any",
+        "subject": "Proof",
+        "top_level": true,
+        "objects": "@change",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A top-level Proof is blocked by at least one dev ticket."
+      },
+      {
+        "id": "proof-blocked-by-whole-feature",
+        "rule": "blocked-by-all-in-grouping",
+        "subject": "Proof",
+        "top_level": true,
+        "objects": "@change",
+        "grouping": "feature",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "Each top-level Proof is blocked by every dev ticket of its feature: no partial proof, the proof waits until everything is developed."
+      },
+      {
+        "id": "done-proof-needs-done-change",
+        "rule": "closed-requires-blockers-closed",
+        "subject": "Proof",
+        "top_level": true,
+        "objects": "@change",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A Proof that is Done cannot be blocked by a dev ticket that is not Done."
+      },
+      {
+        "id": "proof-has-subproofs",
+        "rule": "linked-to",
+        "subject": "Proof",
+        "top_level": true,
+        "relations": [
+          "child"
+        ],
+        "object": "Proof",
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A top-level Proof is split into sub-issue Proofs, each answering exactly one fact or one question."
+      },
+      {
+        "id": "done-proof-needs-done-subproofs",
+        "rule": "closed-requires-children-closed",
+        "subject": "Proof",
+        "top_level": true,
+        "source": "ticket-types.md#proof-and-delivery-as-a-feature",
+        "text": "A top-level Proof that is Done has all its sub-issue Proofs Done."
+      },
+      {
+        "id": "addressee-on-waiting",
+        "rule": "attribute-required",
+        "subject": "@waiting",
+        "attribute": "addressee",
+        "source": "ticket-types.md#addressee-who-must-answer-or-act",
+        "text": "A Question or a Blocker names who must answer or act."
+      },
+      {
+        "id": "addressee-only-on-waiting",
+        "rule": "attribute-only-on",
+        "attribute": "addressee",
+        "types": "@waiting",
+        "source": "ticket-types.md#labels",
+        "text": "Addressee is used on Question and Blocker only."
+      },
+      {
+        "id": "waiting-in-addressee-team",
+        "rule": "team-matches-attribute",
+        "attribute": "addressee",
+        "subject": "@waiting",
+        "source": "ticket-types.md#addressee-who-must-answer-or-act",
+        "text": "A Question or a Blocker is created in the team that must answer or act."
+      },
+      {
+        "id": "bug-split-into-tasks",
+        "rule": "linked-to",
+        "subject": "Bug",
+        "relations": [
+          "child"
+        ],
+        "object": "Technical task",
+        "source": "ticket-types.md#bug-a-problem-fixed-by-technical-tasks",
+        "text": "A Bug describes the problem; its fix is one or several Technical tasks, as its sub-issues."
+      },
+      {
+        "id": "change-has-complexity",
+        "rule": "estimate-required",
+        "subject": "@change",
+        "attribute": "complexity",
+        "source": "ticket-types.md#complexity-and-splitting",
+        "text": "Every dev ticket carries a complexity (1 to 5): it picks the model and tells whether to split."
+      },
+      {
+        "id": "complexity-max-unsplit",
+        "rule": "estimate-max-unsplit",
+        "subject": "@change",
+        "attribute": "complexity",
+        "max": 3,
+        "severity": "warning",
+        "waiver": {
+          "section": "Complexity",
+          "match": "^(atomic|indivisible|cannot be split)"
+        },
+        "source": "ticket-types.md#complexity-and-splitting",
+        "text": "A dev ticket above complexity 3 is split into sub-issues as early as possible, unless its Complexity section says it is atomic and why."
+      },
+      {
+        "id": "feature-stays-digestible",
+        "rule": "grouping-max-members",
+        "grouping": "feature",
+        "subject": "@change",
+        "max": 8,
+        "severity": "warning",
+        "source": "ticket-types.md#a-feature-you-can-digest",
+        "text": "A feature holding more than 8 dev tickets is cut too coarsely: split it into several features."
+      },
+      {
+        "id": "required-sections",
+        "rule": "requires-sections",
+        "subject": "*",
+        "source": "ticket-types.md#every-ticket-opens-with-an-example-in-plain-words",
+        "text": "A ticket body has the sections its type requires, « In plain words » first."
+      }
+    ]
+  },
+  "binding": {
+    "_comment": "Linear specifics: label groups, template names, state names. Replace this block to bind the generic model to another tracker.",
+    "tracker": "linear",
+    "attributes": {
+      "type": {
+        "label_group": "Type",
+        "scope": "workspace",
+        "values": [
+          "Bug",
+          "Blocker",
+          "Question",
+          "Research",
+          "Proof",
+          "Technical task"
+        ]
+      },
+      "addressee": {
+        "label_group": "Addressee",
+        "scope": "workspace",
+        "values": [
+          "Product",
+          "Technical",
+          "Security / legal",
+          "External",
+          "Organisation"
+        ],
+        "team_keys": {}
+      },
+      "environment": {
+        "label_group": "Environment",
+        "scope": "workspace",
+        "values": [
+          "Staging",
+          "Prod"
+        ],
+        "aliases": {
+          "Staging": [
+            "stage",
+            "recette",
+            "pprod",
+            "preprod",
+            "pre-prod"
+          ],
+          "Prod": [
+            "production"
+          ]
+        },
+        "_comment": "The environments of YOUR project: list them here (values) and the words a milestone name might use for them (aliases). The rules lot-proved-on-each-environment and lot-not-named-after-environment read this list; override it in a rules file under `binding`."
+      },
+      "complexity": {
+        "node_field": "estimate",
+        "scale": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "model_hints": {
+          "1": "haiku",
+          "2": "sonnet",
+          "3": "sonnet",
+          "4": "opus",
+          "5": "opus"
+        },
+        "_comment": "Complexity is the tracker's numeric estimate (set the team's estimation to Linear or Exponential so 1..5 are allowed values). `model_hints` is advice read by the agent that picks a model for a ticket, never enforced; edit it in a rules overlay under `binding`."
+      }
+    },
+    "groupings": {
+      "feature": {
+        "linear": "project milestone",
+        "node_field": "milestone"
+      }
+    },
+    "templates": {
+      "Bug": {
+        "workspace_template": "Bug",
+        "file": "templates/tickets/bug.md"
+      },
+      "Blocker": {
+        "workspace_template": "Blocker",
+        "file": "templates/tickets/blocker.md"
+      },
+      "Question": {
+        "workspace_template": "Question",
+        "file": "templates/tickets/question.md"
+      },
+      "Research": {
+        "workspace_template": "Research",
+        "file": "templates/tickets/research.md"
+      },
+      "Proof": {
+        "workspace_template": "Proof",
+        "file": "templates/tickets/proof.md"
+      },
+      "Technical task": {
+        "workspace_template": "Technical task",
+        "file": "templates/tickets/technical-task.md"
+      },
+      "Proof fact": {
+        "workspace_template": "Proof fact",
+        "file": "templates/tickets/proof-fact.md",
+        "_comment": "Second template of the Proof type, for the sub-issue Proofs."
+      }
+    },
+    "states": {
+      "done_kinds": [
+        "completed"
+      ],
+      "ignored_kinds": [
+        "canceled"
+      ],
+      "done_name": "Done",
+      "_comment": "Kinds are Linear's state types, as exported in node.state."
+    }
+  }
+}

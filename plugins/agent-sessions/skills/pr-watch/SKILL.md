@@ -304,6 +304,25 @@ prw subscribe --commit "$(git rev-parse HEAD)" --branch staging --session "$SESS
    or the post-merge build line was delivered). Do not re-arm.
 5. Exit 4 (`already waiting`): a wait is already armed for this session. Do not re-arm.
 
+## `prw` as a local MCP server
+
+`mcp/prw_mcp.py` (standard library, stdio) exposes `prw` as tools: `prw_subscribe` (a PR, a branch
+or a merge commit), `prw_unsubscribe`, `prw_ignore_comment`, `prw_list`, `prw_status`, `prw_wait`,
+`prw_doctor` and `prw_daemon` (`once`, `alive`, `start`, `stop`; never `run`, the foreground loop).
+Each tool runs one `prw` subcommand and returns `exit_code`, `stdout` and `stderr`. Register it once
+per machine from the installed copy:
+
+```bash
+claude mcp add prw -- python3 ~/.agents/skills/pr-watch/mcp/prw_mcp.py
+```
+
+`PRW_BIN` points the server at another `prw` (the Docker wrapper `scripts/watchers-docker/prw`).
+`prw_wait` is bounded (default 25 s, at most 55 s): `status` is `wake` (with `lines`), `timeout`,
+`no-open-subscription` (exit 3, do not re-arm) or `already-waiting` (exit 4, do not re-arm). A
+`wake` whose lines say `still watching` is followed by another `prw_wait`. For a wait that costs
+no tokens, the CLI `prw wait` with `run_in_background` remains the better tool. Tests:
+`docker run --rm -v "$PWD/..:/skills:ro" -w /skills/pr-watch/tests python:3.12-alpine python3 -B -m unittest prw_mcp_test`.
+
 ## 9. The daemon reloads its own code
 
 A long-running bash never re-sources its libraries. On 2026-11-02 a daemon
