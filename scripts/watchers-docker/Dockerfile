@@ -34,7 +34,8 @@ RUN set -eu; \
 # Copied, not mounted: the scripts then do not live in a git checkout, so the
 # "refusing: runs from a git checkout" guards stay armed and untouched.
 COPY skills/pr-watch /opt/watchers/pr-watch
-COPY skills/linear-tracker /opt/watchers/linear-tracker
+COPY skills/linear-atlas /opt/watchers/linear-atlas
+COPY skills/linear-semantics /opt/watchers/linear-semantics
 
 RUN useradd --create-home --uid 10001 --shell /bin/bash watcher \
  && mkdir -p /var/lib/watchers/prw /var/lib/watchers/lw \

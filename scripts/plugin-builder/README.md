@@ -174,7 +174,7 @@ built asset sets `plugin` explicitly. `modelo-internal` exists in the registry b
 
 ### `agent-sessions`
 
-- Skills: `ai-usage-tracking`, `conversation-focus`, `grievances`, `linear-tracker`, `pilot-session`, `plain-explanation`, `pr-watch`, `session-meta`, `session-title`
+- Skills: `ai-usage-tracking`, `conversation-focus`, `grievances`, `linear-atlas`, `linear-semantics`, `linear-tracker`, `pilot-session`, `plain-explanation`, `pr-watch`, `session-meta`, `session-title`
 - Hooks: `conversation-focus-prompt`, `conversation-focus-stop`, `pilot-reminder`, `session-title-ask`, `session-title-close-kids`, `session-title-progress`, `session-title-sync`, `session-title-watcher-check`, `session-title-working`
 
 ### `agent-tooling`

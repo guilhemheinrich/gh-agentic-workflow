@@ -4,4 +4,4 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Git Bash: hand docker a Windows path, and keep it from rewriting /opt/... args.
 here="$(cygpath -m "$here" 2>/dev/null || printf '%s' "$here")"
 export MSYS_NO_PATHCONV=1
-exec docker compose -f "$here/compose.yml" exec -T lw python3 /opt/watchers/linear-tracker/scripts/lw "$@"
+exec docker compose -f "$here/compose.yml" exec -T lw python3 /opt/watchers/linear-atlas/scripts/lw "$@"
