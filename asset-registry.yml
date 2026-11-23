@@ -1225,6 +1225,11 @@ assets:
       of a Linear project", "inconsistent tickets", "what is in staging", "LINEAR_API_KEY", "linear watch", "lw subscribe",
       "lw wait", "lw MCP", "watch this ticket", "réveiller la session sur Linear", "surveiller le projet Linear", "linear-
       atlas".
+    mcp:
+      - name: lw
+        command: python3
+        args:
+          - ${CLAUDE_PLUGIN_ROOT}/skills/linear-atlas/mcp/lw_mcp.py
     category: workflows-and-processes
     plugin: agent-sessions
   - path: skills/linear-semantics/
@@ -1494,6 +1499,11 @@ assets:
       watcher on a machine, when adding GitHub to a machine that already watches Bitbucket (or the reverse), when adding
       a third host, or when a session is woken by a `prw wait` exit. Triggers on "pr watch", "prw", "réagir aux PR",
       "news de GitHub / Bitbucket", "pipeline échoué", "commentaire de PR", "instancier le watcher".
+    mcp:
+      - name: prw
+        command: python3
+        args:
+          - ${CLAUDE_PLUGIN_ROOT}/skills/pr-watch/mcp/prw_mcp.py
     category: devx-and-agentic
     plugin: agent-sessions
   - path: skills/semantic-release-js-ts-pipeline/

@@ -160,6 +160,24 @@ export function buildPlugins({ root, config, out, write, visibility = 'public' }
   for (const [p, names] of hooksOf) {
     planOf(p).files.set('hooks/hooks.json', { buf: Buffer.from(json(buildHooksJson(names))), mode: 0o644 });
   }
+  // ---- MCP servers shipped by skills: one .mcp.json per plugin -------------
+  const mcpOf = new Map();
+  for (const a of builtAssets) {
+    if (!a.mcp?.length || skipPlugin(a.plugin)) continue;
+    if (a.type !== 'skill') { errors.push(`${a.type} '${a.name}': \`mcp\` is only allowed on skills`); continue; }
+    const servers = mcpOf.get(a.plugin) ?? mcpOf.set(a.plugin, {}).get(a.plugin);
+    for (const m of a.mcp) {
+      if (servers[m.name]) { errors.push(`plugin '${a.plugin}': MCP server '${m.name}' declared twice`); continue; }
+      for (const arg of m.args ?? []) {
+        const hit = /^\$\{CLAUDE_PLUGIN_ROOT\}\/(.+)$/.exec(arg);
+        if (hit && !planOf(a.plugin).files.has(hit[1])) errors.push(`skill '${a.name}': MCP server '${m.name}' runs '${hit[1]}', which the plugin does not ship`);
+      }
+      servers[m.name] = { command: m.command, ...(m.args?.length ? { args: m.args } : {}), ...(m.env ? { env: m.env } : {}) };
+    }
+  }
+  for (const [p, servers] of mcpOf) {
+    planOf(p).files.set('.mcp.json', { buf: Buffer.from(json({ mcpServers: servers })), mode: 0o644 });
+  }
   const pluginNames = [...plugins.keys()].sort();
   for (const p of pluginNames) {
     const manifest = { name: p, description: describePlugin(p), author: config.marketplace.owner };
@@ -179,7 +197,7 @@ export function buildPlugins({ root, config, out, write, visibility = 'public' }
   report.push('Plugins (asset counts):');
   for (const p of pluginNames) {
     const c = plugins.get(p).counts;
-    report.push(`  ${p.padEnd(18)} skills=${c.skill} agents=${c.agent} commands=${c.command} hooks=${c.hook}`);
+    report.push(`  ${p.padEnd(18)} skills=${c.skill} agents=${c.agent} commands=${c.command} hooks=${c.hook} mcp=${Object.keys(mcpOf.get(p) ?? {}).length}`);
   }
   const edges = [];
   for (const p of pluginNames) for (const [d, from] of plugins.get(p).deps) edges.push(`  ${p} -> ${d} (${from.size} file(s))`);

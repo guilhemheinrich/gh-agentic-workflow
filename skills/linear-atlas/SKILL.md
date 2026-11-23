@@ -509,7 +509,7 @@ never shells out or calls a Docker wrapper: `lw_subscribe`, `lw_unsubscribe`, `l
 subcommand and returns `exit_code`, `stdout` and `stderr`; `lw` stays the one place that holds the
 watcher's behaviour.
 
-Register it once per machine, from the installed copy (the daemon itself stays the launchd job):
+Installed through the Claude plugin (`agent-sessions`), the server is declared in the plugin's `.mcp.json` and needs no registration. Otherwise, register it once per machine, from the installed copy (the daemon itself stays the launchd job):
 
 ```bash
 claude mcp add lw -- python3 ~/.agents/skills/linear-atlas/mcp/lw_mcp.py
