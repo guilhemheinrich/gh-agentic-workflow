@@ -41,6 +41,9 @@
         "scripts",
         "shared",
         "skills"
+      ],
+      "path-traversal-example-in-audit-skill": [
+        "etc"
       ]
     },
     "agent": {},
@@ -62,7 +65,20 @@
         "user",
         "var",
         "version",
-        "work"
+        "work",
+        "metrics",
+        "console",
+        "jolokia",
+        "phpinfo.php",
+        "actuator",
+        "server-status",
+        "server-info",
+        "openapi.json",
+        "ready",
+        "live",
+        "info",
+        "graphql",
+        "etc"
       ],
       "claude-code-builtin": [
         "mcp",
@@ -87,6 +103,9 @@
         "speckit.specify",
         "speckit.tasks",
         "tasks"
+      ],
+      "builtin-claude-code-command-named-in-audit-skill": [
+        "security-review"
       ]
     }
   }

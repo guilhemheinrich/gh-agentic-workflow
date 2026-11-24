@@ -1,0 +1,27 @@
+# method<TAB>path<TAB>severity<TAB>signature (extended regex on the first 64 kB of the body)<TAB>what a match proves
+# A row is reported "exposed" only when the status is 200 AND the signature matches,
+# which rules out soft-404 pages. Bodies are never stored, only the boolean.
+GET	/.git/HEAD	high	^ref: refs/|^[0-9a-f]{40}$	Git metadata served: this file is public; whether the objects (the source) are too was not tested
+GET	/.git/config	high	\[core\]	Git config served: remote URLs, sometimes credentials
+GET	/.env	critical	^[A-Z_][A-Z0-9_]*=	Environment file served: KEY=value lines are public; such files usually hold database and API credentials
+GET	/metrics	medium	^# (HELP|TYPE) 	Prometheus metrics public: internal names, versions, traffic volumes
+GET	/actuator	medium	"_links"	Spring Boot Actuator index public
+GET	/actuator/env	high	"propertySources"	Actuator env public: configuration keys; values are masked by default since Spring Boot 3, so secrets are possible, not proven
+GET	/actuator/health	info	"status"	Actuator health public (acceptable if it shows no component detail)
+GET	/server-status	medium	Apache Server Status|Active connections:	Web server status page public: client IPs, URLs, worker state
+GET	/nginx_status	low	Active connections:	nginx stub_status public
+GET	/server-info	medium	Apache Server Information	Apache module and config dump public
+GET	/swagger-ui/	low	swagger-ui	Swagger UI public: full API surface documented for attackers too
+GET	/swagger-ui.html	low	swagger-ui	Swagger UI public
+GET	/v3/api-docs	low	"openapi"[[:space:]]*:	OpenAPI document public
+GET	/openapi.json	low	"openapi"[[:space:]]*:	OpenAPI document public
+GET	/swagger.json	low	"swagger"[[:space:]]*:	Swagger 2 document public
+POST	/graphql	medium	"__schema"	GraphQL introspection answers: the schema is probably queryable (only the root type name was asked)
+GET	/debug/pprof/	high	Types of profiles available|debug/pprof/	Go pprof public: heap and goroutine dumps, DoS lever
+GET	/debug/vars	medium	"cmdline"	Go expvar public: command line and memory stats
+GET	/phpinfo.php	high	PHP Version	phpinfo public: paths, modules, environment variables
+GET	/jolokia	high	"agent"	Jolokia JMX bridge public: a known route to remote code execution when write/exec is allowed
+GET	/_profiler	high	Symfony Profiler	Symfony profiler public: requests, sessions, config
+GET	/console	high	Werkzeug|H2 Console	Interactive debug console public
+GET	/haproxy?stats	medium	Statistics Report for	HAProxy stats page public: backend names and health
+GET	/.well-known/security.txt	good	Contact:	security.txt present (a positive finding)

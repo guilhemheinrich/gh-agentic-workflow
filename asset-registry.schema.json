@@ -295,7 +295,8 @@
         "domain-specific",
         "other",
         "philosophy",
-        "devx-and-agentic"
+        "devx-and-agentic",
+        "audit"
       ],
       "patternProperties": {
         ".*": {
@@ -329,7 +330,8 @@
         "domain-specific",
         "other",
         "philosophy",
-        "devx-and-agentic"
+        "devx-and-agentic",
+        "audit"
       ]
     },
     "bundle": {

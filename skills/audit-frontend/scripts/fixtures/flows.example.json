@@ -1,0 +1,21 @@
+{
+  "baseUrl": null,
+  "flows": [
+    {
+      "name": "fixture",
+      "steps": [
+        { "goto": "slow-page.html", "label": "cold load" },
+        { "click": "#fast", "label": "control: should raise no flag", "expectNoFlags": true },
+        { "click": "#slow", "label": "600 ms synchronous handler", "expectFlags": ["interaction-latency", "main-thread-blocked"], "expectLatency": "measured" },
+        { "click": "#thrash", "label": "write/read geometry in a loop", "expectFlags": ["forced-layout"] },
+        { "click": "#later", "expect": "#result", "label": "fast handler, late result", "expectFlags": ["slow-result"] },
+        { "type": ["#q", "audit"], "label": "per-keystroke input lag", "expectFlags": ["main-thread-blocked"], "expectLatency": "measured" },
+        { "hover": "#fast", "label": "not a timed interaction", "expectLatency": "not-applicable" },
+        { "check": "#done", "label": "no input reaches the page", "expectLatency": "no-input-event", "expectFlags": ["no-input-event"] },
+        { "scroll": 2400, "label": "scroll listener doing sync work", "expectFlags": ["dropped-frames"], "expectLatency": "not-applicable" },
+        { "axe": true },
+        { "dumpDom": "fixture-final" }
+      ]
+    }
+  ]
+}

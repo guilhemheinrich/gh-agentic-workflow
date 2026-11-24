@@ -73,6 +73,7 @@ Current split (every asset sets `plugin` explicitly; public build):
 |---|---:|---:|---:|---:|---:|
 | `agent-sessions` | 9 | 0 | 0 | 9 | 18 |
 | `agent-tooling` | 4 | 0 | 0 | 0 | 4 |
+| `audit` | 4 | 0 | 0 | 0 | 4 |
 | `backend-and-data` | 6 | 0 | 0 | 0 | 6 |
 | `docker-and-k8s` | 5 | 0 | 2 | 0 | 7 |
 | `frontend` | 4 | 0 | 0 | 0 | 4 |
@@ -80,7 +81,7 @@ Current split (every asset sets `plugin` explicitly; public build):
 | `review-and-projection` | 5 | 0 | 0 | 0 | 5 |
 | `speckit` | 3 | 9 | 2 | 0 | 14 |
 | `testing-and-debugging` | 4 | 1 | 2 | 0 | 7 |
-| | **47** | **12** | **11** | **9** | **79** |
+| | **51** | **12** | **11** | **9** | **83** |
 
 Skills are installed as `/<plugin>:<skill>`, e.g. `/testing-and-debugging:e2e-playwright`.
 `modelo-internal` (private, never published) and `speckit` (needs GitHub Spec Kit installed) are
@@ -172,6 +173,7 @@ built asset sets `plugin` explicitly. `modelo-internal` exists in the registry b
 |---|---:|---:|---:|---:|---:|
 | `agent-sessions` | 9 | 0 | 0 | 9 | 18 |
 | `agent-tooling` | 4 | 0 | 0 | 0 | 4 |
+| `audit` | 4 | 0 | 0 | 0 | 4 |
 | `backend-and-data` | 6 | 0 | 0 | 0 | 6 |
 | `docker-and-k8s` | 5 | 0 | 2 | 0 | 7 |
 | `frontend` | 4 | 0 | 0 | 0 | 4 |
@@ -179,7 +181,7 @@ built asset sets `plugin` explicitly. `modelo-internal` exists in the registry b
 | `review-and-projection` | 5 | 0 | 0 | 0 | 5 |
 | `speckit` | 3 | 9 | 2 | 0 | 14 |
 | `testing-and-debugging` | 4 | 1 | 2 | 0 | 7 |
-| | **47** | **12** | **11** | **9** | **79** |
+| | **51** | **12** | **11** | **9** | **83** |
 
 ### `agent-sessions`
 
@@ -189,6 +191,10 @@ built asset sets `plugin` explicitly. `modelo-internal` exists in the registry b
 ### `agent-tooling`
 
 - Skills: `claude-plugin-release`, `eslint-solid-nestjs`, `lsp-mcp`, `static-validation-hooks`
+
+### `audit`
+
+- Skills: `audit-database`, `audit-frontend`, `audit-infra`, `audit-security`
 
 ### `backend-and-data`
 
