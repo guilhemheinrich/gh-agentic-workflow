@@ -1,0 +1,15 @@
+{
+  "name": "audit",
+  "description": "Audits — rigorous, evidence-based reviews of a system (front-end, database, infrastructure, security) that produce a triaged findings report, driven by open-source tooling run in Docker.",
+  "author": {
+    "name": "guilhemheinrich"
+  },
+  "version": "0.6.0",
+  "dependencies": [
+    "backend-and-data",
+    "docker-and-k8s",
+    "frontend",
+    "git-and-delivery",
+    "testing-and-debugging"
+  ]
+}

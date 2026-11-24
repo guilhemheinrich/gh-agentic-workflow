@@ -1,0 +1,70 @@
+# LOCAL LAB, deliberately misconfigured: one nginx "load balancer" in front of two nginx
+# backends. It exists to prove that collect-headers.sh and tls-and-dns.sh detect what
+# they claim to detect. No port is published on the host: the collectors join the
+# `audit-lab` network with --docker-network audit-lab.
+#
+#   docker build -t audit-infra-toolbox:1 skills/audit-infra/scripts/
+#   docker compose -f skills/audit-infra/scripts/fixtures/lb-lab/docker-compose.yml up -d
+#   skills/audit-infra/scripts/collect-headers.sh --i-am-authorized lab-lb --active-scans-agreed lab-lb \
+#       --docker-network audit-lab --probe-endpoints http://lab-lb:8080/
+#   skills/audit-infra/scripts/active-scan.sh --i-am-authorized lab-lb --active-scans-agreed lab-lb \
+#       --docker-network audit-lab --ports 80,443,8080,8443,9443,5432 nmap lab-lb
+#   skills/audit-infra/scripts/tls-and-dns.sh --i-am-authorized lab-lb --tls-only \
+#       --docker-network audit-lab --port 8443 lab-lb
+#   DNS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' audit-lab-lab-dns-1)
+#   skills/audit-infra/scripts/tls-and-dns.sh --i-am-authorized dangling.lab.test --dns-only \
+#       --docker-network audit-lab --resolver "$DNS" dangling.lab.test
+#   docker compose -f skills/audit-infra/scripts/fixtures/lb-lab/docker-compose.yml down -v
+name: audit-lab
+
+services:
+  certgen:
+    image: audit-infra-toolbox:1
+    user: "0"
+    volumes: ["certs:/certs"]
+    command:
+      - sh
+      - -c
+      - >-
+        test -f /certs/lab.crt ||
+        openssl req -x509 -newkey rsa:2048 -nodes -days 20
+        -subj "/CN=lab-lb" -addext "subjectAltName=DNS:lab-lb"
+        -keyout /certs/lab.key -out /certs/lab.crt 2>/dev/null;
+        chmod 644 /certs/lab.key
+    networks: [lab]
+
+  backend-a:
+    image: nginx:1.31.10-alpine
+    volumes: ["./backend-a.conf:/etc/nginx/conf.d/default.conf:ro"]
+    networks: [lab]
+
+  backend-b:
+    image: nginx:1.31.10-alpine
+    volumes: ["./backend-b.conf:/etc/nginx/conf.d/default.conf:ro"]
+    networks: [lab]
+
+  lab-lb:
+    image: nginx:1.31.10-alpine
+    depends_on:
+      certgen: {condition: service_completed_successfully}
+      backend-a: {condition: service_started}
+      backend-b: {condition: service_started}
+    volumes:
+      - "./lb.conf:/etc/nginx/conf.d/default.conf:ro"
+      - "certs:/certs:ro"
+    networks: [lab]
+
+  lab-dns:
+    image: coredns/coredns:1.15.0
+    command: ["-conf", "/etc/coredns/Corefile"]
+    volumes:
+      - "./Corefile:/etc/coredns/Corefile:ro"
+      - "./lab.test.zone:/zones/lab.test.zone:ro"
+    networks: [lab]
+
+volumes:
+  certs: {}
+
+networks:
+  lab:
+    name: audit-lab

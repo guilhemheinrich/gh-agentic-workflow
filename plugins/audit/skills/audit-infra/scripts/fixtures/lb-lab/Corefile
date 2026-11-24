@@ -1,0 +1,5 @@
+# Lab DNS: authoritative for lab.test only, answers nothing else.
+lab.test:53 {
+    file /zones/lab.test.zone
+    errors
+}
