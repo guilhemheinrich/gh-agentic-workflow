@@ -1,0 +1,16 @@
+; Lab zone. Detection targets:
+;   www      -> two-hop CNAME chain ending on two A records (DNS round robin)
+;   dangling -> CNAME to a name that no longer exists (NXDOMAIN): takeover-shaped
+$ORIGIN lab.test.
+$TTL 60
+@         IN SOA ns.lab.test. hostmaster.lab.test. 1 7200 3600 1209600 60
+@         IN NS  ns.lab.test.
+@         IN CAA 0 issue "letsencrypt.org"
+@         IN TXT "v=spf1 -all"
+_dmarc    IN TXT "v=DMARC1; p=reject"
+ns        IN A   192.0.2.53
+www       IN CNAME edge.lab.test.
+edge      IN CNAME lb.lab.test.
+lb        IN A   192.0.2.10
+lb        IN A   192.0.2.11
+dangling  IN CNAME decommissioned.lab.test.

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>audit-frontend probe fixture</title>
+    <style>
+      body { font-family: sans-serif; margin: 16px; }
+      button, input { font-size: 16px; margin: 4px; }
+      #list div { border-bottom: 1px solid #ccc; }
+      #result { display: none; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Self-test page for scripts/interaction-probe.mjs. Every control below
+      carries one deliberate defect so that each probe flag can be seen firing.
+      Not an example of how to write a page.
+    -->
+    <h1>Probe fixture</h1>
+    <button id="fast">fast (control, no defect)</button>
+    <button id="slow">slow handler (blocks 600 ms)</button>
+    <button id="thrash">layout thrashing</button>
+    <button id="later">result after 1500 ms</button>
+    <input id="q" aria-label="search" placeholder="80 ms of work per keystroke" />
+    <p id="out">-</p>
+    <p id="result">result is here</p>
+    <label><input type="checkbox" id="done" checked /> already checked (a check step sends no input)</label>
+    <img src="missing-image.png" alt="deliberately missing" width="10" height="10" />
+    <div id="list"></div>
+
+    <script>
+      const out = document.getElementById('out');
+      const busy = (ms) => {
+        const end = performance.now() + ms;
+        while (performance.now() < end) { /* burn the main thread */ }
+      };
+
+      console.error('fixture: deliberate console.error at load');
+
+      document.getElementById('fast').addEventListener('click', () => {
+        out.textContent = 'fast ' + Date.now();
+      });
+
+      document.getElementById('slow').addEventListener('click', () => {
+        busy(600);
+        out.textContent = 'slow ' + Date.now();
+      });
+
+      // Write then read geometry in the same loop: each read forces a layout.
+      document.getElementById('thrash').addEventListener('click', () => {
+        const rows = document.querySelectorAll('#list div');
+        let total = 0;
+        for (const row of rows) {
+          row.style.paddingLeft = (total % 7) + 'px';
+          total += row.offsetHeight;
+        }
+        out.textContent = 'thrash ' + total;
+      });
+
+      // Fast handler, slow outcome: INP is good, the user still waits.
+      document.getElementById('later').addEventListener('click', () => {
+        out.textContent = 'working...';
+        setTimeout(() => {
+          document.getElementById('result').style.display = 'block';
+        }, 1500);
+      });
+
+      document.getElementById('q').addEventListener('input', (e) => {
+        busy(80);
+        out.textContent = 'typed ' + e.target.value;
+      });
+
+      const list = document.getElementById('list');
+      for (let i = 0; i < 3000; i++) {
+        const d = document.createElement('div');
+        d.textContent = 'row ' + i;
+        list.appendChild(d);
+      }
+
+      // Unthrottled scroll listener doing synchronous work.
+      window.addEventListener('scroll', () => { busy(40); });
+    </script>
+  </body>
+</html>

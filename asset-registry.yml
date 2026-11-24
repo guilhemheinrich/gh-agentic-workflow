@@ -108,6 +108,9 @@ x-category-descriptions:
   devx-and-agentic: >-
     DevX & Agentic — developer experience and agent harness tooling (session titles, self-improving skills, skill
     discovery, agent hooks)
+  audit: >-
+    Audits — rigorous, evidence-based reviews of a system (front-end, database, infrastructure, security) that produce
+    a triaged findings report, driven by open-source tooling run in Docker.
   other: Everything else
 x-plugin-descriptions:
   agent-sessions: >-
@@ -1707,3 +1710,94 @@ assets:
       validation. All tools produce machine-readable output without host dependencies.
     category: quality-assurance
     plugin: testing-and-debugging
+  - path: skills/audit-frontend/
+    type: skill
+    tags:
+      - accessibility
+      - docker
+      - eslint
+      - frontend
+      - performance
+      - playwright
+      - quality
+      - typescript
+      - web-analysis
+    description: >-
+      Rigorous front-end audit of a web project, with evidence for every finding: measured latency of real interactions
+      (Playwright probe recording INP-style event timing, long tasks, Long Animation Frames, forced layout, framework
+      commit counts, console and network errors), an expert review of state-management and rendering errors (state at
+      the wrong level, selectors returning new references, effect cascades, render loops, context churn, unstable keys,
+      unvirtualized lists, layout thrashing, two-way sync, async races) for React, Vue, Svelte, Solid, Angular signals
+      and Lit, a Dockerized static battery (TypeScript strict, ESLint, stylelint, HTML/CSS validity, bundle budgets,
+      unused code, dependency advisories), and a findings report with severity and re-verification steps. Use when asked
+      to audit, review or assess a front-end, when a UI feels slow or janky, when hunting re-render storms or render
+      loops, before a release or a takeover of a front-end codebase, or to explain what a front-end audit covers.
+    category: audit
+    plugin: audit
+  - path: skills/audit-database/
+    type: skill
+    tags:
+      - architecture
+      - backend
+      - docker
+      - quality
+      - security
+      - sql
+      - verification
+    description: >-
+      Audit a relational database (PostgreSQL first, notes for MySQL and SQL Server) for relational integrity and for
+      business rules that leaked into the ORM: polymorphic associations by convention (entity_id + entity_type with no
+      foreign key), missing foreign keys and orphan rows, constraints enforced only in code, enums as free text, JSON
+      hiding relations, soft delete, money as float, timestamps without time zone, multi-tenant leakage, indexes,
+      operations (bloat, sequences, long transactions, backups), migration safety and security (roles, grants, RLS,
+      pg_hba, PII). Ships a read-only, Docker-only script running 54 catalog checks with JSON or markdown output, ORM
+      grep patterns, remediation SQL and a deliverable template. Use when asked to audit, review or assess a database or
+      schema, to find polymorphic associations or missing foreign keys, to check whether BI/ETL tools can read a
+      database without the application, or to explain to a non-specialist what a database audit covers.
+    category: audit
+    plugin: audit
+  - path: skills/audit-infra/
+    type: skill
+    tags:
+      - devops
+      - docker
+      - infrastructure
+      - kubernetes
+      - security
+    description: >-
+      Run a rigorous infrastructure audit of a deployed system, black-box from outside and white-box from its manifests,
+      and produce a topology map plus an evidence-backed report. Black-box: DNS (CNAME chains, dangling records,
+      takeover leads), TLS (protocol versions, certificate, HSTS), HTTP response headers read as fingerprints of the CDN
+      / WAF / load balancer / proxy chain, load-balancer and cookie-affinity detection over repeated requests, cookies,
+      CORS, error-page leakage, exposed admin and debug endpoints, open ports. White-box: Kubernetes and Helm
+      (securityContext, NetworkPolicy, exposed Services, RBAC, probes, replicas), Docker and Compose, Terraform and
+      CloudFormation (public buckets, 0.0.0.0/0, IAM wildcards), CI/CD, image CVEs and SBOM. Resilience: single points
+      of failure, health checks, autoscaling, backups, observability, rate limits, timeouts. Ships Docker-only scripts
+      (`collect-headers.sh`, `tls-and-dns.sh`, `active-scan.sh`, `scan-iac.sh`, `topology-from-manifests.py`) behind two
+      authorization gates (`--i-am-authorized <host>`, plus `--active-scans-agreed <host>` for any scan), version-tagged
+      images for testssl.sh, nmap, nuclei, trivy, kube-linter, hadolint, checkov, syft and grype, and a deliberately
+      broken local lab that proves each detection. Use when asked to audit, review or map an infrastructure, find what
+      is exposed to the internet, tell which components talk to which, check a load balancer, review Kubernetes
+      manifests or Terraform for security and resilience, or explain to a non-specialist what such an audit covers.
+    category: audit
+    plugin: audit
+  - path: skills/audit-security/
+    type: skill
+    tags:
+      - auth
+      - docker
+      - quality
+      - security
+      - verification
+    description: >-
+      Run a rigorous, evidence-based application security audit of a repository: vulnerable and malicious dependencies
+      (OSV.dev, osv-scanner, ecosystem audit tools, SBOM with syft + grype/trivy) prioritised by real exploitation (CISA
+      KEV, EPSS) rather than raw CVSS, committed secrets including git history (gitleaks, trufflehog), SAST (semgrep),
+      and a manual expert review of what tools cannot see (object-level authorization, JWT and session handling, CSRF,
+      CORS, SSRF, injection, XSS sinks, crypto misuse, uploads, webhooks, LLM integrations, front-end token storage, CSP
+      and SRI). Every finding is mapped to OWASP Top 10, ASVS and CWE, scored with an explicit rubric, and shipped with
+      evidence, a fix and a re-verify command. Docker only. Use when asked to audit the security of an application or
+      repository, to check dependencies for known vulnerabilities, to look for leaked secrets, to review authentication
+      or authorization code, to triage a list of CVEs, or to prepare a security report before a release or a pentest.
+    category: audit
+    plugin: audit

@@ -1,0 +1,10 @@
+{
+  "name": "audit-security-fixture",
+  "version": "0.0.0",
+  "private": true,
+  "description": "DELIBERATELY VULNERABLE test fixture for the audit-security skill. Never install, never deploy.",
+  "dependencies": {
+    "lodash": "4.17.4",
+    "minimist": "0.0.8"
+  }
+}

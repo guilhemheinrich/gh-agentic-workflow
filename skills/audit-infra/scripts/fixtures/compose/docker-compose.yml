@@ -1,0 +1,56 @@
+# FIXTURE, deliberately insecure. Do not run. Detection targets:
+#   db publishes 5432 on every interface, admin mounts the Docker socket and is
+#   privileged, images float on `latest`, worker talks to an external SaaS.
+x-defaults: &defaults
+  restart: unless-stopped
+
+services:
+  proxy:
+    <<: *defaults
+    image: traefik:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on: [app]
+
+  app:
+    <<: *defaults
+    build:
+      context: ../docker
+    environment:
+      DATABASE_URL: postgres://app:example-not-a-secret@db:5432/app
+      QUEUE_URL: amqp://queue:5672
+      SENTRY_DSN: https://public@o0.ingest.sentry.io/0
+    depends_on:
+      db:
+        condition: service_started
+      queue:
+        condition: service_started
+
+  worker:
+    <<: *defaults
+    image: registry.example.test/app/worker:latest
+    environment:
+      - QUEUE_URL=amqp://queue:5672
+      - S3_ENDPOINT=https://s3.eu-west-3.amazonaws.com
+    depends_on: [queue]
+
+  db:
+    image: postgres:17-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: example-not-a-secret
+
+  queue:
+    image: rabbitmq:4-alpine
+    ports:
+      - "127.0.0.1:15672:15672"
+
+  admin:
+    image: portainer/portainer-ce:latest
+    privileged: true
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
