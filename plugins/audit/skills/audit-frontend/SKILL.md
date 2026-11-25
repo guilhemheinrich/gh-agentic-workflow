@@ -38,6 +38,13 @@ belong to the `testing-and-debugging:web-analysis` skill. Client-side security (
 storage, `postMessage`) is **out of scope**: say so in the report and point to
 the `audit:audit-security` skill.
 
+**Language (mandatory).** Everything addressed to the person — the chat
+answer, the report, the findings, the plan, the "not verified" list — is written
+in **their language**, the one of their request (French request, French report).
+Never default to English. Code, commands, SQL, file paths, identifiers, tool
+output quoted as evidence and rule ids (`IDX-001`) stay as they are; the prose
+around them is translated, and so are headings and severity labels.
+
 ## Ground rules
 
 1. **No finding without evidence.** A `file:line`, a measurement with its

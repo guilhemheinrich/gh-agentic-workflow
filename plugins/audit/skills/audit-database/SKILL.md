@@ -48,6 +48,13 @@ This skill detects; `backend-and-data:sql-migration-guidelines/` and `backend-an
 prescribe: read them when drafting a fix. The report must stand alone (its
 readers lack this repository): put the SQL in it.
 
+**Language (mandatory).** Everything addressed to the person — the chat
+answer, the report, the findings, the plan, the "not verified" list — is written
+in **their language**, the one of their request (French request, French report).
+Never default to English. Code, commands, SQL, file paths, identifiers, tool
+output quoted as evidence and rule ids (`IDX-001`) stay as they are; the prose
+around them is translated, and so are headings and severity labels.
+
 ## Non-negotiable rules
 
 - **Read-only.** The audit never writes and never runs DDL. Fixes are proposed
@@ -215,7 +222,7 @@ Fill [references/deliverable-template.md](references/deliverable-template.md). R
   level, node, data probes on or off, statistics age.
 - End with a three-horizon plan: stop the bleeding (constraints as `NOT VALID`),
   repair (clean orphans, validate), restructure (replace polymorphic pairs).
-  Write in the language of the person who asked; SQL and identifiers stay as is.
+  Write it in the person's language (mandatory, see "Language" above); SQL and identifiers stay as is.
 
 ## Testing the skill itself
 

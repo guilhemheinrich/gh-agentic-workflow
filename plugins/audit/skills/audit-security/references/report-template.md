@@ -1,5 +1,9 @@
 # Report template and severity rubric
 
+> **Language (mandatory):** write the report, headings and severity labels in the
+> language of the person who asked. This template is in English; translate its
+> prose, keep code, paths, identifiers and rule ids verbatim.
+
 The report is written to `$OUT/SECURITY-AUDIT.md`, next to the tool outputs
 and outside the checkout, then handed to the requester where they ask. It must stand alone: a reader who never saw the audit session can
 re-check every line.

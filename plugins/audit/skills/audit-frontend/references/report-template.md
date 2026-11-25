@@ -1,5 +1,9 @@
 # Report contract
 
+> **Language (mandatory):** write the report, headings and severity labels in the
+> language of the person who asked. This template is in English; translate its
+> prose, keep code, paths, identifiers and rule ids verbatim.
+
 The audit's deliverable is one Markdown report with the sections below, in this
 order. A reader must be able to act on any finding without the auditor in the
 room, and to re-run the check that produced it.

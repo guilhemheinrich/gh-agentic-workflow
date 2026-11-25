@@ -45,6 +45,13 @@ Overlap rule: a finding on a border is reported once, here, naming the
 sibling skill that owns the fix. Example: a SQL query built by concatenation
 is ours (CWE-89); a table readable by the `public` role is audit-database's.
 
+**Language (mandatory).** Everything addressed to the person — the chat
+answer, the report, the findings, the plan, the "not verified" list — is written
+in **their language**, the one of their request (French request, French report).
+Never default to English. Code, commands, SQL, file paths, identifiers, tool
+output quoted as evidence and rule ids (`IDX-001`) stay as they are; the prose
+around them is translated, and so are headings and severity labels.
+
 ## Rules that never bend
 
 1. **Authorization first, and read-only.** Audit only a repository whose
