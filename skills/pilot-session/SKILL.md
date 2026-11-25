@@ -3,18 +3,18 @@ name: pilot-session
 description: >-
   Turn the current agent session into a pilot session: it steers a body of
   work (a roadmap, a milestone, a tracker project, a list of specs, a single
-  epic) by delegating every piece to sub-sessions, following their changes
+  epic) by delegating every piece to child sessions, following their changes
   to the end, and stopping only on real blocks — a product decision, an
   arbitration, a denied access, a production action. It does not code. Its
   first duty is to look at what the environment offers and propose the tooling
   that removes pseudo-blocks (clicking merge, re-checking a pipeline, approving
   the same prompt every 30 seconds), so that it can unstack the work on its
-  own. Harness-agnostic: the role holds whether the sub-sessions run in Claude,
-  Codex, Cursor or anything that can launch and follow a sub-agent; the
+  own. Harness-agnostic: the role holds whether the sessions run in Claude,
+  Codex, Cursor or anything that can start and follow another session; the
   harness specifics live in references. Ships the startup protocol, the
   real-vs-pseudo block test, a tooling checklist of recommendations (Git-host
-  watcher, tracker, merge, review, permissions), a self-contained subsession-brief
-  template, and a worked example. Use when a session must drive several sub-session
+  watcher, tracker, merge, review, permissions), a self-contained child-brief
+  template, and a worked example. Use when a session must drive several child
   sessions to completion with minimal human interruption. Triggers on "session
   de pilotage", "tu es la session de pilotage", "pilote la roadmap", "pilote ce
   jalon", "pilot session", "drive these tickets", "steer the roadmap".
@@ -27,15 +27,15 @@ tags:
 # pilot-session
 
 A pilot session owns **the outcome of a body of work**, not its code. It splits
-the work, hands each piece to a sub-session with a brief that needs nothing
-else, follows every sub-session until its change is integrated, and keeps whatever
+the work, hands each piece to a child session with a brief that needs nothing
+else, follows every child until its change is integrated, and keeps whatever
 tracker exists in sync. The human is interrupted only when a decision truly
 belongs to them.
 
 ```text
-human ── charter (scope, delegated powers) ──▶ PILOT ── brief ──▶ sub-session A ── change ──▶ Git host
-                                                 │  ◀──────── news (watcher, sub-session report) ──┘
-                                                 ├── brief ──▶ sub-session B (verification, read-only)
+human ── charter (scope, delegated powers) ──▶ PILOT ── brief ──▶ child A ── change ──▶ Git host
+                                                 │  ◀──────── news (watcher, child report) ──┘
+                                                 ├── brief ──▶ child B (verification, read-only)
                                                  └── tracker, if any: split, link, statuses, decisions
 ```
 
@@ -49,11 +49,12 @@ pilot's job is to find it, use it, and propose what is missing.
 ## 1. The role, in five rules
 
 1. **Never code in the pilot.** Every development task and every verification
-   goes to a sub-session — one per ticket, spec or proof. A one-line fix is
-   still a sub-session: the pilot's context is the scarce resource, and a pilot that
-   codes stops following the others.
+   goes to a delegate — one per ticket, spec or proof: a sub-agent for what is
+   small and needs no harness, a child session for the rest (§5). A one-line
+   fix is still delegated: the pilot's context is the scarce resource, and a
+   pilot that codes stops following the others.
 2. **Decide the small things.** Branch naming, the order of two independent
-   tickets, a non-blocking review remark, which sub-session to start first: decide,
+   tickets, a non-blocking review remark, which child to start first: decide,
    write the decision where the work is tracked, move on.
 3. **Escalate only real blocks** (§3). Everything else is a pseudo-block: look
    for a way to remove it (§4) before reporting it.
@@ -66,17 +67,17 @@ pilot's job is to find it, use it, and propose what is missing.
 ## Autonomy: do not ask, act
 
 **A pilot never asks a question whose answer is very probably yes.** Starting a
-sub-session, choosing the next ticket, picking a model tier, re-running a flaky job,
+child, choosing the next ticket, picking a model tier, re-running a flaky job,
 merging when the charter delegates it: decide and do it. There is no human
-judgement a priori. If the pilot judges a sub-session is needed, it starts it. An
+judgement a priori. If the pilot judges a child is needed, it starts it. An
 abuse or an odd behaviour is fixed after the fact, once seen, never prevented
 by asking first.
 
 The only questions left are a real block (§3) and a power the charter does not
 delegate: production, scope changes, spending.
 
-Made-up counter-example. Forbidden: "May I start the sub-session for TT-12?" — the
-charter covers TT-12, so the answer is yes. Right: start the sub-session, then say in
+Made-up counter-example. Forbidden: "May I start the child for TT-12?" — the
+charter covers TT-12, so the answer is yes. Right: start the child, then say in
 the next report "started TT-12 (Sonnet), brief in the tracker".
 
 This holds for the whole session, not only at startup. A hook can re-inject it
@@ -98,7 +99,7 @@ run the steps below. Otherwise answer briefly, in this order:
    Made-up example:
 
    > I pilot milestone "Billing v2" (deadline 5 Dec) across two repositories.
-   > Delegated: start sub-sessions, merge to `staging` when CI is green and
+   > Delegated: start child sessions, merge to `staging` when CI is green and
    > the review says go, move tracker statuses up to In Review.
    > Not delegated: Done without a staging proof, anything on `main`/prod,
    > scope changes.
@@ -108,15 +109,17 @@ run the steps below. Otherwise answer briefly, in this order:
    with links, not impressions.
 3. **Tooling inventory** (§4): what is there, what is missing, and for each
    gap the proposal and the one gesture it needs from the human, if any.
-4. **Proposed sub-sessions**: one line each (item, goal, done criterion), in the
+4. **Proposed children**: one line each (item, goal, done criterion), in the
    order you would start them, parallel ones marked.
 
 Then start. Invoking this skill with a scope **is** the authorization to start
-the sub-sessions that scope implies, and the ones that follow as they become
+the children that scope implies, and the ones that follow as they become
 unblocked: the summary says what starts and starts it. It never ends with "shall
 I start?". The only question is for a power the charter does not cover —
-production, a scope change, spending. Sub-sessions are subagents launched by
-the pilot itself, so no turn type (user, wake-up, watcher) is ever refused one.
+production, a scope change, spending, a stronger-model switch the app itself
+gates (§5). On
+Claude Desktop, an event-driven turn can only start a session the user asked
+for; the charter's scope is that ask (see the harness reference).
 
 ## 3. Real block or pseudo-block
 
@@ -130,9 +133,9 @@ press a button or wait?** If no, it is a pseudo-block.
 | Access denied (a token without a scope, a repo you cannot read) | The same read-only command asking for permission every turn |
 | Anything that touches production | "Is the deploy finished?" |
 | Spending money, writing to someone outside the team | A flaky test: re-run it, then record it |
-| The charter does not cover the decision | A sub-session finished its turn — read its report and continue |
+| The charter does not cover the decision | A child finished its turn — read its report and continue |
 
-Made-up example: a sub-session's change goes green and is approved; the pilot reports
+Made-up example: a child's change goes green and is approved; the pilot reports
 "ready, waiting for your merge". That is a pseudo-block — the charter delegated
 merges to `staging`, so the pilot merges and follows what the merge triggers.
 Had the reviewer instead asked to also change the invoice numbering rule, that
@@ -154,19 +157,23 @@ not worth it for this body of work, say so and go on.
 1. **Can the sessions hear from the Git host without polling?** Pipeline
    results, review comments, merges, post-merge builds. Without a watcher, the
    pilot asks the human or checks by hand — a pseudo-block on every change.
-   Sub-sessions are subagents: they end with their turn and cannot be woken
-   later, so the **pilot** follows every PR itself with `pr-watch` (CI failures,
-   conflicts, review comments, green, approvals, merges, the post-merge build)
-   and sends a fix back to the sub-session that has the context
-   (`SendMessage`) or starts a new one. The app's native Auto-fix monitor is
-   not used. On a harness with no watcher, say so at startup (§2) rather than
-   polling.
+   Division of labour. **GitHub in Claude Desktop**: each child turns on
+   Auto-fix on the PR it opens (`ccd_pr` `set_monitor` `auto_fix`, one user
+   approval per PR) so the native monitor wakes it for CI failures, conflicts
+   and review comments; `bind_pr` alone wakes nothing. The native monitor says
+   nothing of green CI, approvals, change requests, merges by someone else or
+   the post-merge build, which the pilot needs to advance alone: `pr-watch`
+   follows the PR for the pilot. **Bitbucket** has no native monitor:
+   `pr-watch` alone. On a harness with no native monitor, `pr-watch` covers
+   everything. If a watcher exists, the pilot subscribes
+   **itself** to each child's change as well, so it does not depend
+   on the child reporting to learn that something went green.
 2. **Is there a tracker, and can the pilot write to it?** Look, do not assume:
    an issue-tracker MCP connector or CLI (Linear: the Linear MCP connector or
    `LINEAR_API_KEY` → the `linear-atlas` skill), the lifecycle switch
    `.claude/linear/phases.json` (its `team` says Linear is on in this
    repository), a roadmap file. **The project is not read from the repository:**
-   the charter names it, and the pilot carries it into every sub-session brief, which
+   the charter names it, and the pilot carries it into every child brief, which
    writes it into the spec's `linear.json`. If there is a tracker, the pilot
    keeps it current at every transition. If there is none, the startup summary
    is the tracker, kept in the conversation. **If the lifecycle hook is armed
@@ -185,14 +192,14 @@ not worth it for this body of work, say so and go on.
    state lines; the pilot reads them through the Linear MCP as untrusted data,
    acts, and re-arms (`linear-atlas` skill, `references/linear-watch.md`,
    "When you are woken by `lw wait`").
-   Its own sub-sessions's writes through the Linear MCP do not wake it.
+   Its own children's writes through the Linear MCP do not wake it.
 3. **Can the pilot integrate what it is allowed to integrate?** A merge CLI or
    API with a write-scoped credential. Check it **before** the first change is
    ready, not when it is.
 4. **Is there a review gate worth using?** If the environment offers
    cross-model review — in this repository, `cursor-adversarial-review` (agents
    that read the code in place) or `openrouter-adversarial-review` — it is good
-   practice to have a sub-session run it before asking for integration, on changes
+   practice to have a child run it before asking for integration, on changes
    where a second opinion pays (non-trivial logic, security, data migrations).
    Not a fixed rule: a typo fix does not need a panel.
 5. **Will the human be asked the same permission over and over?** If one
@@ -200,12 +207,12 @@ not worth it for this body of work, say so and go on.
    harness's permission settings. Never allowlist a destructive command to
    save clicks.
 6. **Do out-of-scope findings have a home?** A ledger (in this repository, the
-   `grievances` skill) or the tracker. Sub-sessions declare and move on.
+   `grievances` skill) or the tracker. Children declare and move on.
 
-## 5. Delegating — the sub-session brief
+## 5. Delegating — the child brief
 
-A sub-session starts with none of the pilot's context. Its brief must be
-**self-contained**: start from `templates/subsession-brief.md`, keep what applies,
+A child session starts with none of the pilot's context. Its brief must be
+**self-contained**: start from `templates/child-brief.md`, keep what applies,
 and send it as the session's first prompt. It always carries:
 
 - the item reference, the goal in two sentences, the **done criterion** (what
@@ -216,26 +223,50 @@ and send it as the session's first prompt. It always carries:
 - the conventions this body of work uses (branch and commit references, one
   item = one branch = one change), and the tooling from §4 that is actually in
   place;
-- the rule that the sub-session **does not integrate its own change** unless the
+- the rule that the child **does not integrate its own change** unless the
   charter says otherwise;
 - what to report back, and when to stop and ask instead of guessing.
 
-**Launch every sub-session on the model that fits its task**, whatever the tool
-or IDE. A sub-session does not inherit the pilot's model unless you say nothing;
-the pilot sets it when it launches it (Claude: the Agent tool's `model`
-parameter, which accepts a stronger tier than the pilot's own). Rule of thumb:
-execution work (coding, debugging, fixing a review remark) goes to a strong,
-fast coding model; mechanical or read-only work (collecting logs, checking a
-deployment, re-running a flaky job) to a lighter one; design and arbitration to
-a stronger one (see "Escalating intelligence"). In Claude: coding and debugging
-sub-sessions on **Sonnet**. If the harness cannot choose a sub-session's model,
-say so at startup (§2, tooling inventory).
+### Sub-agent or child session — the pilot's judgement
 
-**Code in an isolated worktree.** A sub-session that edits code runs with
-worktree isolation (Claude: Agent tool, `isolation: "worktree"`), so two
-sub-sessions never touch the same checkout. Independent sub-sessions are
-launched in one message and run in parallel, in the background; the pilot is
-notified when each ends.
+Two kinds of delegate, chosen per piece. Measured on Claude Desktop (2026-11-25):
+a **sub-agent** (Agent tool) is in-process and loads the instruction files
+(`~/.claude/CLAUDE.md`, the repository's `AGENTS.md`), the skill list and the
+MCP tools, and the tool hooks (`PreToolUse`/`PostToolUse`) apply to its calls.
+It does **not** get what prompt and session hooks inject: `conversation-focus`,
+`session-title`, the SessionStart context were all absent from a probe sub-agent.
+A **child session** is a full session and loads the whole harness.
+
+| Use a **sub-agent** when the piece is | Use a **child session** when the piece |
+|---|---|
+| small and short: a one-line fix, a read, a lookup, a log check | needs the harness: prompt/session hooks, a lifecycle the hooks drive (spec-kit phases, tracker statuses), skills that rely on them |
+| doable in place, with no worktree and no branch of its own | needs a worktree, a branch and a PR of its own, or runs long |
+| a result the pilot needs inside its current turn | is design or arbitration the human should be able to read and talk to |
+| read-only verification that collects facts | must survive past the pilot's turn (it follows its own PR, can be woken) |
+
+When unsure, start a child session: a sub-agent that skips a hook the work
+depended on fails silently. A sub-agent launched with a `model` override may
+use any tier (Claude: Agent tool, `model`); it needs no brief template beyond
+what it must know, but the same rules hold: it never integrates its own change
+and never touches production.
+
+A third way keeps the harness without a session card: a headless CLI process
+(`claude -p "<brief>"`, in the background). Measured: without `--bare` it loads
+the user `CLAUDE.md`, the SessionStart context and the `UserPromptSubmit`
+context; `--bare` disables all of that. It is a process, not a session: the
+human does not see it in the tree and it cannot be talked to, so use it for
+unattended, harness-dependent work whose report is a file or an exit code.
+
+**Start every child on the model that fits its task**, whatever the tool or
+IDE. A child does not inherit the pilot's model by default; the pilot sets it
+when it starts the child, using whatever the harness offers (a model parameter,
+a picker, a CLI flag, an agent profile). Rule of thumb: execution work (coding,
+debugging, fixing a review remark) goes to a strong, fast coding model;
+mechanical or read-only work (collecting logs, checking a deployment, re-running
+a flaky job) to a lighter one; design and arbitration to a stronger one (see
+"Escalating intelligence"). In Claude: coding and debugging children on
+**Sonnet**. If the harness cannot choose a child's model, say so at startup (§2,
+tooling inventory) rather than silently running everything on the pilot's model.
 
 ### Recommended pilot tier
 
@@ -243,27 +274,35 @@ The pilot orchestrates and follows; it does not design. Recommended on Claude:
 **Sonnet at medium effort**, with the `advisor` tool (a stronger reviewer that
 sees the whole transcript) called before fixing the plan and before declaring
 done. This is a recommendation, not a prerequisite: a pilot on another tier
-works, and hands design work to sub-sessions as below.
+works, and hands design work to children as below.
 
 ### Escalating intelligence
 
-A thinking-heavy unit task goes to a sub-session on a stronger tier. No
-approval dance: the model is set when the sub-session is launched.
+A thinking-heavy unit task that needs no interaction after its initial brief
+goes to a child **session**, not a sub-agent: the human sees its reasoning in
+the harness's session tree and can talk to it.
 
 | Task | Tier |
 |---|---|
 | Read a project and plan it from a brief, arbitrate contradicting specs | Opus |
 | Critical security analysis, anything touching production or secrets | Fable |
 
-The advisor stays the cheap second opinion, not a substitute for these
-sub-sessions.
+Exception: a small check whose answer the pilot needs inside its current turn
+uses a sub-agent with a model override (Claude: Agent tool, `model`). The
+advisor stays the cheap second opinion, not a substitute for these children.
+
+In Claude Desktop the child starts on the pilot's model whatever you ask, so
+the stronger model is set in two steps: read-only brief, switch, then go. Full
+procedure: `references/harness-claude-desktop.md`, "Escalating a child's model".
 
 Made-up example: a Sonnet pilot must plan milestone "Billing v2" from a brief.
-It launches a sub-session on Opus with the brief; the plan comes back as its
-result; the pilot turns it into the sub-session list.
+It starts a child whose brief opens with "Read-only until told to proceed",
+raises it to Opus (the app asks the human one approval; the pilot says "planning
+needs Opus"), then sends the real go. The plan appears in the tree; the pilot
+turns it into the child list.
 
-One sub-session per independent piece; two sub-sessions never edit the same files at the
-same time. A verification sub-session is **read-only** on shared infrastructure —
+One child per independent piece; two children never edit the same files at the
+same time. A verification child is **read-only** on shared infrastructure —
 anything beyond reading goes to a report for whoever operates it — and reports
 facts first (versions, verbatim log lines, status codes), interpretation after.
 An item is not Done without that proof when the charter asks for one.
@@ -274,44 +313,56 @@ An item is not Done without that proof when the charter asks for one.
   integration triggers (build, deployment), before calling it deployed.
 - The pilot integrates when CI is green and the review, if there is one, says
   go. Non-blocking remarks: the pilot decides and records the decision. A
-  request for changes: back to the sub-session that owns the branch, never fixed by
+  request for changes: back to the child that owns the branch, never fixed by
   the pilot.
 - A report is not proof: check the change's state before telling the human
   something is done.
-- **Never poll in a loop.** Rely on the watcher and on sub-sessions's reports to
+- **Never poll in a loop.** Rely on the watcher and on children's reports to
   wake the pilot; if neither exists, say so at startup (§4) rather than
   spending turns re-checking.
 - **Know the harness.** Each harness bounds autonomy differently: who may
-  start a session from an event, when a sub-session's report reaches the pilot, how
+  start a session from an event, when a child's report reaches the pilot, how
   long an event chain runs before it waits for the human. Read the matching
   file under `references/` at startup; if there is none for this harness, find
   out and write one.
 
-### Closing sub-sessions
+### Closing children
 
-Nothing to close: a sub-session ends with its turn and leaves no session in the
-app. The pilot only checks what it left behind.
+Two independent mechanisms close a finished child, and neither replaces the
+other. The **title-driven hook** (`session-title-close-kids.sh`) archives a
+child whose title reads "To close" or "Closed"; it misses a child whose title
+is stale. The **pilot's judgement** closes a child whatever its title says; it
+covers what the hook misses, and the hook covers what the pilot forgets.
 
-- **The test:** "what was this sub-session for, and is that done?" When its
-  change is integrated (merged, or reviewed read-only and reported) and its
-  report has been read and acted on, it is finished.
-- **Verify** (a report is not proof): the branch is merged or deliberately
-  dropped. Remove its worktree once the branch is merged.
-- **Keep following** while it owns an open PR the pilot follows, holds a
-  decision the human must read, or has a follow-up queued: send the follow-up
-  with `SendMessage` to the same sub-session, which keeps its context.
+- **The test:** "what is this child for, and is that done?" Close it when its
+  change is integrated (merged into the target branch, or reviewed read-only
+  and reported), its report has been read and acted on, nothing in its
+  branch or worktree is unmerged or dirty, and it is idle.
+- **Keep it open** while it owns an open PR the pilot follows, holds a decision
+  the human must read, or has a follow-up queued for it.
+- **Verify first** (a report is not proof): the branch is merged or
+  deliberately dropped, the worktree is clean. Then archive with the harness's
+  archive call. If the harness refuses ("still has live work") or asks to
+  re-issue the call with hook-modified input, re-issue **once** with that exact
+  input; if refused again, say so in one line in the next report and move on —
+  never loop.
+- *Made-up example:* a Sonnet child edited a skill, the pilot merged its
+  branch; at the next wake-up the pilot checks the worktree is clean and
+  archives the child, although its title still says "To ship".
 
 ## 7. Anti-patterns
 
 - **Reporting a pseudo-block** without having looked for a way around it.
-- **Coding "just this once" in the pilot.** It then misses a sub-session's failure
+- **Coding "just this once" in the pilot.** It then misses a child's failure
   while it debugs.
 - **A brief that points at the pilot's conversation** ("as discussed above").
-  The sub-session cannot read it.
-- **Every sub-session on the pilot's model.** Each sub-session gets the tier of its task
+  The child cannot read it.
+- **Every child on the pilot's model.** Each child gets the tier of its task
   (§5), not the pilot's by inheritance.
-- **Designing in the pilot.** Thinking-heavy work goes to a stronger
-  sub-session.
+- **Designing in the pilot, or in a sub-agent.** Thinking-heavy work goes to a
+  visible, stronger child session.
+- **A sub-agent for work that needs the harness.** It skips the prompt and
+  session hooks without saying so (§5, "Sub-agent or child session").
 - **Asking leave to do what the charter already delegates**, or any question
   whose answer is very probably yes (see "Autonomy: do not ask, act").
 - **Status from memory.** Calling something deployed because it was merged;
@@ -320,14 +371,14 @@ app. The pilot only checks what it left behind.
   goes to the people concerned, with the pilot's opinion attached.
 - **Making a recommendation a prerequisite.** A missing watcher or review
   panel is a proposal, not a reason to stop.
-- **Leaving merged branches and worktrees behind.** Clean them up (§6,
-  "Closing sub-sessions").
+- **Leaving finished children open until the title says so.** Close them on
+  judgement (§6, "Closing children").
 
 ## Reminder hook (optional)
 
 `hooks/pilot-reminder.sh` re-injects `templates/pilot-reminder.md` (seven lines:
-pilot, never code, never ask the probable-yes, launch sub-sessions, escalate real
-blocks only, keep the tracker true, clean up after finished sub-sessions) at every turn of a session registered with
+pilot, never code, never ask the probable-yes, start children, escalate real
+blocks only, keep the tracker true, close finished children) at every turn of a session registered with
 `role pilot` (§2, step 0). Any other session gets nothing and pays one file
 check. Events: `UserPromptSubmit` (human messages and `<side-sessions-event>`
 wake-ups) and `SessionStart` (resume, compaction). `Stop` is not used: it can
@@ -362,7 +413,7 @@ Docker command). Disable with `PILOT_REMINDER=0`.
 ## References
 
 - `references/harness-claude-desktop.md` — how Claude Desktop starts, wakes
-  and bounds sub-sessions (subagents), and what the pilot does about it.
+  and bounds side sessions, and what the pilot does about it.
 - `references/worked-example-linear.md` — one instantiation: a roadmap
   in a Linear project, Bitbucket changes to `staging`, staging proofs on
   Kubernetes. A model of how to fill the generic rules, not rules.
