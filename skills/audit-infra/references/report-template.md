@@ -1,5 +1,9 @@
 # Report template
 
+> **Language (mandatory):** write the report, headings and severity labels in the
+> language of the person who asked. This template is in English; translate its
+> prose, keep code, paths, identifiers and rule ids verbatim.
+
 Copy everything below the line into the report file and fill it. Rules that make the
 report usable:
 

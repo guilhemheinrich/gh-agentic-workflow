@@ -40,6 +40,13 @@ what describes it (white-box): `type: LoadBalancer` on a PostgreSQL Service says
 database asks for an address outside the cluster". The two views are merged into one
 map. New to the vocabulary: `references/glossary.md`.
 
+**Language (mandatory).** Everything addressed to the person — the chat
+answer, the report, the findings, the plan, the "not verified" list — is written
+in **their language**, the one of their request (French request, French report).
+Never default to English. Code, commands, SQL, file paths, identifiers, tool
+output quoted as evidence and rule ids (`IDX-001`) stay as they are; the prose
+around them is translated, and so are headings and severity labels.
+
 ## Hard rules
 
 1. **Authorization first, in the user's own words.** No packet leaves for a host
