@@ -1,21 +1,16 @@
-# Child brief — <ITEM-REF>: <short title>
+# Sub-session brief — <ITEM-REF>: <short title>
 
 <!-- Copy, fill every <…>, delete every line that does not apply to this body
-of work. The child has none of the pilot's conversation: never write "as
+of work. The sub-session has none of the pilot's conversation: never write "as
 discussed", restate it. Optional sections are marked; keep them only when the
 tooling they name is actually in place. -->
 
-<!-- Before sending: start this session on the model that fits the task, not
-on the pilot's model (SKILL.md §5) — e.g. in Claude, Sonnet for coding and
-debugging. For a stronger tier (Opus, Fable), start read-only, switch the
-model, then send the go (harness reference, "Escalating a child's model"). -->
+<!-- Before launching: set the model that fits the task, not the pilot's by
+default (SKILL.md §5) — in Claude, the Agent tool's `model` (Sonnet for coding
+and debugging, Opus or Fable for design and security), and
+`isolation: "worktree"` when it edits code. -->
 
-<!-- Optional — keep as the very first line of the brief when the child must
-run on a stronger model than the pilot's: -->
-Read-only until told to proceed: do not analyse or answer yet, reply 'ready'
-only.
-
-You are a child session of a pilot session. You own one piece of work, end to
+You are a sub-session (a subagent) of a pilot session. You own one piece of work, end to
 end, up to a change that passes its gates. You do not integrate it yourself
 <unless the charter says otherwise>.
 
@@ -60,21 +55,13 @@ it.> Before asking for integration, have the diff attacked by <2–3 models from
 other vendors> through <tool>. Fix blocking findings; list the others in the
 change description.
 
-## Optional — Pull request monitoring
+## Optional — Pull request
 
-<Keep only in Claude Desktop with a GitHub repository.> Once you have opened
-the PR, turn on Auto-fix for it (`ccd_pr` `set_monitor` `auto_fix`; the user
-approves once per PR) — the app then wakes you on CI failures, conflicts and
-review comments, and `bind_pr` alone does not. The pilot follows the PR with
-`pr-watch` (green CI, approvals, merges): you do not need to report those.
+Open the PR and report its link. The pilot follows it (CI, reviews, merge) with
+`pr-watch` and sends you back what needs fixing: you cannot be woken after you
+end, so finish with the change pushed and the PR opened.
 
-## Optional — Git-host watcher
-
-<Keep only if a watcher is installed.> After pushing, make sure the change is
-watched (<command>) and keep the wait running in the background. Follow CI and
-review comments; fix failures and address comments until green.
-
-## Optional — verification child (read-only)
+## Optional — verification sub-session (read-only)
 
 - Read-only on shared infrastructure; anything beyond reading goes to a
   report for whoever operates it.
@@ -88,4 +75,4 @@ End each turn with: state (working / change open / green / blocked), link,
 CI state, and the one question you need answered, if any. Stop and ask the
 pilot — do not guess — when: <the scope is unclear | a business rule is
 ambiguous | access is denied | an action would touch production>.
-Leave the worktree clean and everything committed, so the pilot can close you.
+Leave the worktree clean and everything committed and pushed.

@@ -16,19 +16,19 @@ the roadmap is that Linear project.
 
 | Generic rule | This setup |
 |---|---|
-| Tracker | Linear project named in the charter (carried by each child brief into its spec's `linear.json`); Linear MCP connector + `linear-tracker` skill. Split into issues/sub-issues, PR link on the issue, status moved to In Review when the PR opens. Decisions that are not the pilot's: comment on the issue, people mentioned. |
-| Pilot tier | Sonnet, medium effort, `advisor` before fixing the plan and before done; milestone planning goes to an Opus child session, security analysis to Fable |
+| Tracker | Linear project named in the charter (carried by each sub-session brief into its spec's `linear.json`); Linear MCP connector + `linear-tracker` skill. Split into issues/sub-issues, PR link on the issue, status moved to In Review when the PR opens. Decisions that are not the pilot's: comment on the issue, people mentioned. |
+| Pilot tier | Sonnet, medium effort, `advisor` before fixing the plan and before done; milestone planning goes to an Opus sub-session, security analysis to Fable |
 | Branch naming | Linear `gitBranchName`, or `tt-NNNN-<slug>` |
 | Target branch | `staging`, PR opened with `ws pr open` |
 | References | `Linear: TT-NNNN` in the PR description, `Refs: TT-NNNN` in every commit |
 | Repository constraints | Docker-only execution, repo CLAUDE.md and hooks, `specs/NNN-<slug>/brief.md` with `Scope: OUT` before the code; the `ws` dev stack stays up |
 | Review gate | chosen for this project because the tooling was in place: 2–3 non-Anthropic models picked from the OpenRouter coding ranking, via `cursor-adversarial-review` (fallback `openrouter-adversarial-review`), then the host reviewer `acme-reviewer` |
 | Git-host news | `pr-watch`: `prw subscribe` on push, `prw wait` in the background; `prw subscribe --commit` for a direct push to `staging` |
-| Merge | the pilot runs `ws pr merge` when the pipeline is green and `acme-reviewer` gives the go. Non-blocking reserves: the pilot decides. Changes requested: back to the child. |
+| Merge | the pilot runs `ws pr merge` when the pipeline is green and `acme-reviewer` gives the go. Non-blocking reserves: the pilot decides. Changes requested: back to the sub-session. |
 | Deployment follow-up | `prw` follows the post-merge pipeline of `staging` until deployment |
 | Production | never without an explicit human GO |
 
-## Verification child (staging, read-only)
+## Verification sub-session (staging, read-only)
 
 - Browser: the Playwright MCP with SSO credentials on `hub.staging.example.com`,
   session opened with
@@ -43,10 +43,10 @@ the roadmap is that Linear project.
 - A ticket goes Done only with its staging proof: image tag, verbatim log
   lines, HTTP codes. Facts first, interpretation after.
 
-## Cross-repository children
+## Cross-repository sub-sessions
 
-The pilot runs at the root of `acme-workspace`, but most children work in a
+The pilot runs at the root of `acme-workspace`, but most sub-sessions work in a
 service repository (`billing-app`, `acme-broker`, …). In Claude
-Desktop such a child cannot be started from an event-driven turn (see
-`harness-claude-desktop.md`): start those children on a user turn when
+Desktop such a sub-session cannot be started from an event-driven turn (see
+`harness-claude-desktop.md`): start those sub-sessions on a user turn when
 possible, or batch their proposal cards.
