@@ -1,51 +1,96 @@
 # Harness reference — Claude Desktop (Code tab)
 
-How this harness launches, follows and bounds sub-sessions, and what a pilot
-does about each limit. Another harness gets its own file next to this one,
-answering the same questions: how a sub-session is launched, how its report
-comes back, what wakes an idle pilot, and what the harness refuses to do on its
-own.
+How this harness starts, wakes and bounds side sessions, and what a pilot does
+about each limit. Another harness gets its own file next to this one, answering
+the same questions: how a child is started, how its report comes back, what
+wakes an idle pilot, and what the harness refuses to do on its own.
 
-## Launching sub-sessions
+## Starting children
 
-- A sub-session is a **subagent** launched with the Agent tool. The brief is its
-  prompt; it starts with none of the pilot's context (`subagent_type`
-  `general-purpose`, or a fresh specialised agent). It is not a side session:
-  no card, no approval, nothing in the sidebar.
-- **Set the model on the launch** (`model`: `sonnet` for coding and debugging,
-  `haiku` for a read-only verification that only collects facts, `opus` or
-  `fable` for planning, arbitration and security). A model stronger than the
-  pilot's is honoured: there is no two-step escalation.
-- **Isolate code work**: `isolation: "worktree"`. Independent sub-sessions go in
-  one message and run in parallel; with `run_in_background` the pilot is
-  notified when each ends and keeps working meanwhile.
-- Follow-ups go to the sub-session that has the context (`SendMessage` to its
-  agent id), not to a new one.
-- No turn type blocks a launch: the "only asked-for starts run from an event"
-  limit of side sessions does not apply, nor the click-a-card limit for another
-  repository (the sub-session's brief names the repository path).
+- A child is a side session started from the pilot (`start_session`). The
+  brief is its first prompt; `context: "fresh"` for a self-contained brief.
+- **Set the child's model on the start call** (`start_session`'s `model`
+  parameter): coding and debugging children start on `sonnet`; a read-only
+  verification child may take `haiku` when it only collects facts. Without the
+  parameter the child inherits the pilot's model. A `model` **stronger** than
+  the pilot's own is ignored: see "Escalating a child's model".
+- Follow-ups go to the child that has the context (`SendMessage` to its
+  session id), not to a new session.
+- **Only asked-for starts run from an event.** On a turn started by another
+  session's message or an automated event, the app refuses to start a session
+  and turns it into a proposal card — except on a side-session event that
+  directly follows a user turn, for steps the user asked to have in their own
+  session, and in this project only. Hence the skill (§2) starts the planned children on the user turn that
+  invokes it: the charter's scope is the ask.
+- A child whose working directory is another repository falls outside "this
+  project only": on an event-driven turn it becomes a card the human clicks.
+  Start those on a user turn when possible, or batch their cards.
+
+## Sub-agents (Agent tool)
+
+In-process, no card, no approval. Measured 2026-11-25: they load `CLAUDE.md`
+and `AGENTS.md`, the skill list and MCP tools, and tool hooks fire on their
+calls; prompt/session hook context (`conversation-focus`, `session-title`,
+SessionStart) does not reach them. `model` may be stronger than the pilot's;
+`isolation: "worktree"` gives code work its own checkout. Reports come back as
+the call's result. A sub-agent cannot be woken after it ends. Choice rule:
+SKILL.md §5, "Sub-agent or child session".
+
+## Headless CLI
+
+`claude -p "<brief>"` run in the background loads the user `CLAUDE.md`, the
+SessionStart and `UserPromptSubmit` hook context (measured); `--bare` skips
+hooks, skills, plugins, MCP and `CLAUDE.md`. Not a session: invisible in the
+app's tree, no follow-up. Unattended work only.
+
+## Escalating a child's model
+
+Verified: `start_session` ignores a `model` stronger than the pilot's, so the
+child starts on the pilot's model. Switch it after the start:
+
+1. **Start read-only.** The brief's first line is "Read-only until told to
+   proceed: do not analyse or answer yet, reply 'ready' only."
+2. **Switch.** `set_session_model` on the child's session id (optionally
+   `set_session_effort`). Raising to a more expensive model makes the app ask
+   the human for one approval; say in one line why ("planning needs Opus").
+   It is refused on the pilot's own session and applies from the child's next
+   turn.
+3. **Go.** Once switched, send the real instruction with `SendMessage`.
 
 ## Hearing back
 
-- A sub-session's final report comes back as the Agent call's result, or as a
-  notification when it ran in the background. A report is the sub-session's
-  word, not proof: check the change before relaying.
-- A sub-session cannot be woken after it ends, and the app's native PR monitor
-  (`ccd_pr` Auto-fix) wakes the session that owns the PR, not a subagent. The
-  **pilot** therefore follows each PR with `pr-watch`, and sends a fix back with
-  `SendMessage` or launches a new sub-session.
-- The app re-invokes an idle pilot when one of its background commands exits.
-  A watcher that blocks until news arrives (for example `prw wait` from the
-  `agent-sessions:pr-watch` skill), run in the background, is therefore a wake source.
+- **A child's report reaches the pilot only when no session it started is
+  still working.** With three children in parallel, a green change from the
+  first would wait for the other two to go idle. Do not rely on reports to
+  learn that a change is green: subscribe the pilot itself to each child's
+  change through the Git-host watcher, when there is one. On GitHub the app's
+  native monitor only wakes a session for CI failures, conflicts and review
+  comments, and only with Auto-fix on for that PR (`ccd_pr` `set_monitor`):
+  each child enables it, and `pr-watch` covers the rest for the pilot.
+- **Event chains run out.** After many side-session events in a row with no
+  user message, further reports wait for the next user turn. When the pilot
+  notices a long chain, it posts a short status and its next planned step so
+  the human can relaunch with one word.
+- The app re-invokes an idle session when one of its background commands
+  exits. A watcher that blocks until news arrives (for example `prw wait` from
+  the `agent-sessions:pr-watch` skill), run in the background, is therefore a wake source.
+- A report is the child's word, not proof: check the change before relaying.
 
 ## Worktrees
 
-A sub-session in its own worktree commits on its own branch. Nothing it did is
-in the pilot's checkout until merged; never merge a sub-session's branch into
-the pilot's checkout unless the human asks. Remove the worktree once its branch
-is merged.
+A child in its own worktree commits on its own branch. Nothing it did is in
+the pilot's checkout until merged; never merge children's branches into the
+pilot's checkout unless the human asks.
+
+## Archiving a finished child
+
+Close a child with `archive_session` once the pilot's judgement says it is done
+(SKILL.md §6, "Closing children"). The call can be refused because the session
+"still has live work", or the app can ask to re-issue it with hook-modified
+input: re-issue **once** with that exact input. If it is refused again, say so
+in one line in the next report and move on; never loop.
 
 ## Never poll
 
-No sleep loops, no scheduled re-checks of CI. Background waits and sub-session
-results re-invoke the pilot when something changes.
+No sleep loops, no scheduled re-checks of CI. Background waits and side-session
+reports re-invoke the pilot when something changes.
