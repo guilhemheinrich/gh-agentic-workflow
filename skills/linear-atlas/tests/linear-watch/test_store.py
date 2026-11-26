@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
@@ -51,6 +52,11 @@ class StoreTestCase(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.state_dir = Path(self._tmp.name) / "state"
         self.db = self.state_dir / "lw.sqlite"
+        # a subscription by URL needs the key of its workspace to exist (a made-up one here)
+        patcher = mock.patch.dict(os.environ, {"LINEAR_API_KEY": "lin_api_TESTkey0123456789",
+                                               "HOME": self._tmp.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -260,7 +266,7 @@ class TestList(StoreTestCase):
                          {("s1", SLUG_ID), ("s2", "TT-1")})
         self.assertEqual(
             set(data[0]),
-            {"session", "harness", "kind", "target", "since", "created_at",
+            {"session", "harness", "kind", "target", "workspace", "since", "created_at",
              "renewed_at", "closed_at", "close_reason"},
         )
 

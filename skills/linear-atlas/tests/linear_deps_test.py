@@ -30,8 +30,12 @@ def load(path):
         return json.load(fh)
 
 
+ISOLATED_HOME = tempfile.mkdtemp(prefix="linear-deps-home-")  # no ~/.config/linear in there
+
+
 def run_cli(*args, env=None):
     full_env = {k: v for k, v in os.environ.items() if k != "LINEAR_API_KEY"}
+    full_env.update(HOME=ISOLATED_HOME, USERPROFILE=ISOLATED_HOME)
     full_env.setdefault("LINEAR_SEMANTICS", os.path.join(HERE, "fixtures", "model-legacy.json"))
     full_env.update(env or {})
     return subprocess.run([sys.executable, SCRIPT, *args], capture_output=True, text=True, env=full_env)
@@ -200,6 +204,77 @@ class StubHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(payload)))
         self.end_headers()
         self.wfile.write(payload)
+
+
+class WorkspaceKeyTests(unittest.TestCase):
+    """The key follows the workspace of the project URL (linear_creds.py)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.server = http.server.HTTPServer(("127.0.0.1", 0), StubHandler)
+        cls.url = "http://127.0.0.1:%d/graphql" % cls.server.server_port
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.shutdown()
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="linear-deps-ws-")
+        os.makedirs(os.path.join(self.home, ".config", "linear"))
+        saved = {k: os.environ.get(k) for k in ("HOME", "USERPROFILE", "LINEAR_API_KEY")}
+        os.environ.update(HOME=self.home, USERPROFILE=self.home)
+        os.environ.pop("LINEAR_API_KEY", None)
+        StubHandler.seen_auth = []
+        ld.ACTIVE_WORKSPACE = None
+
+        def restore():
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+            ld.ACTIVE_WORKSPACE = None
+        self.addCleanup(restore)
+
+    def write_key(self, name, key):
+        with open(os.path.join(self.home, ".config", "linear", name), "w") as fh:
+            fh.write("LINEAR_API_KEY=%s" % key + chr(10))
+
+    def test_each_workspace_uses_its_own_file(self):
+        self.write_key("acme.env", "key-acme")
+        self.write_key("other.env", "key-other")
+        ld.fetch_live("0123456789ab", self.url, workspace="acme")
+        self.assertEqual(set(StubHandler.seen_auth), {"key-acme"})
+        StubHandler.seen_auth = []
+        ld.fetch_live("0123456789ab", self.url, workspace="other")
+        self.assertEqual(set(StubHandler.seen_auth), {"key-other"})
+
+    def test_without_a_workspace_file_the_default_file_serves(self):
+        self.write_key("env", "key-default")
+        ld.fetch_live("0123456789ab", self.url, workspace="acme")
+        self.assertEqual(set(StubHandler.seen_auth), {"key-default"})
+
+    def test_no_key_names_the_file_to_create(self):
+        with self.assertRaises(SystemExit) as ctx:
+            ld.fetch_live("0123456789ab", self.url, workspace="other")
+        self.assertIn("~/.config/linear/other.env", str(ctx.exception))
+
+    def test_not_found_names_the_workspace_the_key_belongs_to(self):
+        saved = ld.gql
+        ld.gql = lambda api_url, key, query, variables: {"organization": {"urlKey": "acme"}}
+        self.addCleanup(lambda: setattr(ld, "gql", saved))
+        message = ld.not_found_message(self.url, "secret-key", "other", "0123456789ab")
+        self.assertIn("belongs to workspace 'acme'", message)
+        self.assertIn("~/.config/linear/other.env", message)
+        self.assertNotIn("secret-key", message)
+
+    def test_not_found_in_the_right_workspace_stays_plain(self):
+        saved = ld.gql
+        ld.gql = lambda api_url, key, query, variables: {"organization": {"urlKey": "acme"}}
+        self.addCleanup(lambda: setattr(ld, "gql", saved))
+        self.assertEqual(ld.not_found_message(self.url, "k", "acme", "0123456789ab"),
+                         "error: project not found for slug id '0123456789ab'")
 
 
 class LivePathTests(unittest.TestCase):
