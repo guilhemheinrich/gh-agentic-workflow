@@ -89,11 +89,7 @@ class Syncer:
         self.thread = None
 
     def _gql(self, query, variables):
-        import os
-        key = os.environ.get("LINEAR_API_KEY", "").strip()
-        if not key:
-            raise SystemExit("error: LINEAR_API_KEY is not set")
-        return ld.gql(self.api_url, key, query, variables)
+        return ld.gql(self.api_url, ld.api_key(), query, variables)
 
     # ---- the three pulls ----------------------------------------------------------------------
 

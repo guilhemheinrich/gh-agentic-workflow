@@ -63,11 +63,14 @@ refuse to run from a checkout; `LW_ALLOW_CHECKOUT=1` is for tests only).
    `# lw-hook` marker), repoint any `~/.local/bin/lw` link, then remove the old
    folder. The store (`~/.local/state/linear-watch/`) and the launchd label
    (`com.linear-watch.daemon`) are unchanged: subscriptions carry over.
-1. **The Linear CLI and the key.** `brew install schpet/tap/linear`; the key
-   lives in `~/.config/linear/env` as `LINEAR_API_KEY=…`, which `lw` reads when
-   its environment has none (launchd starts it with nothing). `lw` looks for
+1. **The Linear CLI and the keys.** `brew install schpet/tap/linear`. A Linear
+   key is scoped to one workspace (the `<workspace>` of
+   `https://linear.app/<workspace>/...`), so each workspace has its own file,
+   `~/.config/linear/<workspace>.env`, holding `LINEAR_API_KEY=…` (a key made
+   in that workspace). `~/.config/linear/env` stays the default for the
+   one-workspace setup. See "One key per workspace" below. `lw` looks for
    the CLI at `/opt/homebrew/bin/linear`, else on `PATH`; `LW_LINEAR_BIN`
-   overrides. The key never goes on argv nor in a log.
+   overrides. A key never goes on argv nor in a log.
 2. **Start the daemon.** `lw daemon start` installs and loads
    `~/Library/LaunchAgents/com.linear-watch.daemon.plist`.
 3. **Register the Claude hooks.** `lw setup --claude` prints the diff to
@@ -94,8 +97,8 @@ Both hooks exit 0 and stay silent on any problem; `LW_HOOKS=0` disables them.
 
 | Command | Does |
 |---|---|
-| `lw subscribe --session ID --project SLUG\|URL [--since 3d] [--harness claude-code]` | Watch a project. A URL or a slug is reduced to its slugId. |
-| `lw subscribe --session ID --issue TT-123 [--since 3d]` | Watch one issue (identifier or issue URL). |
+| `lw subscribe --session ID --project SLUG\|URL [--workspace WS] [--since 3d] [--harness claude-code]` | Watch a project. A URL or a slug is reduced to its slugId; the workspace comes from the URL, or `--workspace` for a bare slug. |
+| `lw subscribe --session ID --issue TT-123 [--workspace WS] [--since 3d]` | Watch one issue (identifier or issue URL). |
 | `lw unsubscribe --session ID (--project … \| --issue … \| --all)` | Close the matching open subscriptions, reason `unsubscribed`. |
 | `lw list [--session ID] [--closed] [--json]` | Show open subscriptions (`--closed` adds closed ones). |
 | `lw wait --session ID [--timeout S]` | Block until the session has lines; print them. Exit 0 lines, 2 timeout or error, 3 nothing subscribed, 4 another wait runs. |
@@ -200,8 +203,8 @@ verbatim transcripts, is in [`linear-watch-cli.md`](linear-watch-cli.md). The
 facts that shape the code:
 
 - `LINEAR_API_KEY` in the environment beats any credential the CLI stored, so
-  `lw` always exports it to the child (loading it from `~/.config/linear/env`
-  when its own environment has none).
+  `lw` always exports it to the child: the key of the call's workspace (see
+  "One key per workspace"), never the one the CLI stored.
 - Exit codes are distinguishable for the classes `lw` acts on (credential,
   not found, bad query); `lw` maps them to 0 ok, 10 credential rejected,
   12 rate limited, 13 anything else, and keeps the last error for `doctor`.
@@ -214,6 +217,36 @@ facts that shape the code:
 - Agent and human comments are indistinguishable in Linear (`botActor` is
   `null` for both): that is why the own-writes hook exists.
 
+### One key per workspace
+
+A personal Linear key sees one workspace only. `lw` and the `linear_*.py`
+scripts therefore pick the key from the workspace of what they touch, the
+`<workspace>` slug of the Linear URL:
+
+| Order | Source | Serves |
+|---|---|---|
+| 1 | `~/.config/linear/<workspace>.env` (`LINEAR_API_KEY=…`) | that workspace |
+| 2 | `LINEAR_API_KEY` in the environment | every workspace without a file of its own |
+| 3 | `~/.config/linear/env` | every workspace without a file of its own (the old single-file setup, unchanged) |
+
+- `lw subscribe` takes the workspace from the project or issue URL, or from
+  `--workspace <slug>` for a bare slugId or identifier (a flag that contradicts
+  the URL is refused). It is stored with the subscription; a subscription made
+  before this existed has none and keeps using steps 2 and 3. Each poll, each
+  graph rebuild and each `linear_deps.py` / `linear_serve.py` call uses the key
+  of its own workspace.
+- A subscription for a workspace that no step serves fails at subscribe time,
+  naming the file to create (`~/.config/linear/<workspace>.env`).
+- When Linear answers "not found" for a project and the key turns out to belong
+  to another workspace (its organization `urlKey` differs from the URL's), the
+  error says so and names the file to fix instead of "Entity not found".
+- A key is never printed, never on argv and never in a log; an error about one
+  workspace never contains another workspace's key.
+- Known limit: the poll cursors and the remembered issue states are keyed by
+  project slugId and by issue identifier (`TT-123`). Two workspaces that both use
+  the team key `TT` would share those rows for issues; project subscriptions are
+  not affected (slugIds are unique).
+
 ## 6. `lw doctor`
 
 One line per check, `ok` / `warn` / `FAIL`; exit 1 on any `FAIL`
@@ -223,6 +256,7 @@ healthy machine:
 ```text
 ok linear binary /opt/homebrew/bin/linear
 ok credential present (~/.config/linear/env)
+ok workspace acme: credential present (~/.config/linear/acme.env), accepted (last call ok at 2026-11-12T16:05:01Z); 1 subscription(s)
 ok heartbeat 2m old
 ok last Linear call ok at 2026-11-12T16:05:01Z
 ok session 1f0c…: 1 open (project 5842ed0c2bcd), oldest 3h 12m, renewed 2m ago
@@ -231,7 +265,8 @@ ok session 1f0c…: 1 open (project 5842ed0c2bcd), oldest 3h 12m, renewed 2m ago
 | Check | `FAIL` when |
 |---|---|
 | linear binary | not found or not executable (at `LW_LINEAR_BIN` when set) |
-| credential | no key in the environment nor in `~/.config/linear/env`, or Linear rejected it on the last call |
+| credential | no key in the environment nor in `~/.config/linear/env` (skipped once every subscription names a workspace), or Linear rejected it on the last call |
+| workspace `<ws>` | one line per workspace that has a file or an open subscription: `FAIL` when no key serves it (the line names the file to create) or Linear rejected it; says whether the last call was accepted, and counts the subscriptions. `lw doctor --workspace WS` reports that one only |
 | heartbeat | absent (daemon not started) or older than 3 × `LW_POLL_SECONDS` |
 | last Linear call | the last call failed and no call succeeded since (`warn` when rate limited) |
 | subscriptions | never: one informative line per session (targets, age, last renewal) |
@@ -304,8 +339,8 @@ lw graph --project checkout-redesign-3f9a1c2b4d5e   # slug, slugId or project UR
 lw graph --issue TT-2290                            # the project of this ticket
 ```
 
-It runs `linear_deps.py` with the host Python and reads `LINEAR_API_KEY` from
-the environment or `~/.config/linear/env`, never from argv.
+It runs `linear_deps.py` with the host Python and the key of the project's
+workspace (see "One key per workspace"), never on argv.
 
 **The rule for every session: cite the graph's local path.** Whenever a
 session talks about the project (progress, what is blocked, what to do next),

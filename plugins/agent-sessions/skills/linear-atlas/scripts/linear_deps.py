@@ -2,14 +2,15 @@
 """Render the "blocks / blocked by" graph of a Linear project as a standalone SVG.
 
 Usage:
-    LINEAR_API_KEY=lin_api_... python linear_deps.py PROJECT_URL -o deps.svg [--json-out deps.json]
+    python linear_deps.py PROJECT_URL -o deps.svg [--json-out deps.json]   # key: see below
     python linear_deps.py check deps.json --type Proof --blocked-by "Technical task,Feature,Improvement,Bug"
     python linear_deps.py verify deps.json   # every rule of linear-semantics/references/semantics.json
     python linear_deps.py PROJECT_URL --from-json ../tests/fixtures/linear-deps-demo.json -o deps.svg   # offline
 
 PROJECT_URL looks like https://linear.app/<workspace>/project/<name>-<slugId>.
 Every box is a link to https://linear.app/<workspace>/issue/<IDENTIFIER>.
-Standard library only; the API key is read from LINEAR_API_KEY and never printed.
+Standard library only. The API key is chosen by the workspace of PROJECT_URL (linear_creds.py):
+~/.config/linear/<workspace>.env, else LINEAR_API_KEY, else ~/.config/linear/env. It is never printed.
 """
 import argparse
 import json
@@ -20,6 +21,10 @@ import urllib.error
 import urllib.request
 from collections import defaultdict
 from xml.sax.saxutils import escape, quoteattr
+
+# `python -I` drops the script's directory from sys.path; the sibling module needs it.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import linear_creds  # noqa: E402
 
 API_URL = "https://api.linear.app/graphql"
 PAGE_SIZE = 25      # issues per page; relations are capped at the same size to stay under the complexity limit
@@ -92,6 +97,9 @@ TYPE_GROUP = "type"
 DIRECTED = ("blocks", "duplicate")
 
 
+QUERY_ORGANIZATION = "query { organization { urlKey } }"
+
+
 def parse_project_url(url):
     m = PROJECT_URL_RE.match(url.strip())
     if not m:
@@ -122,16 +130,43 @@ def gql(api_url, key, query, variables):
     return payload["data"]
 
 
-def fetch_live(slug, api_url, descriptions=True):
-    key = os.environ.get("LINEAR_API_KEY", "").strip()
+# The workspace whose key api_key() uses when the caller names none (`serve` sets it).
+ACTIVE_WORKSPACE = None
+
+
+def api_key(workspace=None):
+    """The Linear key of a workspace (linear_creds.resolve); exits with the file to create when none."""
+    workspace = workspace or ACTIVE_WORKSPACE
+    key = linear_creds.load_key(workspace)
     if not key:
-        raise SystemExit("error: LINEAR_API_KEY is not set (or use --from-json)")
+        raise SystemExit("error: %s (or use --from-json)" % linear_creds.missing_message(workspace))
+    return key
+
+
+def not_found_message(api_url, key, workspace, slug):
+    """"project not found", saying so when the key belongs to another workspace."""
+    message = "error: project not found for slug id %r" % slug
+    if workspace:
+        try:
+            org = (gql(api_url, key, QUERY_ORGANIZATION, {}).get("organization") or {}).get("urlKey") or ""
+        except SystemExit:
+            org = ""
+        if org and org.lower() != workspace:
+            message = ("error: project not found for slug id %r: the key used for workspace %r belongs to"
+                       " workspace %r, which cannot see it; put a key made in %r in %s"
+                       % (slug, workspace, org.lower(), workspace, linear_creds.display_path(workspace)))
+    return message
+
+
+def fetch_live(slug, api_url, descriptions=True, workspace=None):
+    key = api_key(workspace)
+    workspace = workspace or ACTIVE_WORKSPACE
     nodes = gql(api_url, key, QUERY_PROJECT_BY_FILTER, {"slug": slug})["projects"]["nodes"]
     project = nodes[0] if nodes else None
     if project is None:
         project = gql(api_url, key, QUERY_PROJECT_BY_ID, {"id": slug}).get("project")
     if project is None:
-        raise SystemExit("error: project not found for slug id %r" % slug)
+        raise SystemExit(not_found_message(api_url, key, workspace, slug))
 
     issues, relations, external, other_ids, truncated = [], set(), {}, {}, []
     after = None
@@ -1180,7 +1215,7 @@ def verify_main(argv):
     model = load_semantics(args.semantics, overlays)
     if re.match(r"https?://", args.graph):
         workspace, slug = parse_project_url(args.graph)
-        data = fetch_live(slug, args.api_url, descriptions=True)
+        data = fetch_live(slug, args.api_url, descriptions=True, workspace=workspace)
         graph = build_export(data, args.graph.strip(), workspace)
     else:
         graph = load_json(args.graph)
@@ -1826,7 +1861,7 @@ def main(argv=None):
 
     workspace, slug = parse_project_url(args.project_url)
     data = (load_json(args.from_json) if args.from_json
-            else fetch_live(slug, args.api_url, descriptions=not args.no_descriptions))
+            else fetch_live(slug, args.api_url, descriptions=not args.no_descriptions, workspace=workspace))
     if args.no_descriptions:
         drop_descriptions(data)
     graph = build_graph(data, args.include_related, args.external, bands=not args.no_milestones)
