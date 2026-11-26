@@ -9,3 +9,6 @@ scripts/watchers-docker/prw text eol=lf
 scripts/watchers-docker/lw text eol=lf
 scripts/watchers-docker/Dockerfile text eol=lf
 scripts/watchers-docker/*.cmd text eol=crlf
+
+# The fake `linear` used by the lw tests has an env shebang: a CRLF checkout (core.autocrlf) or archive breaks it
+skills/*/tests/linear-watch/bin/* text eol=lf

@@ -426,6 +426,11 @@ server's session, so it needs a credential of its own: a **personal API key**.
   an admin has to create it.
 - **Scope it down:** the script only reads. Give the key the **Read** permission and,
   if the workspace offers it, limit it to the teams of the project.
+- **One key per workspace:** a key sees one workspace only. The scripts take it from the
+  workspace of the project URL: `~/.config/linear/<workspace>.env` (`LINEAR_API_KEY=…`),
+  else `LINEAR_API_KEY`, else the default `~/.config/linear/env`. With several workspaces,
+  one file each (see `references/linear-watch.md`, "One key per workspace"); `lw doctor`
+  reports each.
 - **Hold it:** in the shell or the secret store of the person running the command, as
   `LINEAR_API_KEY`. Never in a file of the repository, never in a chat. The script never prints it: an unreachable API or a refusal shows
   the HTTP status or Linear's message, and a test pins it.
@@ -507,7 +512,8 @@ by `lw wait`, the graph rebuild, and `lw doctor`:
 never shells out or calls a Docker wrapper: `lw_subscribe`, `lw_unsubscribe`, `lw_list`,
 `lw_wait`, `lw_own_write`, `lw_expire`, `lw_doctor`, `lw_graph`. Each tool runs one `lw`
 subcommand and returns `exit_code`, `stdout` and `stderr`; `lw` stays the one place that holds the
-watcher's behaviour.
+watcher's behaviour. `lw_subscribe`, `lw_list`, `lw_doctor` and `lw_graph` take an optional `workspace`
+(the Linear workspace slug, which picks the credential file) and the answers report it.
 
 Installed through the Claude plugin (`agent-sessions`), the server is declared in the plugin's `.mcp.json` and needs no registration. Otherwise, register it once per machine, from the installed copy (the daemon itself stays the launchd job):
 

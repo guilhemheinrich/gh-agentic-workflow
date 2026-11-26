@@ -33,8 +33,15 @@ Controlled by the environment:
                        `unreachable` (exit 5) while the others answer
   FAKE_LINEAR_KEY      the only key this fake accepts; another non-empty key
                        gets the measured 401 (exit 4). Unset: any key is fine.
+  FAKE_LINEAR_KEYS     several workspaces: comma-separated `key=workspace` pairs.
+                       Only those keys are accepted (another gets the 401), and
+                       `{ organization { urlKey } }` answers the key's workspace.
+  FAKE_LINEAR_PROJECT_ORGS  comma-separated `slugId=workspace` pairs: a call whose
+                       variables name one of these projects with a key of another
+                       workspace gets the measured "Entity not found" (exit 3).
   FAKE_LINEAR_LOG      file to append one JSON line per call to: argv, stdin,
-                       cwd, whether a key was received and LINEAR_IGNORE_ENV_FILE.
+                       cwd, whether a key was received, LINEAR_IGNORE_ENV_FILE and,
+                       with FAKE_LINEAR_KEYS, the workspace of the key (`org`).
                        The key value itself is never written.
 
 Like the real CLI, a missing or empty LINEAR_API_KEY exits 4 with
@@ -144,6 +151,11 @@ def poll_answer(operation: str, variables: dict) -> str | None:
     if operation == "CommentsSince":
         conn = json.loads(fixture("comments-since.json"))["data"]["comments"]
         nodes = [] if after else _visible(conn["nodes"], "createdAt", variables.get("since"))
+        slug = variables.get("p")
+        if slug and slug != FAKE_PROJECT:
+            # another project has comments of its own: same text, ids with the slug's prefix
+            for node in nodes:
+                node["id"] = slug[:8] + node["id"][8:]
         return json.dumps({"data": {"comments": _connection(nodes, TERMINAL_PAGE if after else conn["pageInfo"])}})
     issues = json.loads(fixture("issues-updated-since.json"))["data"]["issues"]
     for node in issues["nodes"]:
@@ -192,6 +204,16 @@ def err(text: str, code: int) -> None:
     sys.exit(code)
 
 
+def pairs(name: str) -> dict:
+    """FAKE_LINEAR_KEYS-style `a=b,c=d` into {a: b, c: d}."""
+    found = {}
+    for item in os.environ.get(name, "").split(","):
+        left, _, right = item.partition("=")
+        if left and right:
+            found[left] = right
+    return found
+
+
 def main() -> None:
     argv = sys.argv[1:]
     document = sys.stdin.read() if not sys.stdin.isatty() else ""
@@ -206,6 +228,7 @@ def main() -> None:
                 "cwd": os.getcwd(),
                 "key_received": bool(key),
                 "ignore_env_file": os.environ.get("LINEAR_IGNORE_ENV_FILE"),
+                "org": pairs("FAKE_LINEAR_KEYS").get(key),
             }) + "\n")
 
     if not argv or argv[0] != "api":
@@ -236,8 +259,15 @@ def main() -> None:
             "  Set LINEAR_API_KEY, add api_key to .linear.toml, or run `linear auth login`.", 4)
     expected = os.environ.get("FAKE_LINEAR_KEY")
     mode = os.environ.get("FAKE_LINEAR_MODE", "ok")
-    if (expected and key != expected) or mode == "unauthenticated":
+    key_orgs = pairs("FAKE_LINEAR_KEYS")
+    if (expected and key != expected) or (key_orgs and key not in key_orgs) or mode == "unauthenticated":
         err(fixture("errors-unauthenticated.json"), 4)
+    org = key_orgs.get(key)
+    if org and operation_name(document) == "Workspace":
+        out(json.dumps({"data": {"organization": {"urlKey": org}}}), 0)
+    owner = pairs("FAKE_LINEAR_PROJECT_ORGS").get((variables or {}).get("p") or (variables or {}).get("slug"))
+    if org and owner and owner != org:
+        out(fixture("errors-not-found.json"), 3)
 
     if mode == "hang":
         time.sleep(30)

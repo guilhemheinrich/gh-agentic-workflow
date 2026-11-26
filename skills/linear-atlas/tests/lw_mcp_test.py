@@ -64,6 +64,22 @@ class McpTests(unittest.TestCase):
         self.assertTrue(out["isError"])
         self.assertIn("project", out["content"][0]["text"])
 
+    def test_workspace_is_passed_to_subscribe_list_and_doctor(self):
+        out, _ = self.call("lw_subscribe", {"session": "s1", "project": "0123456789ab", "workspace": "other"})
+        self.assertEqual(out["stdout"], "ARGV subscribe --session s1 --project 0123456789ab --workspace other")
+        out, _ = self.call("lw_list", {"workspace": "other"})
+        self.assertEqual(out["stdout"], "ARGV list --json --workspace other")
+        out, _ = self.call("lw_doctor", {"workspace": "other"})
+        self.assertEqual(out["stdout"], "ARGV doctor --workspace other")
+        out, _ = self.call("lw_doctor", {})
+        self.assertEqual(out["stdout"], "ARGV doctor")
+
+    def test_workspace_is_in_the_tool_schemas(self):
+        out = self.talk({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        tools = {t["name"]: t["inputSchema"]["properties"] for t in out[0]["result"]["tools"]}
+        for name in ("lw_subscribe", "lw_list", "lw_doctor"):
+            self.assertIn("workspace", tools[name])
+
     def test_wait_is_bounded_and_reports_a_wake(self):
         out, err = self.call("lw_wait", {"session": "s1", "timeout": 9999})
         self.assertFalse(err)

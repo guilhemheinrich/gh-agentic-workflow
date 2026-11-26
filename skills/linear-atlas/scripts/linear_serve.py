@@ -36,10 +36,15 @@ INACTIVE_PROJECT_STATES = ("completed", "canceled")
 PINNED = []  # slugIds given with --project: listed even when the key's user is neither member nor lead
 
 
+def linear_creds_normalize(value):
+    try:
+        return ld.linear_creds.normalize_workspace(value)
+    except ValueError as exc:
+        raise SystemExit("error: %s" % exc)
+
+
 def list_my_projects(api_url):
-    key = os.environ.get("LINEAR_API_KEY", "").strip()
-    if not key:
-        raise SystemExit("error: LINEAR_API_KEY is not set")
+    key = ld.api_key()
     out, after = [], None
     while True:
         page = ld.gql(api_url, key, QUERY_MY_PROJECTS, {"after": after})["projects"]
@@ -249,8 +254,10 @@ def serve_main(argv):
                     help="every N-th pull re-reads each tracked project in full (default 30; 0 = never)")
     ap.add_argument("--api-url", default=ld.API_URL, help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
-    if not os.environ.get("LINEAR_API_KEY", "").strip():
-        raise SystemExit("error: LINEAR_API_KEY is not set")
+    # one serve, one workspace: --workspace, else the one of a pinned project URL
+    ld.ACTIVE_WORKSPACE = (linear_creds_normalize(args.workspace)
+                           or next((ws for ws in (ld.linear_creds.workspace_from_url(p) for p in args.project) if ws), None))
+    ld.api_key()  # fail now, naming the credential file to create
 
     PINNED[:] = args.project
     workspace = args.workspace

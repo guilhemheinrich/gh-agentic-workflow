@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """lw — the Linear watcher of the linear-atlas skill: wake agent sessions on Linear changes.
 
-    lw subscribe   --session ID (--project SLUG|URL | --issue TT-123) [--since 3d] [--harness H]
+    lw subscribe   --session ID (--project SLUG|URL | --issue TT-123) [--workspace WS] [--since 3d] [--harness H]
     lw unsubscribe --session ID (--project SLUG|URL | --issue TT-123 | --all)
     lw list        [--session ID] [--closed] [--json]
 
@@ -14,6 +14,10 @@ A subscription ties one session to one Linear target: a project (stored as its
 slugId, the 12-hex suffix of the project slug) or an issue (stored as its
 uppercase identifier). Subscribing twice is a no-op that renews the row.
 --since is capped at 7 days: nothing older is ever delivered.
+
+A subscription also records its Linear workspace (from the URL, or --workspace)
+and every call for it uses that workspace's key: ~/.config/linear/<workspace>.env,
+else LINEAR_API_KEY, else ~/.config/linear/env (see linear_creds.py).
 
 Standard library only. Errors go to stderr with exit 2.
 """
@@ -91,6 +95,11 @@ MIGRATIONS = [
       PRIMARY KEY (session, id)
     );
     CREATE INDEX events_pending ON events (session) WHERE delivered_at IS NULL;
+    """,
+    # v2: the Linear workspace of a subscription (the <ws> of linear.app/<ws>/...),
+    # which picks the credential. NULL = no workspace known: the default key.
+    """
+    ALTER TABLE subscriptions ADD COLUMN workspace TEXT;
     """,
 ]
 SCHEMA_VERSION = len(MIGRATIONS)
@@ -193,6 +202,25 @@ def parse_duration(value: str) -> timedelta:
     return min(timedelta(**{UNITS[match.group(2)]: int(match.group(1))}), MAX_SINCE)
 
 
+def workspace_of(args) -> str | None:
+    """The workspace of a subscribe/graph call: --workspace, else the slug in the URL.
+
+    Both given and different is an error: the URL would silently lose.
+    """
+    given = getattr(args, "workspace", None)
+    try:
+        explicit = linear_creds.normalize_workspace(given)
+    except ValueError as exc:
+        raise LwError(str(exc)) from exc
+    from_url = None
+    for value in (getattr(args, "project", None), getattr(args, "issue", None)):
+        if value and "://" in value:
+            from_url = linear_creds.workspace_from_url(value)
+    if explicit and from_url and explicit != from_url:
+        raise LwError(f"--workspace {explicit} contradicts the URL, which is in workspace {from_url}")
+    return explicit or from_url
+
+
 def target_of(args) -> tuple[str, str]:
     if getattr(args, "project", None):
         return "project", normalize_project(args.project)
@@ -211,12 +239,17 @@ def target_of(args) -> tuple[str, str]:
 # whichever stream holds it. Rate limiting was never provoked: it is recognized
 # by the RATELIMITED code (Linear's documented error) or by its wording.
 #
-# The key comes from the environment, else from ~/.config/linear/env (launchd
-# starts the daemon with no LINEAR_API_KEY). It only ever goes into the child's
+# The key is chosen per workspace by linear_creds.resolve(): ~/.config/linear/<ws>.env,
+# else the environment, else ~/.config/linear/env (launchd starts the daemon with
+# no LINEAR_API_KEY). It only ever goes into the child's
 # environment: never argv, never os.environ, never a log or the status file.
 # Imported here rather than at the top so this section stays self-contained.
 import shutil  # noqa: E402
 import subprocess  # noqa: E402
+
+# Credentials per workspace live in linear_creds.py (next to this script).
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import linear_creds  # noqa: E402
 
 T_OK = 0
 T_CREDENTIAL = 10    # no key, or Linear rejected it
@@ -230,7 +263,8 @@ TRANSPORT_FILE = "transport.json"
 LINEAR_FAILURE_PREFIX = "✗ API request failed: "
 RATE_LIMIT_RE = re.compile(r"rate.?limit|too many requests|\b429\b", re.IGNORECASE)
 OPERATION_RE = re.compile(r"^\s*(?:query|mutation)\s+([A-Za-z_][A-Za-z0-9_]*)")
-ENV_LINE_RE = re.compile(r"^\s*(?:export\s+)?LINEAR_API_KEY\s*=\s*(.*?)\s*$")
+NOT_FOUND_RE = re.compile(r"not found", re.IGNORECASE)
+WORKSPACE_QUERY = "query Workspace { organization { urlKey } }"
 
 
 class TransportError(Exception):
@@ -266,30 +300,9 @@ def linear_bin() -> str | None:
     return _linear_bin_cache
 
 
-def load_linear_key() -> str | None:
-    """LINEAR_API_KEY from the environment (empty = unset), else ~/.config/linear/env.
-
-    The file is parsed, never sourced: `LINEAR_API_KEY=…` with an optional
-    `export ` and optional quotes.
-    """
-    key = os.environ.get("LINEAR_API_KEY")
-    if key:
-        return key
-    path = Path.home() / ".config" / "linear" / "env"
-    try:
-        lines = path.read_text().splitlines()
-    except OSError:
-        return None
-    for line in lines:
-        match = ENV_LINE_RE.match(line)
-        if not match:
-            continue
-        value = match.group(1)
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        if value:
-            key = value
-    return key or None
+def load_linear_key(workspace: str | None = None) -> str | None:
+    """The key serving a workspace (None = no workspace known); see linear_creds.resolve."""
+    return linear_creds.load_key(workspace)
 
 
 def _operation_name(query: str) -> str:
@@ -337,12 +350,25 @@ def _classify(rc: int, stdout: str, stderr: str) -> tuple[int, str]:
     return T_OTHER, message
 
 
-def _record_transport(state_dir: Path, field: str, value) -> None:
-    """Merge one field into <state_dir>/transport.json (atomic, mode 0600)."""
+def _record_transport(state_dir: Path, field: str, value, workspace: str | None = None) -> None:
+    """Merge one field into <state_dir>/transport.json (atomic, mode 0600).
+
+    The default credential keeps the top-level fields; a named workspace has its
+    own under "workspaces".
+    """
     try:
         state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         status = read_transport_status(state_dir)
-        status[field] = value
+        if workspace:
+            workspaces = status.get("workspaces")
+            if not isinstance(workspaces, dict):
+                workspaces = status["workspaces"] = {}
+            entry = workspaces.get(workspace)
+            if not isinstance(entry, dict):
+                entry = workspaces[workspace] = {}
+            entry[field] = value
+        else:
+            status[field] = value
         tmp = state_dir / f".{TRANSPORT_FILE}.{os.getpid()}"
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as fh:
@@ -352,21 +378,55 @@ def _record_transport(state_dir: Path, field: str, value) -> None:
         pass  # the status file is for doctor; never fail a call over it
 
 
-def read_transport_status(state_dir: Path) -> dict:
-    """{"last_ok": ts, "last_error": {"code", "message", "query", "at"}}, keys optional."""
+def read_transport_status(state_dir: Path, workspace: str | None = None) -> dict:
+    """{"last_ok": ts, "last_error": {"code", "message", "query", "at"}}, keys optional.
+
+    workspace=None reads the default credential's record; a slug reads that workspace's.
+    """
     try:
         status = json.loads((Path(state_dir) / TRANSPORT_FILE).read_text())
     except (OSError, ValueError):
         return {}
-    return status if isinstance(status, dict) else {}
+    if not isinstance(status, dict):
+        return {}
+    if workspace:
+        workspaces = status.get("workspaces")
+        entry = workspaces.get(workspace) if isinstance(workspaces, dict) else None
+        return entry if isinstance(entry, dict) else {}
+    return status
+
+
+def _wrong_workspace_hint(key: str, workspace: str, binary: str, timeout: float) -> str | None:
+    """When Linear says "not found", say so if the key belongs to another workspace.
+
+    Asks the key for its own organization (one extra call, only on this failure)
+    and compares its urlKey with the workspace of the URL. Never names a key.
+    """
+    env = dict(os.environ, LINEAR_API_KEY=key, LINEAR_IGNORE_ENV_FILE="1")
+    try:
+        proc = subprocess.run(
+            [binary, "api", "--variables-json", "{}"], input=WORKSPACE_QUERY,
+            capture_output=True, text=True, env=env, cwd="/", timeout=min(timeout, 30.0),
+        )
+        body = json.loads(proc.stdout)
+        actual = str(((body.get("data") or {}).get("organization") or {}).get("urlKey") or "").lower()
+    except (OSError, ValueError, subprocess.SubprocessError, AttributeError):
+        return None
+    if not actual or actual == workspace:
+        return None
+    return (f"the key used for workspace {workspace!r} belongs to workspace {actual!r}, which cannot see"
+            f" this project (Linear answers 'not found'): put a key made in {workspace!r} in"
+            f" {linear_creds.display_path(workspace)}")
 
 
 def linear_api(query: str, variables: dict | None = None, *,
-               state_dir: Path | None = None, timeout: float | None = None) -> dict:
+               state_dir: Path | None = None, timeout: float | None = None,
+               workspace: str | None = None) -> dict:
     """Run one GraphQL document through `linear api` and return the parsed body.
 
     Raises TransportError with code T_CREDENTIAL, T_RATE_LIMITED or T_OTHER.
     The outcome is recorded in <state_dir>/transport.json for `lw doctor`.
+    workspace picks the credential (linear_creds.resolve); None = the default key.
     """
     name = _operation_name(query)
     state_dir = Path(state_dir) if state_dir else default_state_dir()
@@ -375,18 +435,22 @@ def linear_api(query: str, variables: dict | None = None, *,
             timeout = float(os.environ.get("LW_LINEAR_TIMEOUT") or LINEAR_TIMEOUT_S)
         except ValueError:
             timeout = LINEAR_TIMEOUT_S
-    key = load_linear_key()
+    key, source = linear_creds.resolve(workspace)
+    # a workspace has a status record of its own only when its own file served the call;
+    # the environment and the default file are one credential, whatever the workspace
+    record_for = workspace if source == "file" else None
 
     def fail(code: int, message: str):
         if key:
             message = message.replace(key, "<key>")
         message = message[:300]
         _record_transport(state_dir, "last_error",
-                          {"code": code, "message": message, "query": name, "at": fmt(now())})
+                          {"code": code, "message": message, "query": name, "at": fmt(now())},
+                          record_for)
         return TransportError(code, message, name)
 
     if not key:
-        raise fail(T_CREDENTIAL, "no LINEAR_API_KEY in the environment nor in ~/.config/linear/env")
+        raise fail(T_CREDENTIAL, linear_creds.missing_message(workspace))
     binary = linear_bin()
     if not binary:
         raise fail(T_OTHER, f"linear binary not found (set LW_LINEAR_BIN; default {LINEAR_DEFAULT_BIN})")
@@ -402,14 +466,20 @@ def linear_api(query: str, variables: dict | None = None, *,
         raise fail(T_OTHER, f"cannot run {binary}: {exc.strerror or exc}") from None
     code, message = _classify(proc.returncode, proc.stdout, proc.stderr)
     if code != T_OK:
+        if code == T_OTHER and workspace and NOT_FOUND_RE.search(message):
+            message = _wrong_workspace_hint(key, workspace, binary, timeout) or message
         raise fail(code, message)
-    _record_transport(state_dir, "last_ok", fmt(now()))
+    _record_transport(state_dir, "last_ok", fmt(now()), record_for)
     return json.loads(proc.stdout)
 
 
 # ── commands ──────────────────────────────────────────────────────────────────
 def cmd_subscribe(conn: sqlite3.Connection, args) -> int:
     kind, target = target_of(args)
+    workspace = workspace_of(args)
+    if workspace and linear_creds.load_key(workspace) is None:
+        # fail now, not at the first poll: the message names the file to create
+        raise LwError(linear_creds.missing_message(workspace))
     t = now()
     try:
         since = fmt(t - parse_duration(args.since)) if args.since else None
@@ -424,9 +494,9 @@ def cmd_subscribe(conn: sqlite3.Connection, args) -> int:
     if row is None:
         conn.execute(
             "INSERT INTO subscriptions"
-            " (session, harness, kind, target, since, created_at, renewed_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (args.session, args.harness, kind, target, since, fmt(t), fmt(t)),
+            " (session, harness, kind, target, since, created_at, renewed_at, workspace)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (args.session, args.harness, kind, target, since, fmt(t), fmt(t), workspace),
         )
         verb = "subscribed"
     else:
@@ -434,13 +504,15 @@ def cmd_subscribe(conn: sqlite3.Connection, args) -> int:
         # changes the first subscribe asked for
         kept = min(s for s in (row["since"], since) if s) if (row["since"] or since) else None
         conn.execute(
-            "UPDATE subscriptions SET renewed_at = ?, since = ? WHERE id = ?",
-            (fmt(t), kept, row["id"]),
+            "UPDATE subscriptions SET renewed_at = ?, since = ?,"
+            " workspace = COALESCE(?, workspace) WHERE id = ?",
+            (fmt(t), kept, workspace, row["id"]),
         )
         since, verb = kept, "renewed"
     conn.execute("COMMIT")
     tail = f" since {since}" if since else ""
-    print(f"{verb} {args.session} to {kind} {target}{tail}")
+    where = f" (workspace {workspace})" if workspace else ""
+    print(f"{verb} {args.session} to {kind} {target}{where}{tail}")
     return 0
 
 
@@ -460,7 +532,7 @@ def cmd_unsubscribe(conn: sqlite3.Connection, args) -> int:
 
 
 LIST_COLUMNS = (
-    "session", "harness", "kind", "target", "since",
+    "session", "harness", "kind", "target", "workspace", "since",
     "created_at", "renewed_at", "closed_at", "close_reason",
 )
 
@@ -473,6 +545,9 @@ def cmd_list(conn: sqlite3.Connection, args) -> int:
     if args.session:
         sql += " AND session = ?"
         params.append(args.session)
+    if getattr(args, "workspace", None):
+        sql += " AND workspace = ?"
+        params.append(workspace_of(args))
     rows = [dict(r) for r in conn.execute(sql + " ORDER BY session, kind, target, id", params)]
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -483,7 +558,8 @@ def cmd_list(conn: sqlite3.Connection, args) -> int:
     for r in rows:
         since = f" since {r['since']}" if r["since"] else ""
         state = f" closed {r['closed_at']} ({r['close_reason']})" if r["closed_at"] else ""
-        print(f"{r['session']}  {r['kind']:<7} {r['target']}{since}  renewed {r['renewed_at']}{state}")
+        where = f" [{r['workspace']}]" if r["workspace"] else ""
+        print(f"{r['session']}  {r['kind']:<7} {r['target']}{where}{since}  renewed {r['renewed_at']}{state}")
     return 0
 
 
@@ -914,12 +990,14 @@ def _line(identifier: str, what: str, url) -> str:
     return f"Linear · {identifier} {what}" + (f" · {link}" if link else "")
 
 
-def _paged(query: str, variables: dict, field: str, state_dir: Path) -> list[dict]:
+def _paged(query: str, variables: dict, field: str, state_dir: Path,
+           workspace: str | None = None) -> list[dict]:
     """Every node of a connection, following pageInfo.endCursor."""
     nodes: list[dict] = []
     after = None
     for _ in range(POLL_MAX_PAGES):
-        body = linear_api(query, {**variables, "after": after}, state_dir=state_dir)
+        body = linear_api(query, {**variables, "after": after}, state_dir=state_dir,
+                          workspace=workspace)
         conn = (body.get("data") or {}).get(field) or {}
         nodes += [n for n in conn.get("nodes") or [] if isinstance(n, dict)]
         page = conn.get("pageInfo") or {}
@@ -980,33 +1058,49 @@ def _floor(sub) -> datetime:
     return parse_ts(sub["since"]) or parse_ts(sub["created_at"])
 
 
+def _workspace_of_subs(subs: list) -> str | None:
+    """The workspace of a target's subscriptions (the first that knows it)."""
+    return next((s["workspace"] for s in subs if s["workspace"]), None)
+
+
 def _fetch_project(slug: str, subs: list, cursor: datetime | None, state_dir: Path):
     bound = _bound(subs, cursor)
+    ws = _workspace_of_subs(subs)
     comments = []
-    for node in _paged(PROJECT_COMMENTS_QUERY, {"since": fmt(bound), "p": slug}, "comments", state_dir):
+    for node in _paged(PROJECT_COMMENTS_QUERY, {"since": fmt(bound), "p": slug}, "comments", state_dir, ws):
         issue = node.get("issue") or {}
         item = _comment(node, str(issue.get("identifier") or "").upper(), issue.get("url"), slug)
         if item:
             comments.append(item)
     if cursor is None:
-        nodes = _paged(PROJECT_BASELINE_QUERY, {"p": slug}, "issues", state_dir)
+        nodes = _paged(PROJECT_BASELINE_QUERY, {"p": slug}, "issues", state_dir, ws)
     else:
         nodes = _paged(PROJECT_ISSUES_QUERY, {"since": fmt(cursor - CURSOR_OVERLAP), "p": slug},
-                       "issues", state_dir)
+                       "issues", state_dir, ws)
     observations = [o for o in (_observation(n, slug) for n in nodes) if o]
     return comments, observations
 
 
-def _fetch_issues(targets: dict, state_dir: Path):
-    """targets: identifier -> bound. Yields (identifiers, comments, observations)
-    per group of ISSUE_GROUP_SIZE, or (identifiers, error) for a failed group."""
-    idents = sorted(targets)
+def _fetch_issues(targets: dict, state_dir: Path, workspaces: dict | None = None):
+    """targets: identifier -> bound; workspaces: identifier -> workspace slug or None.
+    Yields (identifiers, comments, observations) per group of ISSUE_GROUP_SIZE,
+    or (identifiers, error) for a failed group. A group never mixes workspaces:
+    each is fetched with its own key."""
+    workspaces = workspaces or {}
+    by_workspace: dict[str | None, list[str]] = {}
+    for ident in sorted(targets):
+        by_workspace.setdefault(workspaces.get(ident), []).append(ident)
+    for ws, idents in by_workspace.items():
+        yield from _fetch_issue_group(idents, targets, state_dir, ws)
+
+
+def _fetch_issue_group(idents: list, targets: dict, state_dir: Path, ws: str | None):
     for start in range(0, len(idents), ISSUE_GROUP_SIZE):
         group = idents[start:start + ISSUE_GROUP_SIZE]
         since = min(targets[i] for i in group)
         try:
             body = linear_api(WATCHED_ISSUES_QUERY, {"ids": group, "since": fmt(since)},
-                              state_dir=state_dir)
+                              state_dir=state_dir, workspace=ws)
         except TransportError as exc:
             yield group, exc
             continue
@@ -1030,7 +1124,7 @@ def run_cycle(conn: sqlite3.Connection, state_dir: Path) -> CycleResult:
     result = CycleResult()
     t = now()  # the new cursor: taken before the queries, so nothing slips between
     subs = conn.execute(
-        "SELECT id, session, kind, target, since, created_at FROM subscriptions"
+        "SELECT id, session, kind, target, since, created_at, workspace FROM subscriptions"
         " WHERE closed_at IS NULL ORDER BY id"
     ).fetchall()
     by_target: dict[tuple[str, str], list] = {}
@@ -1058,7 +1152,9 @@ def run_cycle(conn: sqlite3.Connection, state_dir: Path) -> CycleResult:
         good.append((kind, target))
     issue_bounds = {target: _bound(target_subs, cursors.get((kind, target)))
                     for (kind, target), target_subs in by_target.items() if kind == "issue"}
-    for outcome in _fetch_issues(issue_bounds, state_dir):
+    issue_workspaces = {target: _workspace_of_subs(target_subs)
+                        for (kind, target), target_subs in by_target.items() if kind == "issue"}
+    for outcome in _fetch_issues(issue_bounds, state_dir, issue_workspaces):
         if isinstance(outcome[1], TransportError):
             result.errors.append(outcome[1])
             continue
@@ -1411,7 +1507,43 @@ def _parse_ts(value: str) -> datetime:
     return datetime.strptime(value, TS_FORMAT).replace(tzinfo=timezone.utc)
 
 
-def doctor_checks(conn: sqlite3.Connection, state_dir: Path) -> list[tuple[str, str]]:
+def workspace_counts(conn: sqlite3.Connection) -> dict[str | None, int]:
+    """Open subscriptions per workspace (None = no workspace recorded)."""
+    return {r["workspace"]: r["n"] for r in conn.execute(
+        "SELECT workspace, COUNT(*) AS n FROM subscriptions WHERE closed_at IS NULL"
+        " GROUP BY workspace")}
+
+
+def workspace_check(state_dir: Path, workspace: str, subscriptions: int) -> tuple[str, str]:
+    """One doctor line for a workspace: credential, acceptance, last error, subscriptions.
+
+    Reads the recorded transport status only; never calls Linear and never names a key.
+    """
+    count = f"{subscriptions} subscription(s)"
+    key, source = linear_creds.resolve(workspace)
+    if not key:
+        return "FAIL", (f"workspace {workspace}: credential missing: {linear_creds.missing_message(workspace)};"
+                        f" {count}")
+    where = {"file": linear_creds.display_path(workspace), "environment": "environment",
+             "default file": linear_creds.display_path(None)}[source]
+    status = read_transport_status(state_dir, workspace if source == "file" else None)
+    last_ok = status.get("last_ok") if isinstance(status.get("last_ok"), str) else None
+    err = status.get("last_error") if isinstance(status.get("last_error"), dict) else None
+    err_at = str(err.get("at", "")) if err else ""
+    current = bool(err) and (last_ok is None or err_at >= last_ok)
+    head = f"workspace {workspace}: credential present ({where})"
+    if current and err.get("code") == T_CREDENTIAL:
+        return "FAIL", f"{head}, rejected by Linear at {err_at}: fix {linear_creds.display_path(workspace)}; {count}"
+    if current:
+        level = "warn" if err.get("code") == T_RATE_LIMITED else "FAIL"
+        return level, (f"{head}, last call failed at {err_at}: {err.get('query')}: {err.get('message')}"
+                       f" (code {err.get('code')}); {count}")
+    accepted = f"accepted (last call ok at {last_ok})" if last_ok else "no call recorded yet"
+    return "ok", f"{head}, {accepted}; {count}"
+
+
+def doctor_checks(conn: sqlite3.Connection, state_dir: Path,
+                  workspace: str | None = None) -> list[tuple[str, str]]:
     checks: list[tuple[str, str]] = []
 
     binary = linear_bin()
@@ -1430,9 +1562,14 @@ def doctor_checks(conn: sqlite3.Connection, state_dir: Path) -> list[tuple[str, 
     current = bool(err) and (last_ok is None or err_at >= last_ok)
     code = err.get("code") if err else None
 
+    watched = workspace_counts(conn)
+    named = sorted(set(linear_creds.configured_workspaces()) | {w for w in watched if w})
+    # the default credential is optional once every subscription names a workspace
+    default_needed = not named or watched.get(None, 0) > 0
     if not load_linear_key():
-        checks.append(("FAIL", "credential missing: no LINEAR_API_KEY in the environment"
-                               " nor in ~/.config/linear/env"))
+        if default_needed:
+            checks.append(("FAIL", "credential missing: no LINEAR_API_KEY in the environment"
+                                   " nor in ~/.config/linear/env"))
     elif current and code == T_CREDENTIAL:
         checks.append(("FAIL", f"credential rejected by Linear at {err_at}: fix LINEAR_API_KEY"
                                " in ~/.config/linear/env"))
@@ -1466,6 +1603,12 @@ def doctor_checks(conn: sqlite3.Connection, state_dir: Path) -> list[tuple[str, 
     else:
         checks.append(("ok", "no Linear call recorded yet"))
 
+    for ws in named:
+        if workspace is None or ws == workspace:
+            checks.append(workspace_check(state_dir, ws, watched.get(ws, 0)))
+    if workspace and workspace not in named:
+        checks.append(workspace_check(state_dir, workspace, 0))
+
     t = now()
     sessions: dict[str, list[sqlite3.Row]] = {}
     for row in conn.execute(
@@ -1488,7 +1631,7 @@ def doctor_checks(conn: sqlite3.Connection, state_dir: Path) -> list[tuple[str, 
 
 def cmd_doctor(conn: sqlite3.Connection, args) -> int:
     state_dir = Path(conn.execute("PRAGMA database_list").fetchone()["file"]).parent
-    checks = doctor_checks(conn, state_dir)
+    checks = doctor_checks(conn, state_dir, workspace_of(args))
     if not args.quiet:
         for level, text in checks:
             print(f"{level} {text}")
@@ -1502,6 +1645,8 @@ def register_doctor(sub, common) -> None:
         " Never calls Linear.",
     )
     p.add_argument("--quiet", action="store_true", help="print nothing; the exit code says it")
+    p.add_argument("--workspace", metavar="SLUG",
+                   help="report this Linear workspace only (default: every configured one)")
     p.set_defaults(func=cmd_doctor)
 
 
@@ -2210,17 +2355,31 @@ def graph_wake_suffix(project_url) -> str:
         return ""
 
 
-def resolve_project_url(slug_id: str, state_dir: Path) -> str:
-    body = linear_api(GRAPH_PROJECT_QUERY, {"slug": slug_id}, state_dir=state_dir)
+def subscription_workspace(state_dir: Path, kind: str, target: str) -> str | None:
+    """The workspace recorded on an open subscription of this target, if any."""
+    conn = connect(state_dir)
+    try:
+        row = conn.execute(
+            "SELECT workspace FROM subscriptions WHERE kind = ? AND target = ? AND closed_at IS NULL"
+            " AND workspace IS NOT NULL ORDER BY id LIMIT 1", (kind, target)).fetchone()
+    finally:
+        conn.close()
+    return row["workspace"] if row else None
+
+
+def resolve_project_url(slug_id: str, state_dir: Path, workspace: str | None = None) -> str:
+    body = linear_api(GRAPH_PROJECT_QUERY, {"slug": slug_id}, state_dir=state_dir,
+                      workspace=workspace or subscription_workspace(state_dir, "project", slug_id))
     for node in ((body.get("data") or {}).get("projects") or {}).get("nodes") or []:
         if isinstance(node, dict) and isinstance(node.get("url"), str):
             return node["url"]
     raise LwError(f"Linear has no project with slugId {slug_id}")
 
 
-def resolve_issue_project(ident: str, state_dir: Path) -> tuple[str, str]:
+def resolve_issue_project(ident: str, state_dir: Path, workspace: str | None = None) -> tuple[str, str]:
     """(slugId, url) of the project an issue belongs to."""
-    body = linear_api(GRAPH_ISSUE_QUERY, {"ids": [ident]}, state_dir=state_dir)
+    body = linear_api(GRAPH_ISSUE_QUERY, {"ids": [ident]}, state_dir=state_dir,
+                      workspace=workspace or subscription_workspace(state_dir, "issue", ident))
     for node in ((body.get("data") or {}).get("issues") or {}).get("nodes") or []:
         project = node.get("project") if isinstance(node, dict) else None
         if isinstance(project, dict) and isinstance(project.get("url"), str):
@@ -2279,7 +2438,8 @@ def _graph_failure(message: str, key: str | None) -> str:
 
 def _render_graph(slug: str, url: str, svg: Path, js: Path) -> GraphOutcome:
     """One renderer run, then the swap. Never raises; failed leaves svg and js alone."""
-    key = load_linear_key()
+    workspace = linear_creds.workspace_from_url(url)
+    key = load_linear_key(workspace)
     started = time.monotonic()
 
     def failed(message: str) -> GraphOutcome:
@@ -2287,7 +2447,7 @@ def _render_graph(slug: str, url: str, svg: Path, js: Path) -> GraphOutcome:
                             _graph_failure(message, key))
 
     if not key:
-        return failed("no LINEAR_API_KEY in the environment nor in ~/.config/linear/env")
+        return failed(linear_creds.missing_message(workspace))
     renderer = os.environ.get("LW_GRAPH_RENDERER") or str(
         Path(os.path.realpath(__file__)).parent / "linear_deps.py")
     try:
@@ -2429,9 +2589,10 @@ def cmd_graph(conn: sqlite3.Connection, args) -> int:
     try:
         if args.project:
             slug_id = normalize_project(args.project)
-            url = args.project if "://" in args.project else resolve_project_url(slug_id, state_dir)
+            url = (args.project if "://" in args.project
+                   else resolve_project_url(slug_id, state_dir, workspace_of(args)))
         else:
-            slug_id, url = resolve_issue_project(normalize_issue(args.issue), state_dir)
+            slug_id, url = resolve_issue_project(normalize_issue(args.issue), state_dir, workspace_of(args))
         outcome = rebuild_graph(state_dir, slug_id, url, create=not args.no_create)
     except TransportError as exc:
         print(f"lw: {exc}", file=sys.stderr)
@@ -2461,6 +2622,8 @@ def register_graph(sub, common) -> None:
         "--no-create", action="store_true",
         help="never create a file: rebuild only a watched project or an existing graph",
     )
+    p.add_argument("--workspace", metavar="SLUG",
+                   help="Linear workspace whose key to use (default: the URL's, else the subscription's)")
     p.set_defaults(func=cmd_graph)
 
 
@@ -2485,6 +2648,9 @@ def build_parser() -> argparse.ArgumentParser:
     target.add_argument("--project", metavar="SLUG|URL")
     target.add_argument("--issue", metavar="TT-123")
     p.add_argument("--since", metavar="3d", help="also deliver changes since then (max 7d)")
+    p.add_argument("--workspace", metavar="SLUG",
+                   help="Linear workspace (the <ws> of linear.app/<ws>/...): picks the key"
+                   " ~/.config/linear/<ws>.env; default: the one in the URL")
     p.add_argument("--harness", default=DEFAULT_HARNESS)
     p.set_defaults(func=cmd_subscribe)
 
@@ -2499,6 +2665,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("list", parents=[common], help="show subscriptions")
     p.add_argument("--session")
     p.add_argument("--closed", action="store_true", help="include closed subscriptions")
+    p.add_argument("--workspace", metavar="SLUG", help="only the subscriptions of this Linear workspace")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_list)
 

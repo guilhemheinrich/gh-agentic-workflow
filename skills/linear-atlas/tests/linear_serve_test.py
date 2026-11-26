@@ -133,7 +133,10 @@ class CliEntryTest(unittest.TestCase):
         """`python -I` drops the script dir from sys.path; serve must still find linear_serve."""
         import subprocess
         script = os.path.join(HERE, "..", "scripts", "linear_deps.py")
+        import tempfile
+        home = tempfile.mkdtemp(prefix="linear-serve-home-")  # no ~/.config/linear in there
         env = {k: v for k, v in os.environ.items() if k != "LINEAR_API_KEY"}
+        env.update(HOME=home, USERPROFILE=home)
         res = subprocess.run([sys.executable, "-I", script, "serve"], capture_output=True, text=True, env=env)
         self.assertNotIn("ModuleNotFoundError", res.stderr)
         self.assertIn("LINEAR_API_KEY", res.stderr)

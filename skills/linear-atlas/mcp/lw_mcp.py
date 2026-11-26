@@ -39,6 +39,8 @@ def _s(desc):
 
 
 SESSION = _s("the agent session id (the one the lw hook printed at session start)")
+WORKSPACE = _s("Linear workspace slug (the <ws> of linear.app/<ws>/...): picks the key "
+               "~/.config/linear/<ws>.env. Default: the one in the project URL")
 TARGET = {"project": _s("Linear project slug or URL"), "issue": _s("issue identifier, e.g. TT-123")}
 
 
@@ -63,9 +65,14 @@ def _wait_args(a):
     return ["wait", "--session", a["session"], "--timeout", str(t)]
 
 
+def _workspace(a):
+    return ["--workspace", str(a["workspace"])] if a.get("workspace") else []
+
+
 def _subscribe(a):
     _need(a, "session")
-    return ["subscribe", "--session", a["session"], *_target(a)] + (["--since", a["since"]] if a.get("since") else [])
+    return (["subscribe", "--session", a["session"], *_target(a)] + _workspace(a)
+            + (["--since", a["since"]] if a.get("since") else []))
 
 
 def _unsubscribe(a):
@@ -86,7 +93,8 @@ TOOLS = {
     "lw_subscribe": (
         "Wake this session when a Linear project or issue changes (comment, state move). "
         "Then call lw_wait in a loop.",
-        {"session": SESSION, **TARGET, "since": _s("also deliver changes since then, e.g. 3d (max 7d)")},
+        {"session": SESSION, **TARGET, "workspace": WORKSPACE,
+         "since": _s("also deliver changes since then, e.g. 3d (max 7d)")},
         ["session"],
         _subscribe),
     "lw_unsubscribe": (
@@ -95,11 +103,12 @@ TOOLS = {
         ["session"],
         _unsubscribe),
     "lw_list": (
-        "List the subscriptions (optionally of one session).",
-        {"session": SESSION, "closed": {"type": "boolean", "description": "include closed subscriptions"}},
+        "List the subscriptions, each with its workspace (optionally of one session or one workspace).",
+        {"session": SESSION, "workspace": WORKSPACE,
+         "closed": {"type": "boolean", "description": "include closed subscriptions"}},
         [],
         lambda a: ["list", "--json"] + (["--session", a["session"]] if a.get("session") else [])
-        + (["--closed"] if a.get("closed") else [])),
+        + _workspace(a) + (["--closed"] if a.get("closed") else [])),
     "lw_wait": (
         "Return the Linear lines not delivered yet to this session, or `timeout` after `timeout` seconds "
         "(default 25, max 55). A non-empty `lines` is the wake. Call again after a timeout.",
@@ -113,13 +122,14 @@ TOOLS = {
         [],
         _own_write),
     "lw_expire": ("Close finished or abandoned subscriptions now.", {}, [], lambda a: ["expire"]),
-    "lw_doctor": ("Check the watcher: binary, credential, heartbeat, transport. Never calls Linear.", {}, [],
-                  lambda a: ["doctor"]),
+    "lw_doctor": ("Check the watcher: binary, credential, heartbeat, transport, and one line per Linear "
+                  "workspace (credential, last error, subscriptions). Never calls Linear.",
+                  {"workspace": WORKSPACE}, [], lambda a: ["doctor"] + _workspace(a)),
     "lw_graph": (
         "Rebuild a project's dependency graph (SVG + JSON in ~/linear-graphs).",
-        {**TARGET, "no_create": {"type": "boolean", "description": "never create a file, only rebuild an existing one"}},
+        {**TARGET, "workspace": WORKSPACE, "no_create": {"type": "boolean", "description": "never create a file, only rebuild an existing one"}},
         [],
-        lambda a: ["graph", *_target(a)] + (["--no-create"] if a.get("no_create") else [])),
+        lambda a: ["graph", *_target(a)] + _workspace(a) + (["--no-create"] if a.get("no_create") else [])),
 }
 
 
