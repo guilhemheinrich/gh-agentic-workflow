@@ -41,8 +41,8 @@ services:
     volumes:
       - lw-state:/var/lib/watchers/lw
       - type: bind
-        source: ${LINEAR_ENV_FILE_HOST:?set LINEAR_ENV_FILE_HOST in .env}
-        target: /home/watcher/.config/linear/env
+        source: ${LINEAR_CONFIG_DIR_HOST:?set LINEAR_CONFIG_DIR_HOST in .env}
+        target: /home/watcher/.config/linear
         read_only: true
       - type: bind
         source: ${LW_DESKTOP_DIR_HOST:?set LW_DESKTOP_DIR_HOST in .env}

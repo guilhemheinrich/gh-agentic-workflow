@@ -36,9 +36,17 @@ version with `docker compose build --build-arg LINEAR_CLI_VERSION=vX.Y.Z`.
 ## Setup
 
 1. `copy .env.example .env` and fill in the host paths:
-   the `pr-watch` env file (tokens), the `~/.config/linear/env` file
-   (`LINEAR_API_KEY=...`), and the Claude Desktop `claude-code-sessions`
-   folder. Never commit `.env`.
+   the `pr-watch` env file (tokens), the `~/.config/linear` directory
+   (`LINEAR_CONFIG_DIR_HOST`, mounted read-only), and the Claude Desktop
+   `claude-code-sessions` folder. Never commit `.env`.
+
+   **Multiple Linear workspaces.** The whole `~/.config/linear` directory is
+   mounted, so `lw` sees one credential file per workspace: `env` is the
+   default key and `<workspace>.env` is the key of the workspace
+   `linear.app/<workspace>/...`, each containing `LINEAR_API_KEY=...`. The
+   lookup order is the one of `skills/linear-atlas/scripts/linear_creds.py`.
+   Adding a workspace only means adding a file on the host; no compose change
+   or rebuild is needed.
 2. From this folder: `docker compose up -d --build`.
 3. Put this folder on `PATH` (or call the wrappers by full path) to use
    `prw` / `lw` from `cmd`, PowerShell or Git Bash.
@@ -58,11 +66,29 @@ version with `docker compose build --build-arg LINEAR_CLI_VERSION=vX.Y.Z`.
 
 The Claude hooks are bash scripts. `adapters/claude/find-prw.sh` resolves `prw`
 from `$PRW_BIN` first (it must be an existing file), and the linear-atlas
-session-start hook resolves `lw` from `$LW_BIN`. Point them at the
-extensionless Git Bash wrappers, for example
-`PRW_BIN=/d/code/gh-agentic-workflow/scripts/watchers-docker/prw` and
-`LW_BIN=/d/code/gh-agentic-workflow/scripts/watchers-docker/lw` (use the
-`.cmd` files from `cmd` / PowerShell). Not tested with a live hook.
+session-start hook resolves `lw` from `$LW_BIN`. The MCP servers (`lw_mcp.py`,
+`prw_mcp.py`) run it with a Windows Python, which cannot execute a bash script
+(`WinError 193`), so on Windows point both at the `.cmd` wrappers, with forward
+slashes (the servers split the value with `shlex`, which eats backslashes):
+
+```json
+"env": {
+  "LW_BIN": "D:/code/gh-agentic-workflow/scripts/watchers-docker/lw.cmd",
+  "PRW_BIN": "D:/code/gh-agentic-workflow/scripts/watchers-docker/prw.cmd"
+}
+```
+
+An extensionless value is upgraded to its `.cmd` sibling on Windows when that file
+exists. Claude reads `env` from `settings.json` at session start: **restart the
+Claude session** after editing it. A value that cannot be executed no longer kills
+the MCP server: every tool (`lw_doctor`, `prw_doctor` included) answers with an
+error naming the command tried and the variable. The hooks are untested with the
+`.cmd` form.
+
+The wrappers check that the script exists in the container before running it and
+exit 127 with a message naming the missing path (for example
+`/opt/watchers/linear-atlas/scripts/lw`) when the container is down or its image is
+stale: rebuild with `docker compose -f scripts/watchers-docker/compose.yml up -d --build`.
 
 The session-start hooks run `daemon alive || daemon start`. With the container
 as supervisor, `daemon start` (launchd) must never run: it fails on Windows
