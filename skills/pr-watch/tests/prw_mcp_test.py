@@ -2,6 +2,7 @@
 
 Run: docker run --rm -v "$PWD/..:/skills:ro" -w /skills/pr-watch/tests python:3.12-alpine python3 -B -m unittest -v prw_mcp_test
 """
+import importlib.util
 import json
 import os
 import stat
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SERVER = os.path.join(HERE, "..", "mcp", "prw_mcp.py")
@@ -107,6 +109,94 @@ class McpTests(unittest.TestCase):
         self.assertEqual(r["error"]["code"], -32601)
         (r,) = self.talk({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {"name": "nope", "arguments": {}}})
         self.assertTrue(r["result"]["isError"])
+
+
+def _load_module():
+    spec = importlib.util.spec_from_file_location("prw_mcp", SERVER)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _fwd(path):
+    return path.replace("\\", "/")
+
+
+class UnrunnableCommandTests(unittest.TestCase):
+    """A command that cannot start (missing file, WinError 193) must not kill the server."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.bogus = _fwd(os.path.join(self.dir.name, "does-not-exist", "prw"))
+        self.mod = _load_module()
+
+    def test_run_tool_returns_an_error_result_for_a_missing_command(self):
+        with mock.patch.dict(os.environ, {"PRW_BIN": self.bogus}):
+            out, is_err = self.mod.run_tool("prw_doctor", {})
+        self.assertTrue(is_err)
+        self.assertIsNone(out["exit_code"])
+        self.assertIn(self.bogus, out["error"])
+        self.assertIn("PRW_BIN", out["error"])
+        self.assertEqual(out["command"][0], self.bogus)
+
+    def test_error_names_the_variable_as_unset_when_not_configured(self):
+        env = {k: v for k, v in os.environ.items() if k != "PRW_BIN"}
+        with mock.patch.dict(os.environ, env, clear=True),                 mock.patch.object(self.mod.subprocess, "run", side_effect=OSError("boom")):
+            out, is_err = self.mod.run_tool("prw_doctor", {})
+        self.assertTrue(is_err)
+        self.assertIn("PRW_BIN=unset", out["error"])
+        self.assertIn("boom", out["error"])
+
+    def test_windows_hint_points_to_the_cmd_wrapper(self):
+        with mock.patch.dict(os.environ, {"PRW_BIN": self.bogus}),                 mock.patch.object(self.mod.sys, "platform", "win32"):
+            out, _ = self.mod.run_tool("prw_doctor", {})
+        self.assertIn("prw.cmd", out["error"])
+        self.assertIn("forward slashes", out["error"])
+
+    def test_the_server_survives_an_unrunnable_command_over_stdio(self):
+        env = dict(os.environ, PRW_BIN=self.bogus)
+        req = lambda i: {"jsonrpc": "2.0", "id": i, "method": "tools/call",
+                         "params": {"name": "prw_doctor", "arguments": {}}}
+        p = subprocess.run([sys.executable, SERVER], input=json.dumps(req(1)) + "\n" + json.dumps(req(2)) + "\n",
+                           capture_output=True, text=True, env=env, timeout=30)
+        replies = [json.loads(x) for x in p.stdout.splitlines()]
+        self.assertEqual([r["id"] for r in replies], [1, 2])
+        for r in replies:
+            self.assertTrue(r["result"]["isError"])
+            body = json.loads(r["result"]["content"][0]["text"])
+            self.assertIn("PRW_BIN", body["error"])
+
+
+class WindowsResolutionTests(unittest.TestCase):
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.mod = _load_module()
+        self.bare = _fwd(os.path.join(self.dir.name, "prw"))
+        for name in ("prw", "prw.cmd"):
+            with open(os.path.join(self.dir.name, name), "w") as fh:
+                fh.write("x")
+
+    def command(self, value, platform="win32"):
+        with mock.patch.dict(os.environ, {"PRW_BIN": value}),                 mock.patch.object(self.mod.sys, "platform", platform):
+            return self.mod.prw_command()
+
+    def test_bare_path_resolves_to_the_cmd_sibling(self):
+        self.assertEqual(self.command(self.bare), [self.bare + ".cmd"])
+
+    def test_extra_words_are_preserved(self):
+        self.assertEqual(self.command(self.bare + " extra"), [self.bare + ".cmd", "extra"])
+
+    def test_a_path_already_ending_in_cmd_is_unchanged(self):
+        self.assertEqual(self.command(self.bare + ".cmd"), [self.bare + ".cmd"])
+
+    def test_no_cmd_sibling_leaves_the_path_unchanged(self):
+        os.remove(self.bare + ".cmd")
+        self.assertEqual(self.command(self.bare), [self.bare])
+
+    def test_other_platforms_keep_the_extensionless_path(self):
+        self.assertEqual(self.command(self.bare, platform="linux"), [self.bare])
 
 
 if __name__ == "__main__":

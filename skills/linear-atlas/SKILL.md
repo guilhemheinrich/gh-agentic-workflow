@@ -521,8 +521,12 @@ Installed through the Claude plugin (`agent-sessions`), the server is declared i
 claude mcp add lw -- python3 ~/.agents/skills/linear-atlas/mcp/lw_mcp.py
 ```
 
-On Windows or with the Docker daemon, point it at the wrapper instead:
-`claude mcp add lw -e LW_BIN="<repo>/scripts/watchers-docker/lw" -- python3 <path>/lw_mcp.py`.
+On Windows or with the Docker daemon, point it at the wrapper instead. A Windows Python cannot run
+the bash wrapper (`WinError 193`), so use the `.cmd` one, with forward slashes (`shlex` eats
+backslashes): `claude mcp add lw -e LW_BIN="D:/path/to/scripts/watchers-docker/lw.cmd" -- python3 <path>/lw_mcp.py`
+(or `LW_BIN` in the `env` of `settings.json`; restart the Claude session, env is read at session start).
+On `win32`, an extensionless `LW_BIN` is upgraded to its `.cmd` sibling when it exists. A binary that
+cannot be run makes the tool answer `isError` with the command tried and `LW_BIN`; the server never dies.
 
 `lw_wait` is **bounded** (default 25 s, at most 55 s) because an MCP call must return: it answers
 `status: "wake"` with `lines`, or `"timeout"` with none. Call it again after a timeout. For a long
@@ -536,6 +540,8 @@ one the SessionStart hook printed. Tests: `bash tests/run-linear-deps-in-docker.
 launchd is macOS-only. On Windows, run `lw daemon run` in a container with the files in
 [scripts/watchers-docker/](../../scripts/watchers-docker/README.md): state in a named volume,
 and `lw` wrappers that run inside the container.
+
+For the MCP server set `LW_BIN=D:/path/to/scripts/watchers-docker/lw.cmd` (forward slashes, the `.cmd` wrapper, not the bash one) and restart the Claude session so the new `env` is read.
 
 
 ## Implementation Status

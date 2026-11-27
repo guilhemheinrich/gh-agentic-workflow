@@ -4,4 +4,10 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Git Bash: hand docker a Windows path, and keep it from rewriting /opt/... args.
 here="$(cygpath -m "$here" 2>/dev/null || printf '%s' "$here")"
 export MSYS_NO_PATHCONV=1
-exec docker compose -f "$here/compose.yml" exec -T lw python3 /opt/watchers/linear-atlas/scripts/lw "$@"
+target=/opt/watchers/linear-atlas/scripts/lw
+# Stale-image guard: name the missing path instead of Python's "can't open file".
+if ! docker compose -f "$here/compose.yml" exec -T lw test -f "$target"; then
+  echo "lw: $target is missing in the watchers container: it is not running, or its image is stale (built before the skill layout changed). Rebuild: docker compose -f $here/compose.yml up -d --build" >&2
+  exit 127
+fi
+exec docker compose -f "$here/compose.yml" exec -T lw python3 "$target" "$@"
