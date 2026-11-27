@@ -316,7 +316,12 @@ Installed through the Claude plugin (`agent-sessions`), it is declared in the pl
 claude mcp add prw -- python3 ~/.agents/skills/pr-watch/mcp/prw_mcp.py
 ```
 
-`PRW_BIN` points the server at another `prw` (the Docker wrapper `scripts/watchers-docker/prw`).
+`PRW_BIN` points the server at another `prw` (the Docker wrapper `scripts/watchers-docker/prw`). On
+Windows a Windows Python cannot run the bash wrapper (`WinError 193`): use the `.cmd` one with forward
+slashes, `PRW_BIN=D:/path/to/scripts/watchers-docker/prw.cmd` (`shlex` eats backslashes), and restart the
+Claude session after editing `env` in `settings.json` (it is read at session start). An extensionless
+value is upgraded to its `.cmd` sibling on `win32`. A binary that cannot be run makes the tool answer
+`isError` with the command tried and `PRW_BIN`; the server never dies.
 `prw_wait` is bounded (default 25 s, at most 55 s): `status` is `wake` (with `lines`), `timeout`,
 `no-open-subscription` (exit 3, do not re-arm) or `already-waiting` (exit 4, do not re-arm). A
 `wake` whose lines say `still watching` is followed by another `prw_wait`. For a wait that costs
@@ -345,6 +350,8 @@ said `ok`. Now:
 launchd is macOS-only. On Windows, run the daemon in a container with the files in
 [scripts/watchers-docker/](../../scripts/watchers-docker/README.md): state in a named volume,
 and `prw` wrappers that run inside the container.
+
+For the MCP server set `PRW_BIN=D:/path/to/scripts/watchers-docker/prw.cmd` (forward slashes, the `.cmd` wrapper, not the bash one) and restart the Claude session so the new `env` is read.
 
 ## 10. A failed diff holds the change back
 

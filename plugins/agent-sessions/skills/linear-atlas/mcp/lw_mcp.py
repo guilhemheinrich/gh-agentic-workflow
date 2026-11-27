@@ -8,6 +8,8 @@ source of truth for the watcher's behaviour.
 
 Which `lw` is run:  $LW_BIN (a path, or several words such as `docker compose ... exec -T lw lw`),
 else the `lw` next to this skill (../scripts/lw), else `lw` on PATH.
+On Windows a bare path with a `.cmd` sibling (D:/x/lw -> D:/x/lw.cmd) runs the `.cmd`; write the path
+with forward slashes. If the command cannot start, the tool answers an error result, never crashes.
 
 `lw_wait` is bounded (default 25 s, max 55 s) because an MCP call must return: call it again
 when it answers `timeout`. A wake is a non-empty `lines` list.
@@ -24,10 +26,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_WAIT = 55
 
 
+def _win_cmd(words):
+    """On Windows, an extensionless first word with a `.cmd` sibling becomes that `.cmd`.
+
+    shlex.split eats backslashes, so LW_BIN must use the forward-slash form D:/path/lw.
+    """
+    if sys.platform == "win32" and words and os.path.splitext(words[0])[1] == "" \
+            and os.path.isfile(words[0] + ".cmd"):
+        return [words[0] + ".cmd"] + words[1:]
+    return words
+
+
 def lw_command():
     env = os.environ.get("LW_BIN", "").strip()
     if env:
-        return shlex.split(env)
+        return _win_cmd(shlex.split(env))
     local = os.path.join(HERE, "..", "scripts", "lw")
     if os.path.isfile(local):
         return [sys.executable, local]
@@ -138,10 +151,18 @@ def run_tool(name, args):
         raise ValueError("unknown tool %r" % name)
     argv = TOOLS[name][3](args or {})
     timeout = MAX_WAIT + 15 if name == "lw_wait" else 120
+    cmd = lw_command() + argv
     try:
-        p = subprocess.run(lw_command() + argv, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
         return {"exit_code": None, "error": "the lw command did not finish in %ds" % timeout}, True
+    except OSError as e:
+        msg = "could not run %r (LW_BIN=%s): %s" % (cmd[0], os.environ.get("LW_BIN") or "unset", e)
+        if sys.platform == "win32":
+            msg += (". On Windows set LW_BIN to the .cmd wrapper with forward slashes, e.g. "
+                    "LW_BIN=D:/path/to/scripts/watchers-docker/lw.cmd, then restart the Claude "
+                    "session (the environment is read at session start)")
+        return {"exit_code": None, "error": msg, "command": cmd}, True
     out = {"exit_code": p.returncode, "stdout": p.stdout.strip(), "stderr": p.stderr.strip()}
     if name == "lw_wait":
         out["lines"] = p.stdout.strip().splitlines() if p.returncode == 0 else []
